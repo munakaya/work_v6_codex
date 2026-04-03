@@ -54,6 +54,12 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
             self._write_json(HTTPStatus.OK, self._alerts_response(parsed.query))
             return
 
+        config_latest_response = self._match_latest_config(parsed.path)
+        if config_latest_response is not None:
+            status_code, payload = config_latest_response
+            self._write_json(status_code, payload)
+            return
+
         bot_heartbeats_response = self._match_bot_heartbeats(parsed.path, parsed.query)
         if bot_heartbeats_response is not None:
             status_code, payload = bot_heartbeats_response
@@ -76,6 +82,23 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/v1/bots/register":
             status_code, payload = self._register_bot_response()
+            self._write_json(status_code, payload)
+            return
+
+        if parsed.path == "/api/v1/configs":
+            status_code, payload = self._create_config_response()
+            self._write_json(status_code, payload)
+            return
+
+        alert_ack_response = self._acknowledge_alert_response(parsed.path)
+        if alert_ack_response is not None:
+            status_code, payload = alert_ack_response
+            self._write_json(status_code, payload)
+            return
+
+        config_assign_response = self._assign_config_response(parsed.path)
+        if config_assign_response is not None:
+            status_code, payload = config_assign_response
             self._write_json(status_code, payload)
             return
 
@@ -213,6 +236,143 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
             )
         return HTTPStatus.ACCEPTED, self._response(data=result)
 
+    def _create_config_response(self) -> tuple[HTTPStatus, dict[str, Any]]:
+        body, error = self._read_json_body()
+        if error is not None:
+            return error
+
+        config_scope = _json_string(body.get("config_scope"))
+        checksum = _json_string(body.get("checksum"))
+        config_json = _optional_object(body.get("config_json"))
+        created_by = _json_string(body.get("created_by"))
+        invalid_string_fields = [
+            key
+            for key in ("config_scope", "checksum")
+            if key in body and _json_string(body.get(key)) is None
+        ]
+        if "created_by" in body and created_by is None:
+            invalid_string_fields.append("created_by")
+
+        if invalid_string_fields:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": (
+                            "fields must be strings: "
+                            + ", ".join(sorted(set(invalid_string_fields)))
+                        ),
+                    }
+                ),
+            )
+
+        if not config_scope or not checksum or config_json is None:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "config_scope, config_json, checksum are required",
+                    }
+                ),
+            )
+
+        result = self.server.read_store.create_config_version(
+            config_scope=config_scope,
+            config_json=config_json,
+            checksum=checksum,
+            created_by=created_by,
+        )
+        return HTTPStatus.CREATED, self._response(data=result)
+
+    def _acknowledge_alert_response(
+        self, path: str
+    ) -> tuple[HTTPStatus, dict[str, Any]] | None:
+        prefix = "/api/v1/alerts/"
+        suffix = "/ack"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+
+        alert_id = path[len(prefix) : -len(suffix)]
+        if not alert_id:
+            return None
+
+        result = self.server.read_store.acknowledge_alert(alert_id)
+        if result is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={"code": "ALERT_NOT_FOUND", "message": "alert_id not found"}
+                ),
+            )
+        return HTTPStatus.ACCEPTED, self._response(data=result)
+
+    def _assign_config_response(
+        self, path: str
+    ) -> tuple[HTTPStatus, dict[str, Any]] | None:
+        prefix = "/api/v1/bots/"
+        suffix = "/assign-config"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+
+        bot_id = path[len(prefix) : -len(suffix)]
+        if not bot_id:
+            return None
+
+        body, error = self._read_json_body()
+        if error is not None:
+            return error
+
+        config_scope = _json_string(body.get("config_scope"))
+        version_no = _json_int(body.get("version_no"))
+        invalid_fields = []
+        if "config_scope" in body and config_scope is None:
+            invalid_fields.append("config_scope")
+        if "version_no" in body and version_no is None:
+            invalid_fields.append("version_no")
+        if invalid_fields:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": (
+                            "fields must use json scalar types: "
+                            + ", ".join(sorted(set(invalid_fields)))
+                        ),
+                    }
+                ),
+            )
+
+        if not config_scope or version_no is None:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "config_scope and version_no are required",
+                    }
+                ),
+            )
+
+        result = self.server.read_store.assign_config(
+            bot_id=bot_id,
+            config_scope=config_scope,
+            version_no=version_no,
+        )
+        if result is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "BOT_OR_CONFIG_NOT_FOUND",
+                        "message": "bot_id or config version not found",
+                    }
+                ),
+            )
+        return HTTPStatus.ACCEPTED, self._response(data=result)
+
     def _bots_response(self, query: str) -> dict[str, Any]:
         params = parse_qs(query)
         bots = self.server.read_store.list_bots(
@@ -231,6 +391,29 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
             acknowledged=acknowledged,
         )
         return self._response(data={"items": alerts, "count": len(alerts)})
+
+    def _match_latest_config(self, path: str) -> tuple[HTTPStatus, dict[str, Any]] | None:
+        prefix = "/api/v1/configs/"
+        suffix = "/latest"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+
+        config_scope = path[len(prefix) : -len(suffix)]
+        if not config_scope:
+            return None
+
+        version = self.server.read_store.latest_config(config_scope)
+        if version is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "CONFIG_NOT_FOUND",
+                        "message": "config scope not found",
+                    }
+                ),
+            )
+        return HTTPStatus.OK, self._response(data=version)
 
     def _match_bot_detail(self, path: str) -> tuple[HTTPStatus, dict[str, Any]] | None:
         prefix = "/api/v1/bots/"
@@ -353,17 +536,6 @@ def _single_query_value(params: dict[str, list[str]], key: str) -> str | None:
     return values[0]
 
 
-def _optional_bool(value: str | None) -> bool | None:
-    if value is None:
-        return None
-    lowered = value.strip().lower()
-    if lowered in {"true", "1", "yes"}:
-        return True
-    if lowered in {"false", "0", "no"}:
-        return False
-    return None
-
-
 def _query_limit(params: dict[str, list[str]], default: int = 20) -> int:
     raw = _single_query_value(params, "limit")
     if raw is None:
@@ -392,6 +564,12 @@ def _optional_string(value: object) -> str | None:
     return str(value)
 
 
+def _json_string(value: object) -> str | None:
+    if isinstance(value, str):
+        return value
+    return None
+
+
 def _optional_int(value: object) -> int | None:
     if value is None:
         return None
@@ -403,6 +581,14 @@ def _optional_int(value: object) -> int | None:
         return int(str(value))
     except ValueError:
         return None
+
+
+def _json_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    return None
 
 
 def _optional_object(value: object) -> dict[str, object] | None:

@@ -22,11 +22,13 @@ class MemoryReadStore:
         bot_details: dict[str, dict[str, object]],
         heartbeats: dict[str, list[dict[str, object]]],
         alerts: list[dict[str, object]],
+        config_versions: dict[str, list[dict[str, object]]],
     ) -> None:
         self.bots = bots
         self.bot_details = bot_details
         self.heartbeats = heartbeats
         self.alerts = alerts
+        self.config_versions = config_versions
 
     def list_bots(
         self,
@@ -72,6 +74,89 @@ class MemoryReadStore:
                 if (alert.get("acknowledged_at") is not None) == acknowledged
             ]
         return alerts
+
+    def latest_config(self, config_scope: str) -> dict[str, object] | None:
+        versions = self.config_versions.get(config_scope)
+        if not versions:
+            return None
+        return versions[0]
+
+    def create_config_version(
+        self,
+        *,
+        config_scope: str,
+        config_json: dict[str, object],
+        checksum: str,
+        created_by: str | None,
+    ) -> dict[str, object]:
+        versions = self.config_versions.setdefault(config_scope, [])
+        next_version = versions[0]["version_no"] + 1 if versions else 1
+        version = {
+            "config_version_id": str(uuid4()),
+            "config_scope": config_scope,
+            "version_no": next_version,
+            "config_json": config_json,
+            "checksum": checksum,
+            "created_by": created_by,
+            "created_at": _sample_time(0),
+        }
+        versions.insert(0, version)
+        return version
+
+    def assign_config(
+        self,
+        *,
+        bot_id: str,
+        config_scope: str,
+        version_no: int,
+    ) -> dict[str, object] | None:
+        detail = self.bot_details.get(bot_id)
+        if detail is None:
+            return None
+
+        versions = self.config_versions.get(config_scope, [])
+        version = next(
+            (item for item in versions if item["version_no"] == version_no),
+            None,
+        )
+        if version is None:
+            return None
+
+        assigned = {
+            "config_scope": config_scope,
+            "version_no": version_no,
+            "config_version_id": version["config_version_id"],
+            "assigned_at": _sample_time(0),
+        }
+        detail["assigned_config_version"] = assigned
+        for bot in self.bots:
+            if bot["bot_id"] == bot_id:
+                bot["assigned_config_version"] = assigned
+                break
+
+        alert = {
+            "alert_id": str(uuid4()),
+            "bot_id": bot_id,
+            "level": "info",
+            "code": "CONFIG_ASSIGNED",
+            "message": f"config {config_scope} v{version_no} assigned",
+            "created_at": _sample_time(0),
+            "acknowledged_at": None,
+        }
+        self.alerts.insert(0, alert)
+        detail.setdefault("recent_alerts", []).insert(0, alert)
+        return assigned
+
+    def acknowledge_alert(self, alert_id: str) -> dict[str, object] | None:
+        acknowledged_at = _sample_time(0)
+        for alert in self.alerts:
+            if alert["alert_id"] == alert_id:
+                alert["acknowledged_at"] = acknowledged_at
+                return {
+                    "alert_id": alert_id,
+                    "acknowledged_at": acknowledged_at,
+                }
+        return None
 
     def register_bot(
         self,
@@ -166,7 +251,13 @@ class MemoryReadStore:
 def build_read_store(config: AppConfig) -> MemoryReadStore:
     if config.use_sample_read_model:
         return sample_read_store()
-    return MemoryReadStore(bots=[], bot_details={}, heartbeats={}, alerts=[])
+    return MemoryReadStore(
+        bots=[],
+        bot_details={},
+        heartbeats={},
+        alerts=[],
+        config_versions={},
+    )
 
 
 def sample_read_store() -> MemoryReadStore:
@@ -240,6 +331,37 @@ def sample_read_store() -> MemoryReadStore:
         },
     ]
 
+    config_versions = {
+        "default": [
+            {
+                "config_version_id": "5375618a-fd27-430f-a8eb-c5dadfc1d498",
+                "config_scope": "default",
+                "version_no": 3,
+                "config_json": {
+                    "strategy_name": "arbitrage",
+                    "min_profit": "1000",
+                    "max_order_notional": "500000",
+                },
+                "checksum": "chk-default-v3",
+                "created_by": "system",
+                "created_at": _sample_time(20),
+            },
+            {
+                "config_version_id": "8ea92369-7267-497d-9ac9-47758cc884d2",
+                "config_scope": "default",
+                "version_no": 2,
+                "config_json": {
+                    "strategy_name": "arbitrage",
+                    "min_profit": "900",
+                    "max_order_notional": "450000",
+                },
+                "checksum": "chk-default-v2",
+                "created_by": "system",
+                "created_at": _sample_time(40),
+            },
+        ]
+    }
+
     bot_details = {
         bot_1_id: {
             **bots[0],
@@ -303,4 +425,5 @@ def sample_read_store() -> MemoryReadStore:
         bot_details=bot_details,
         heartbeats=heartbeats,
         alerts=alerts,
+        config_versions=config_versions,
     )
