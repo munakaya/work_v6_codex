@@ -2,6 +2,8 @@
 
 이 저장소의 설계 문서는 역할별로 분리되어 있다. 먼저 `00_system_overview.md`를 읽고, 이후 작업 범위에 맞는 세부 문서로 내려간다. 기존 병합 문서의 섹션 번호는 참조 호환성을 위해 그대로 유지했다.
 
+구현을 바로 시작하려면 `11_implementation_tasks.md`를 먼저 읽고, 필요한 상세 문서로 내려가면 된다.
+
 - `00_system_overview.md`: 제품 비전, 목표, 요구사항, MVP 범위, 구현 순서
 - `01_architecture.md`: 시스템 구조, 디렉터리 구조, 상태 전이
 - `02_data_model.md`: PostgreSQL, Redis, migration 정책
@@ -17,3 +19,4 @@
   관련 상세 문서: `08_progress_and_gaps.md`, `08_delivery_plan.md`, `08_execution_risk_matrix.md`
 - `09_openapi_reference.md`: OpenAPI YAML 전문
 - `10_storage_sql_reference.md`: Alembic initial migration SQL 전문
+- `11_implementation_tasks.md`: 구현 시작용 작업판과 문서 진입점
