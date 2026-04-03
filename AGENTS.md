@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This repository is currently documentation-first. Start from `docs/README.md`, then read `docs/00_system_overview.md` before drilling into focused design files such as `docs/01_architecture.md`, `docs/04_operations.md`, or the grouped indexes `docs/05_strategy_and_risk.md` and `docs/06_exchange_adapters.md`. Keep new design notes, decision records, and architecture writeups under `docs/`. If implementation code is added later, place runtime code in a dedicated top-level directory such as `platform/` or `src/` rather than mixing code with documentation.
+This repository is currently documentation-first. Start from `docs/README.md`, then read `docs/00_system_overview.md` before drilling into focused design files such as `docs/01_architecture.md`, `docs/04_operations.md`, or the grouped indexes `docs/05_strategy_and_risk.md`, `docs/06_exchange_adapters.md`, `docs/07_ui_and_control_plane.md`, and `docs/08_execution_plan.md`. Keep new design notes, decision records, and architecture writeups under `docs/`. If implementation code is added later, place runtime code in a dedicated top-level directory such as `platform/` or `src/` rather than mixing code with documentation.
 
 ## Build, Test, and Development Commands
 No build system, package manager, or automated test suite is committed yet. For now, contributors mainly review and edit repository documents.

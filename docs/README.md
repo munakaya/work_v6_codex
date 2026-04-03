@@ -11,7 +11,9 @@
   관련 상세 문서: `05_strategy_records.md`, `05_trade_recovery.md`, `05_risk_and_config.md`
 - `06_exchange_adapters.md`: 거래소 설계 인덱스
   관련 상세 문서: `06_exchange_adapter_core.md`, `06_exchange_protocol_reference.md`, `06_exchange_validation.md`
-- `07_ui_and_control_plane.md`: 운영 UI, 정보 구조, query contract
-- `08_execution_plan.md`: 진행 상태, 남은 공백, 실행 계획, exit criteria
+- `07_ui_and_control_plane.md`: UI 설계 인덱스
+  관련 상세 문서: `07_ui_design.md`, `07_frontend_query_contract.md`
+- `08_execution_plan.md`: 실행 계획 인덱스
+  관련 상세 문서: `08_progress_and_gaps.md`, `08_delivery_plan.md`, `08_execution_risk_matrix.md`
 - `09_openapi_reference.md`: OpenAPI YAML 전문
 - `10_storage_sql_reference.md`: Alembic initial migration SQL 전문
