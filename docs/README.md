@@ -7,8 +7,10 @@
 - `02_data_model.md`: PostgreSQL, Redis, migration 정책
 - `03_api_contracts.md`: API 명세와 OpenAPI 초안
 - `04_operations.md`: observability, deployment, auth/RBAC, 장애 대응
-- `05_strategy_and_risk.md`: strategy ADR, recovery, risk limit, config validation
-- `06_exchange_adapters.md`: 거래소 공통 계약과 거래소별 상세 설계
+- `05_strategy_and_risk.md`: 전략/리스크 설계 인덱스
+  관련 상세 문서: `05_strategy_records.md`, `05_trade_recovery.md`, `05_risk_and_config.md`
+- `06_exchange_adapters.md`: 거래소 설계 인덱스
+  관련 상세 문서: `06_exchange_adapter_core.md`, `06_exchange_protocol_reference.md`, `06_exchange_validation.md`
 - `07_ui_and_control_plane.md`: 운영 UI, 정보 구조, query contract
 - `08_execution_plan.md`: 진행 상태, 남은 공백, 실행 계획, exit criteria
 - `09_openapi_reference.md`: OpenAPI YAML 전문
