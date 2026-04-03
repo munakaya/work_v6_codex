@@ -1,7 +1,15 @@
 from __future__ import annotations
 
 from .postgres_driver import PostgresDriverAdapter
-from .postgres_view_utils import bot_summary, strategy_run, timestamp_or_none, uuid_or_none
+from .postgres_view_utils import (
+    alert_event,
+    bot_summary,
+    config_version,
+    heartbeat_entry,
+    strategy_run,
+    timestamp_or_none,
+    uuid_or_none,
+)
 
 
 def list_bots(
@@ -200,17 +208,7 @@ def list_heartbeats(
     )
     if not rows and not bot_exists(adapter, bot_uuid):
         return None
-    return [
-        {
-            "created_at": row["created_at"],
-            "is_process_alive": row["is_process_alive"],
-            "is_market_data_alive": row["is_market_data_alive"],
-            "is_ordering_alive": row["is_ordering_alive"],
-            "lag_ms": row.get("lag_ms"),
-            "payload": row.get("payload") or {},
-        }
-        for row in rows
-    ]
+    return [heartbeat_entry(row) for row in rows]
 
 
 def list_alerts(
@@ -236,7 +234,7 @@ def list_alerts(
     if acknowledged is False:
         conditions.append("acknowledged_at is null")
     where_clause = f"where {' and '.join(conditions)}" if conditions else ""
-    return adapter.fetch_all(
+    rows = adapter.fetch_all(
         f"""
         select
             id::text as alert_id,
@@ -252,12 +250,13 @@ def list_alerts(
         """,
         tuple(params),
     )
+    return [alert_event(row) for row in rows]
 
 
 def latest_config(
     adapter: PostgresDriverAdapter, config_scope: str
 ) -> dict[str, object] | None:
-    return adapter.fetch_one(
+    row = adapter.fetch_one(
         """
         select
             id::text as config_version_id,
@@ -274,6 +273,7 @@ def latest_config(
         """,
         (config_scope,),
     )
+    return None if row is None else config_version(row)
 
 
 def active_bot_count(adapter: PostgresDriverAdapter) -> int:
@@ -312,7 +312,7 @@ def recent_alerts(
     bot_uuid = uuid_or_none(bot_id)
     if bot_uuid is None:
         return []
-    return adapter.fetch_all(
+    rows = adapter.fetch_all(
         """
         select
             id::text as alert_id,
@@ -329,6 +329,7 @@ def recent_alerts(
         """,
         (bot_uuid, limit),
     )
+    return [alert_event(row) for row in rows]
 
 
 def bot_exists(adapter: PostgresDriverAdapter, bot_id: str) -> bool:

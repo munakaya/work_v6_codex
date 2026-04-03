@@ -35,6 +35,7 @@ class AppConfig:
     redis_url: str | None
     redis_key_prefix: str
     use_sample_read_model: bool
+    enable_postgres_mutation: bool
 
     @property
     def ready_dependencies_configured(self) -> bool:
@@ -59,4 +60,5 @@ def load_config() -> AppConfig:
         redis_url=os.getenv("TP_REDIS_URL"),
         redis_key_prefix=os.getenv("TP_REDIS_KEY_PREFIX", "tp"),
         use_sample_read_model=_env_bool("TP_USE_SAMPLE_READ_MODEL", True),
+        enable_postgres_mutation=_env_bool("TP_ENABLE_POSTGRES_MUTATION", False),
     )

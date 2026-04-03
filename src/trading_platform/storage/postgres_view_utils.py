@@ -77,6 +77,41 @@ def assigned_config(row: dict[str, object]) -> dict[str, object] | None:
     return payload
 
 
+def config_version(row: dict[str, object]) -> dict[str, object]:
+    return {
+        "config_version_id": row["config_version_id"],
+        "config_scope": row["config_scope"],
+        "version_no": int_value(row["version_no"]) or 0,
+        "config_json": row.get("config_json") or {},
+        "checksum": row["checksum"],
+        "created_by": row.get("created_by"),
+        "created_at": iso_text(row.get("created_at")),
+    }
+
+
+def heartbeat_entry(row: dict[str, object]) -> dict[str, object]:
+    return {
+        "created_at": iso_text(row.get("created_at")),
+        "is_process_alive": row["is_process_alive"],
+        "is_market_data_alive": row["is_market_data_alive"],
+        "is_ordering_alive": row["is_ordering_alive"],
+        "lag_ms": int_value(row.get("lag_ms")),
+        "payload": row.get("payload") or {},
+    }
+
+
+def alert_event(row: dict[str, object]) -> dict[str, object]:
+    return {
+        "alert_id": row["alert_id"],
+        "bot_id": row.get("bot_id"),
+        "level": row["level"],
+        "code": row["code"],
+        "message": row["message"],
+        "created_at": iso_text(row.get("created_at")),
+        "acknowledged_at": iso_text(row.get("acknowledged_at")),
+    }
+
+
 def bot_summary(row: dict[str, object]) -> dict[str, object]:
     return {
         "bot_id": row["bot_id"],

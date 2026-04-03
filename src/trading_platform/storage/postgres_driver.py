@@ -154,6 +154,10 @@ def _sql_literal(value: object) -> str:
         return "true" if value else "false"
     if isinstance(value, (int, float)):
         return str(value)
+    if isinstance(value, (dict, list, tuple)):
+        text = json.dumps(value, separators=(",", ":"), ensure_ascii=True)
+        text = text.replace("'", "''")
+        return f"'{text}'"
     text = str(value).replace("'", "''")
     return f"'{text}'"
 
@@ -162,9 +166,9 @@ def _decode_text(value: str | None) -> object:
     if value is None or value == "":
         return None
     lowered = value.lower()
-    if lowered == "true":
+    if lowered in {"true", "t"}:
         return True
-    if lowered == "false":
+    if lowered in {"false", "f"}:
         return False
     if _looks_like_json(value):
         try:

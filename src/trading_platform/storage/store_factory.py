@@ -6,6 +6,7 @@ import shutil
 
 from ..config import AppConfig
 from .postgres_driver import PostgresDriverAdapter, PsqlCliAdapter
+from .postgres_mutable_store import PostgresMutableStore
 from .postgres_read_store import PostgresReadStore
 from .read_store import MemoryReadStore, _sample_time
 from .sample_data import build_sample_state
@@ -55,7 +56,12 @@ def build_read_store_bundle(config: AppConfig) -> StoreBootstrapResult:
         )
 
     if config.postgres_dsn:
-        postgres_backend = _postgres_backend_result(config.postgres_dsn, driver_name, cli_name)
+        postgres_backend = _postgres_backend_result(
+            config.postgres_dsn,
+            driver_name,
+            cli_name,
+            enable_mutation=config.enable_postgres_mutation,
+        )
         if postgres_backend is not None:
             return postgres_backend
 
@@ -125,20 +131,27 @@ def _postgres_backend_result(
     dsn: str,
     driver_name: str | None,
     cli_name: str | None,
+    *,
+    enable_mutation: bool,
 ) -> StoreBootstrapResult | None:
     if driver_name is not None:
         adapter = PostgresDriverAdapter(dsn, driver_name)
         ok, reason = adapter.probe()
         if ok:
+            store = PostgresMutableStore(adapter) if enable_mutation else PostgresReadStore(adapter)
             return StoreBootstrapResult(
-                store=PostgresReadStore(adapter),
+                store=store,
                 info=StoreBootstrapInfo(
-                    backend_name="postgres_readonly",
-                    supports_mutation=False,
+                    backend_name=store.backend_name,
+                    supports_mutation=store.supports_mutation,
                     mode="postgres",
                     driver_name=driver_name,
                     driver_available=True,
-                    reason="PostgreSQL read repository enabled",
+                    reason=(
+                        "PostgreSQL mutable repository enabled"
+                        if enable_mutation
+                        else "PostgreSQL read repository enabled"
+                    ),
                 ),
             )
         return StoreBootstrapResult(
@@ -157,15 +170,20 @@ def _postgres_backend_result(
         adapter = PsqlCliAdapter(dsn, cli_name)
         ok, reason = adapter.probe()
         if ok:
+            store = PostgresMutableStore(adapter) if enable_mutation else PostgresReadStore(adapter)
             return StoreBootstrapResult(
-                store=PostgresReadStore(adapter),
+                store=store,
                 info=StoreBootstrapInfo(
-                    backend_name="postgres_readonly",
-                    supports_mutation=False,
+                    backend_name=store.backend_name,
+                    supports_mutation=store.supports_mutation,
                     mode="postgres",
                     driver_name="psql",
                     driver_available=True,
-                    reason="PostgreSQL read repository enabled via psql",
+                    reason=(
+                        "PostgreSQL mutable repository enabled via psql"
+                        if enable_mutation
+                        else "PostgreSQL read repository enabled via psql"
+                    ),
                 ),
             )
         return StoreBootstrapResult(
