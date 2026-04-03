@@ -12,7 +12,27 @@ from .request_utils import (
 
 
 class ControlPlaneWriteRouteMixin:
+    def _ensure_mutation_supported(self) -> tuple[HTTPStatus, dict[str, object]] | None:
+        if self.server.read_store.supports_mutation:
+            return None
+        return (
+            HTTPStatus.NOT_IMPLEMENTED,
+            self._response(
+                error={
+                    "code": "STORE_MUTATION_UNAVAILABLE",
+                    "message": (
+                        f"write operations are disabled for backend "
+                        f"{self.server.read_store.backend_name}"
+                    ),
+                }
+            ),
+        )
+
     def _register_bot_response(self) -> tuple[HTTPStatus, dict[str, object]]:
+        unsupported = self._ensure_mutation_supported()
+        if unsupported is not None:
+            return unsupported
+
         body, error = self._read_json_body()
         if error is not None:
             return error
@@ -49,6 +69,10 @@ class ControlPlaneWriteRouteMixin:
         bot_id = path[len(prefix) : -len(suffix)]
         if not bot_id:
             return None
+
+        unsupported = self._ensure_mutation_supported()
+        if unsupported is not None:
+            return unsupported
 
         body, error = self._read_json_body()
         if error is not None:
@@ -111,6 +135,10 @@ class ControlPlaneWriteRouteMixin:
         return HTTPStatus.ACCEPTED, self._response(data=result)
 
     def _create_config_response(self) -> tuple[HTTPStatus, dict[str, object]]:
+        unsupported = self._ensure_mutation_supported()
+        if unsupported is not None:
+            return unsupported
+
         body, error = self._read_json_body()
         if error is not None:
             return error
@@ -161,6 +189,10 @@ class ControlPlaneWriteRouteMixin:
         return HTTPStatus.CREATED, self._response(data=result)
 
     def _create_strategy_run_response(self) -> tuple[HTTPStatus, dict[str, object]]:
+        unsupported = self._ensure_mutation_supported()
+        if unsupported is not None:
+            return unsupported
+
         body, error = self._read_json_body()
         if error is not None:
             return error
@@ -234,6 +266,10 @@ class ControlPlaneWriteRouteMixin:
         if not alert_id:
             return None
 
+        unsupported = self._ensure_mutation_supported()
+        if unsupported is not None:
+            return unsupported
+
         result = self.server.read_store.acknowledge_alert(alert_id)
         if result is None:
             return (
@@ -256,6 +292,10 @@ class ControlPlaneWriteRouteMixin:
         bot_id = path[len(prefix) : -len(suffix)]
         if not bot_id:
             return None
+
+        unsupported = self._ensure_mutation_supported()
+        if unsupported is not None:
+            return unsupported
 
         body, error = self._read_json_body()
         if error is not None:
@@ -333,6 +373,10 @@ class ControlPlaneWriteRouteMixin:
         if not run_id:
             return None
 
+        unsupported = self._ensure_mutation_supported()
+        if unsupported is not None:
+            return unsupported
+
         outcome, run = self.server.read_store.start_strategy_run(run_id)
         if outcome == "not_found":
             return (
@@ -361,6 +405,10 @@ class ControlPlaneWriteRouteMixin:
     ) -> tuple[HTTPStatus, dict[str, object]] | None:
         if not run_id:
             return None
+
+        unsupported = self._ensure_mutation_supported()
+        if unsupported is not None:
+            return unsupported
 
         outcome, run = self.server.read_store.stop_strategy_run(run_id)
         if outcome == "not_found":

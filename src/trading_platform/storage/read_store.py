@@ -17,6 +17,9 @@ def _sample_time(minutes_ago: int) -> str:
 
 
 class MemoryReadStore:
+    backend_name = "memory"
+    supports_mutation = True
+
     def __init__(
         self,
         *,
@@ -29,7 +32,11 @@ class MemoryReadStore:
         heartbeats: dict[str, list[dict[str, object]]],
         alerts: list[dict[str, object]],
         config_versions: dict[str, list[dict[str, object]]],
+        backend_name: str = "memory",
+        supports_mutation: bool = True,
     ) -> None:
+        self.backend_name = backend_name
+        self.supports_mutation = supports_mutation
         self.bots = bots
         self.bot_details = bot_details
         self.strategy_runs = strategy_runs

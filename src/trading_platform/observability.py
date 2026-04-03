@@ -8,7 +8,7 @@ from pathlib import Path
 import threading
 from typing import Any
 
-from .storage.read_store import MemoryReadStore
+from .storage.store_protocol import ControlPlaneStoreProtocol
 
 
 def _iso_now() -> str:
@@ -71,7 +71,7 @@ class MetricsRegistry:
         with self._lock:
             self._alerts_acknowledged += 1
 
-    def render(self, read_store: MemoryReadStore) -> str:
+    def render(self, read_store: ControlPlaneStoreProtocol) -> str:
         lines = [
             "# HELP control_plane_http_requests_total Total HTTP requests handled by control-plane.",
             "# TYPE control_plane_http_requests_total counter",

@@ -33,6 +33,7 @@ class ControlPlaneReadRouteMixin:
                 "status": "ok" if ready else "degraded",
                 "service": config.service_name,
                 "redis_key_prefix": config.redis_key_prefix,
+                "read_store": self.server.store_bootstrap.as_dict(),
                 "dependencies": dependencies,
             }
         )

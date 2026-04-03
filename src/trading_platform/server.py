@@ -11,8 +11,8 @@ from urllib.parse import urlparse
 from .config import AppConfig
 from .observability import AlertHookNotifier, MetricsRegistry
 from .route_handlers import ControlPlaneRouteMixin
-from .storage.read_store import MemoryReadStore
-from .storage.store_factory import build_read_store
+from .storage.store_factory import StoreBootstrapInfo, build_read_store_bundle
+from .storage.store_protocol import ControlPlaneStoreProtocol
 
 
 LOGGER = logging.getLogger(__name__)
@@ -25,13 +25,15 @@ class ControlPlaneServer(ThreadingHTTPServer):
         self,
         server_address: tuple[str, int],
         config: AppConfig,
-        read_store: MemoryReadStore,
+        read_store: ControlPlaneStoreProtocol,
+        store_bootstrap: StoreBootstrapInfo,
         metrics: MetricsRegistry,
         alert_hook: AlertHookNotifier,
     ):
         super().__init__(server_address, ControlPlaneRequestHandler)
         self.config = config
         self.read_store = read_store
+        self.store_bootstrap = store_bootstrap
         self.metrics = metrics
         self.alert_hook = alert_hook
 
@@ -155,10 +157,12 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
 
 def build_server(config: AppConfig) -> ControlPlaneServer:
     LOGGER.debug("building control plane server with config: %s", asdict(config))
+    bootstrap = build_read_store_bundle(config)
     return ControlPlaneServer(
         (config.host, config.port),
         config,
-        build_read_store(config),
+        bootstrap.store,
+        bootstrap.info,
         MetricsRegistry(),
         AlertHookNotifier(config.alert_hook_path, config.service_name),
     )

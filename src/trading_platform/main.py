@@ -16,11 +16,13 @@ def main() -> None:
     server = build_server(config)
 
     LOGGER.info(
-        "starting %s on %s:%s log=%s",
+        "starting %s on %s:%s log=%s store=%s mode=%s",
         config.service_name,
         config.host,
         config.port,
         log_path,
+        server.store_bootstrap.backend_name,
+        server.store_bootstrap.mode,
     )
     try:
         server.serve_forever()
