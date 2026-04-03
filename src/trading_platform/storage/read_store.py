@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 from ..config import AppConfig
 
@@ -14,12 +14,19 @@ def _sample_time(minutes_ago: int) -> str:
     return _iso(datetime.now(UTC) - timedelta(minutes=minutes_ago))
 
 
-@dataclass(frozen=True)
-class SampleReadStore:
-    bots: list[dict[str, object]]
-    bot_details: dict[str, dict[str, object]]
-    heartbeats: dict[str, list[dict[str, object]]]
-    alerts: list[dict[str, object]]
+class MemoryReadStore:
+    def __init__(
+        self,
+        *,
+        bots: list[dict[str, object]],
+        bot_details: dict[str, dict[str, object]],
+        heartbeats: dict[str, list[dict[str, object]]],
+        alerts: list[dict[str, object]],
+    ) -> None:
+        self.bots = bots
+        self.bot_details = bot_details
+        self.heartbeats = heartbeats
+        self.alerts = alerts
 
     def list_bots(
         self,
@@ -66,14 +73,103 @@ class SampleReadStore:
             ]
         return alerts
 
+    def register_bot(
+        self,
+        *,
+        bot_key: str,
+        strategy_name: str,
+        mode: str,
+        hostname: str | None,
+    ) -> dict[str, object]:
+        existing = next((bot for bot in self.bots if bot["bot_key"] == bot_key), None)
+        if existing is not None:
+            existing["strategy_name"] = strategy_name
+            existing["mode"] = mode
+            existing["hostname"] = hostname
+            existing["status"] = "running"
+            existing["last_seen_at"] = _sample_time(0)
+            detail = self.bot_details[str(existing["bot_id"])]
+            detail.update(existing)
+            return {
+                "bot_id": existing["bot_id"],
+                "assigned_config_version": existing["assigned_config_version"],
+                "status": existing["status"],
+            }
 
-def build_read_store(config: AppConfig) -> SampleReadStore:
+        bot_id = str(uuid4())
+        assigned_config_version = {"config_scope": "default", "version_no": 1}
+        bot = {
+            "bot_id": bot_id,
+            "bot_key": bot_key,
+            "strategy_name": strategy_name,
+            "mode": mode,
+            "status": "running",
+            "hostname": hostname,
+            "last_seen_at": _sample_time(0),
+            "assigned_config_version": assigned_config_version,
+        }
+        self.bots.append(bot)
+        self.bot_details[bot_id] = {
+            **bot,
+            "latest_heartbeat": None,
+            "latest_strategy_run": None,
+            "recent_alerts": [],
+        }
+        self.heartbeats[bot_id] = []
+        return {
+            "bot_id": bot_id,
+            "assigned_config_version": assigned_config_version,
+            "status": bot["status"],
+        }
+
+    def record_heartbeat(
+        self,
+        *,
+        bot_id: str,
+        is_process_alive: bool,
+        is_market_data_alive: bool,
+        is_ordering_alive: bool,
+        lag_ms: int | None,
+        context: dict[str, object] | None,
+    ) -> dict[str, object] | None:
+        detail = self.bot_details.get(bot_id)
+        if detail is None:
+            return None
+
+        heartbeat = {
+            "created_at": _sample_time(0),
+            "is_process_alive": is_process_alive,
+            "is_market_data_alive": is_market_data_alive,
+            "is_ordering_alive": is_ordering_alive,
+            "lag_ms": lag_ms,
+            "payload": context or {},
+        }
+        history = self.heartbeats.setdefault(bot_id, [])
+        history.insert(0, heartbeat)
+        detail["latest_heartbeat"] = heartbeat
+        detail["last_seen_at"] = heartbeat["created_at"]
+
+        for bot in self.bots:
+            if bot["bot_id"] == bot_id:
+                bot["last_seen_at"] = heartbeat["created_at"]
+                bot["status"] = "running" if is_process_alive else "failed"
+                detail["status"] = bot["status"]
+                break
+
+        return {
+            "bot_id": bot_id,
+            "status": detail["status"],
+            "recorded_at": heartbeat["created_at"],
+        }
+
+
+def build_read_store(config: AppConfig) -> MemoryReadStore:
     if config.use_sample_read_model:
         return sample_read_store()
-    return SampleReadStore(bots=[], bot_details={}, heartbeats={}, alerts=[])
+    return MemoryReadStore(bots=[], bot_details={}, heartbeats={}, alerts=[])
 
 
-def sample_read_store() -> SampleReadStore:
+def sample_read_store() -> MemoryReadStore:
     bot_1_id = "9d0f9b5d-8f1d-4fe0-bd90-5b7bcb3b4e21"
     bot_2_id = "0ecf5f88-c7d3-4307-b4e7-e54caef0eab3"
 
@@ -202,7 +298,7 @@ def sample_read_store() -> SampleReadStore:
         ],
     }
 
-    return SampleReadStore(
+    return MemoryReadStore(
         bots=bots,
         bot_details=bot_details,
         heartbeats=heartbeats,
