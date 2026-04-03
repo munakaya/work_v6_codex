@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib.util import find_spec
+import shutil
 
 from ..config import AppConfig
-from .postgres_driver import PostgresDriverAdapter
+from .postgres_driver import PostgresDriverAdapter, PsqlCliAdapter
 from .postgres_read_store import PostgresReadStore
 from .read_store import MemoryReadStore, _sample_time
 from .sample_data import build_sample_state
@@ -39,6 +40,7 @@ class StoreBootstrapResult:
 
 def build_read_store_bundle(config: AppConfig) -> StoreBootstrapResult:
     driver_name = _detect_postgres_driver()
+    cli_name = _detect_postgres_cli()
     if config.use_sample_read_model:
         return StoreBootstrapResult(
             store=sample_read_store(),
@@ -46,26 +48,16 @@ def build_read_store_bundle(config: AppConfig) -> StoreBootstrapResult:
                 backend_name="memory_sample",
                 supports_mutation=True,
                 mode="sample",
-                driver_name=driver_name,
-                driver_available=driver_name is not None,
+                driver_name=driver_name or cli_name,
+                driver_available=bool(driver_name or cli_name),
                 reason="TP_USE_SAMPLE_READ_MODEL enabled",
             ),
         )
 
-    if config.postgres_dsn and driver_name is not None:
-        return StoreBootstrapResult(
-            store=PostgresReadStore(
-                PostgresDriverAdapter(config.postgres_dsn, driver_name)
-            ),
-            info=StoreBootstrapInfo(
-                backend_name="postgres_readonly",
-                supports_mutation=False,
-                mode="postgres",
-                driver_name=driver_name,
-                driver_available=True,
-                reason="PostgreSQL read repository enabled",
-            ),
-        )
+    if config.postgres_dsn:
+        postgres_backend = _postgres_backend_result(config.postgres_dsn, driver_name, cli_name)
+        if postgres_backend is not None:
+            return postgres_backend
 
     return StoreBootstrapResult(
         store=empty_read_store(),
@@ -73,9 +65,9 @@ def build_read_store_bundle(config: AppConfig) -> StoreBootstrapResult:
             backend_name="memory_empty",
             supports_mutation=False,
             mode="empty",
-            driver_name=driver_name,
-            driver_available=driver_name is not None,
-            reason=_fallback_reason(config.postgres_dsn, driver_name),
+            driver_name=driver_name or cli_name,
+            driver_available=bool(driver_name or cli_name),
+            reason=_fallback_reason(config.postgres_dsn, driver_name, cli_name),
         ),
     )
 
@@ -123,9 +115,79 @@ def _detect_postgres_driver() -> str | None:
     return None
 
 
-def _fallback_reason(postgres_dsn: str | None, driver_name: str | None) -> str:
+def _detect_postgres_cli() -> str | None:
+    if shutil.which("psql") is None:
+        return None
+    return "psql"
+
+
+def _postgres_backend_result(
+    dsn: str,
+    driver_name: str | None,
+    cli_name: str | None,
+) -> StoreBootstrapResult | None:
+    if driver_name is not None:
+        adapter = PostgresDriverAdapter(dsn, driver_name)
+        ok, reason = adapter.probe()
+        if ok:
+            return StoreBootstrapResult(
+                store=PostgresReadStore(adapter),
+                info=StoreBootstrapInfo(
+                    backend_name="postgres_readonly",
+                    supports_mutation=False,
+                    mode="postgres",
+                    driver_name=driver_name,
+                    driver_available=True,
+                    reason="PostgreSQL read repository enabled",
+                ),
+            )
+        return StoreBootstrapResult(
+            store=empty_read_store(),
+            info=StoreBootstrapInfo(
+                backend_name="memory_empty",
+                supports_mutation=False,
+                mode="empty",
+                driver_name=driver_name,
+                driver_available=True,
+                reason=f"PostgreSQL driver probe failed: {reason}",
+            ),
+        )
+
+    if cli_name is not None:
+        adapter = PsqlCliAdapter(dsn, cli_name)
+        ok, reason = adapter.probe()
+        if ok:
+            return StoreBootstrapResult(
+                store=PostgresReadStore(adapter),
+                info=StoreBootstrapInfo(
+                    backend_name="postgres_readonly",
+                    supports_mutation=False,
+                    mode="postgres",
+                    driver_name="psql",
+                    driver_available=True,
+                    reason="PostgreSQL read repository enabled via psql",
+                ),
+            )
+        return StoreBootstrapResult(
+            store=empty_read_store(),
+            info=StoreBootstrapInfo(
+                backend_name="memory_empty",
+                supports_mutation=False,
+                mode="empty",
+                driver_name="psql",
+                driver_available=True,
+                reason=f"PostgreSQL CLI probe failed: {reason}",
+            ),
+        )
+
+    return None
+
+
+def _fallback_reason(
+    postgres_dsn: str | None, driver_name: str | None, cli_name: str | None
+) -> str:
     if not postgres_dsn:
         return "TP_POSTGRES_DSN not configured; using empty in-memory store"
-    if driver_name is None:
-        return "PostgreSQL driver unavailable; using empty in-memory store"
+    if driver_name is None and cli_name is None:
+        return "PostgreSQL driver/cli unavailable; using empty in-memory store"
     return "PostgreSQL read repository unavailable; using empty in-memory store"
