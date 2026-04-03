@@ -1,0 +1,492 @@
+# API Contracts
+
+이 문서는 Control Plane API 계약과 OpenAPI 초안을 모은다. 백엔드 구현과 프론트엔드 연동 시 source of truth로 사용한다.
+
+
+## 18. API 명세 초안
+
+초기 버전의 API는 "Control Plane 우선" 원칙을 따른다.
+즉, 주문 실행 API보다 상태 조회, 설정 배포, 운영 명령 API를 먼저 안정화한다.
+
+### 18.1 공통 규칙
+
+- 모든 API는 `/api/v1` prefix 사용
+- 응답은 `success`, `data`, `error` 형태를 기본으로 함
+- `request_id`를 응답 헤더 또는 body에 포함
+- 시간 필드는 `ISO 8601 UTC` 문자열 사용
+- 운영 명령 API는 비동기 처리 기준으로 `accepted` 상태를 반환 가능
+
+응답 예시:
+
+```json
+{
+  "success": true,
+  "data": {
+    "bot_id": "9d0f9b5d-8f1d-4fe0-bd90-5b7bcb3b4e21"
+  },
+  "error": null
+}
+```
+
+에러 예시:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "BOT_NOT_FOUND",
+    "message": "bot_id not found"
+  }
+}
+```
+
+### 18.2 Health API
+
+#### `GET /api/v1/health`
+
+목적:
+
+- Control Plane 프로세스 생존 여부 확인
+
+응답 예시:
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "service": "control-plane",
+    "version": "0.1.0"
+  },
+  "error": null
+}
+```
+
+#### `GET /api/v1/ready`
+
+목적:
+
+- PostgreSQL, Redis 연결 포함 준비 상태 확인
+
+### 18.3 Bot API
+
+#### `POST /api/v1/bots/register`
+
+목적:
+
+- worker 또는 bot instance가 자신을 등록
+
+요청 예시:
+
+```json
+{
+  "bot_key": "arb-upbit-bithumb-001",
+  "strategy_name": "arbitrage",
+  "mode": "shadow",
+  "hostname": "trade-host-01"
+}
+```
+
+응답 핵심 필드:
+
+- `bot_id`
+- `assigned_config_version`
+- `status`
+
+#### `GET /api/v1/bots`
+
+목적:
+
+- bot 목록 조회
+
+필터 예시:
+
+- `status`
+- `strategy_name`
+- `mode`
+
+#### `GET /api/v1/bots/{bot_id}`
+
+목적:
+
+- bot 상세 상태 조회
+
+응답 핵심 필드:
+
+- bot 기본 정보
+- latest heartbeat
+- assigned config
+- latest strategy run
+
+### 18.4 Heartbeat API
+
+#### `POST /api/v1/bots/{bot_id}/heartbeat`
+
+목적:
+
+- bot 상태와 기능 생존 신호 보고
+
+요청 예시:
+
+```json
+{
+  "is_process_alive": true,
+  "is_market_data_alive": true,
+  "is_ordering_alive": true,
+  "lag_ms": 240,
+  "context": {
+    "orderbook_stale_count": 0,
+    "balance_refresh_age_ms": 1800
+  }
+}
+```
+
+### 18.5 Config API
+
+#### `POST /api/v1/configs`
+
+목적:
+
+- 새 config version 생성
+
+핵심 필드:
+
+- `config_scope`
+- `config_json`
+- `checksum`
+
+#### `GET /api/v1/configs/{config_scope}/latest`
+
+목적:
+
+- scope 기준 최신 config 조회
+
+#### `POST /api/v1/bots/{bot_id}/assign-config`
+
+목적:
+
+- bot에 특정 config version 할당
+
+### 18.6 Strategy Run API
+
+#### `POST /api/v1/strategy-runs`
+
+목적:
+
+- strategy run 생성
+
+#### `POST /api/v1/strategy-runs/{run_id}/start`
+
+목적:
+
+- 특정 strategy run 시작 명령
+
+#### `POST /api/v1/strategy-runs/{run_id}/stop`
+
+목적:
+
+- 특정 strategy run 정지 명령
+
+#### `GET /api/v1/strategy-runs/{run_id}`
+
+목적:
+
+- strategy run 상태 조회
+
+### 18.7 Orders / Fills API
+
+#### `GET /api/v1/order-intents`
+
+목적:
+
+- dry-run, shadow, live 전반의 의사결정 기록 조회
+
+필터 예시:
+
+- `bot_id`
+- `strategy_run_id`
+- `status`
+- `market`
+
+#### `GET /api/v1/orders`
+
+목적:
+
+- 실제 주문 이력 조회
+
+#### `GET /api/v1/orders/{order_id}`
+
+목적:
+
+- 단일 주문 및 체결 상세 조회
+
+#### `GET /api/v1/fills`
+
+목적:
+
+- 체결 이력 조회
+
+### 18.8 Alerts API
+
+#### `GET /api/v1/alerts`
+
+목적:
+
+- alert event 목록 조회
+
+#### `POST /api/v1/alerts/{alert_id}/ack`
+
+목적:
+
+- 운영자가 alert 확인 처리
+
+### 18.9 Metrics API
+
+#### `GET /metrics`
+
+목적:
+
+- Prometheus scraping endpoint 제공
+
+## 21. OpenAPI 초안
+
+아래는 초기 버전 Control Plane의 OpenAPI 초안이다.
+정식 OpenAPI YAML을 바로 작성하기 전에, 구현 팀이 빠르게 인터페이스를 합의할 수 있도록 최소 계약 중심으로 정리한다.
+
+### 21.1 공통 컴포넌트 스키마
+
+#### `BotSummary`
+
+```json
+{
+  "id": "uuid",
+  "bot_key": "arb-upbit-bithumb-001",
+  "strategy_name": "arbitrage",
+  "mode": "shadow",
+  "status": "running",
+  "hostname": "trade-host-01",
+  "last_seen_at": "2026-04-03T14:12:00Z"
+}
+```
+
+#### `HeartbeatPayload`
+
+```json
+{
+  "is_process_alive": true,
+  "is_market_data_alive": true,
+  "is_ordering_alive": true,
+  "lag_ms": 240,
+  "context": {
+    "orderbook_stale_count": 0,
+    "balance_refresh_age_ms": 1800
+  }
+}
+```
+
+#### `ConfigVersionSummary`
+
+```json
+{
+  "id": "uuid",
+  "config_scope": "arbitrage.default",
+  "version_no": 3,
+  "checksum": "sha256:...",
+  "created_at": "2026-04-03T14:10:00Z"
+}
+```
+
+#### `OrderIntentSummary`
+
+```json
+{
+  "id": "uuid",
+  "strategy_run_id": "uuid",
+  "market": "XRP-KRW",
+  "buy_exchange": "upbit",
+  "sell_exchange": "bithumb",
+  "target_qty": "120.5",
+  "expected_profit": "14320.11",
+  "status": "created",
+  "created_at": "2026-04-03T14:13:00Z"
+}
+```
+
+#### `AlertEventSummary`
+
+```json
+{
+  "id": "uuid",
+  "bot_id": "uuid",
+  "level": "warn",
+  "code": "ORDERBOOK_STALE",
+  "message": "orderbook stale count exceeded threshold",
+  "created_at": "2026-04-03T14:13:22Z",
+  "acknowledged_at": null
+}
+```
+
+### 21.2 핵심 엔드포인트 목록
+
+#### Health
+
+- `GET /api/v1/health`
+- `GET /api/v1/ready`
+
+#### Bots
+
+- `POST /api/v1/bots/register`
+- `GET /api/v1/bots`
+- `GET /api/v1/bots/{bot_id}`
+- `POST /api/v1/bots/{bot_id}/heartbeat`
+- `POST /api/v1/bots/{bot_id}/assign-config`
+
+#### Configs
+
+- `POST /api/v1/configs`
+- `GET /api/v1/configs/{config_scope}/latest`
+- `GET /api/v1/configs/{config_scope}/versions`
+
+#### Strategy Runs
+
+- `POST /api/v1/strategy-runs`
+- `GET /api/v1/strategy-runs`
+- `GET /api/v1/strategy-runs/{run_id}`
+- `POST /api/v1/strategy-runs/{run_id}/start`
+- `POST /api/v1/strategy-runs/{run_id}/stop`
+
+#### Orders and Fills
+
+- `GET /api/v1/order-intents`
+- `GET /api/v1/order-intents/{intent_id}`
+- `GET /api/v1/orders`
+- `GET /api/v1/orders/{order_id}`
+- `GET /api/v1/fills`
+
+#### Alerts
+
+- `GET /api/v1/alerts`
+- `GET /api/v1/alerts/{alert_id}`
+- `POST /api/v1/alerts/{alert_id}/ack`
+
+### 21.3 엔드포인트별 핵심 계약
+
+#### `POST /api/v1/bots/register`
+
+요청:
+
+```json
+{
+  "bot_key": "arb-upbit-bithumb-001",
+  "strategy_name": "arbitrage",
+  "mode": "shadow",
+  "hostname": "trade-host-01"
+}
+```
+
+응답:
+
+```json
+{
+  "success": true,
+  "data": {
+    "bot": {
+      "id": "uuid",
+      "bot_key": "arb-upbit-bithumb-001",
+      "strategy_name": "arbitrage",
+      "mode": "shadow",
+      "status": "pending"
+    },
+    "assigned_config": {
+      "id": "uuid",
+      "config_scope": "arbitrage.default",
+      "version_no": 1
+    }
+  },
+  "error": null
+}
+```
+
+#### `POST /api/v1/bots/{bot_id}/heartbeat`
+
+요청:
+
+```json
+{
+  "is_process_alive": true,
+  "is_market_data_alive": true,
+  "is_ordering_alive": true,
+  "lag_ms": 240,
+  "context": {
+    "orderbook_stale_count": 0
+  }
+}
+```
+
+응답:
+
+```json
+{
+  "success": true,
+  "data": {
+    "accepted": true,
+    "server_time": "2026-04-03T14:12:03Z"
+  },
+  "error": null
+}
+```
+
+#### `POST /api/v1/configs`
+
+요청:
+
+```json
+{
+  "config_scope": "arbitrage.default",
+  "config_json": {
+    "min_profit": 1000,
+    "max_order_notional": 500000
+  }
+}
+```
+
+#### `POST /api/v1/strategy-runs`
+
+요청:
+
+```json
+{
+  "bot_id": "uuid",
+  "strategy_name": "arbitrage",
+  "mode": "shadow"
+}
+```
+
+#### `GET /api/v1/order-intents`
+
+쿼리 파라미터 예시:
+
+- `bot_id`
+- `strategy_run_id`
+- `market`
+- `status`
+- `created_from`
+- `created_to`
+
+### 21.4 상태 코드 원칙
+
+- `200`: 정상 조회/처리
+- `202`: 비동기 명령 접수
+- `400`: 잘못된 요청
+- `404`: 리소스 없음
+- `409`: 상태 충돌
+- `422`: 도메인 검증 실패
+- `500`: 서버 내부 오류
+
+### 21.5 인증 초안
+
+초기 버전에서는 내부 운영망 기준으로 간단히 시작할 수 있지만, 최소한 아래 두 단계는 열어둔다.
+
+- 1단계: 내부망 + static admin token
+- 2단계: service-to-service token 또는 mTLS
