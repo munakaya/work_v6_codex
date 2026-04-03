@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from .config import AppConfig
+from .storage.dependencies import postgres_status, redis_status
 
 
 LOGGER = logging.getLogger(__name__)
@@ -59,25 +60,22 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
     def _ready_response(self) -> tuple[HTTPStatus, dict[str, Any]]:
         config = self.server.config
         dependencies = {
-            "postgres": self._dependency_status(config.postgres_dsn),
-            "redis": self._dependency_status(config.redis_url),
+            "postgres": postgres_status(config.postgres_dsn).as_dict(),
+            "redis": redis_status(config.redis_url).as_dict(),
         }
-        ready = all(dep["configured"] for dep in dependencies.values())
+        ready = all(
+            bool(dep["configured"]) and bool(dep["reachable"]) for dep in dependencies.values()
+        )
         status = HTTPStatus.OK if ready else HTTPStatus.SERVICE_UNAVAILABLE
         payload = self._response(
             data={
                 "status": "ok" if ready else "degraded",
                 "service": config.service_name,
+                "redis_key_prefix": config.redis_key_prefix,
                 "dependencies": dependencies,
             }
         )
         return status, payload
-
-    def _dependency_status(self, value: str | None) -> dict[str, Any]:
-        return {
-            "configured": bool(value),
-            "state": "configured" if value else "not_configured",
-        }
 
     def _response(
         self,

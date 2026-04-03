@@ -1,0 +1,1 @@
+- db_inspect.py: PostgreSQL/Redis 설정과 코드 기준 스키마를 읽기 전용으로 요약해 `.tmp/db_report/`에 저장
