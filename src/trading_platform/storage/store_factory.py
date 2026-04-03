@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from importlib.util import find_spec
 
 from ..config import AppConfig
+from .postgres_driver import PostgresDriverAdapter
+from .postgres_read_store import PostgresReadStore
 from .read_store import MemoryReadStore, _sample_time
 from .sample_data import build_sample_state
 from .store_protocol import ControlPlaneStoreProtocol
@@ -50,6 +52,21 @@ def build_read_store_bundle(config: AppConfig) -> StoreBootstrapResult:
             ),
         )
 
+    if config.postgres_dsn and driver_name is not None:
+        return StoreBootstrapResult(
+            store=PostgresReadStore(
+                PostgresDriverAdapter(config.postgres_dsn, driver_name)
+            ),
+            info=StoreBootstrapInfo(
+                backend_name="postgres_readonly",
+                supports_mutation=False,
+                mode="postgres",
+                driver_name=driver_name,
+                driver_available=True,
+                reason="PostgreSQL read repository enabled",
+            ),
+        )
+
     return StoreBootstrapResult(
         store=empty_read_store(),
         info=StoreBootstrapInfo(
@@ -58,9 +75,7 @@ def build_read_store_bundle(config: AppConfig) -> StoreBootstrapResult:
             mode="empty",
             driver_name=driver_name,
             driver_available=driver_name is not None,
-            reason=(
-                "PostgreSQL read repository not wired yet; using empty in-memory store"
-            ),
+            reason=_fallback_reason(config.postgres_dsn, driver_name),
         ),
     )
 
@@ -106,3 +121,11 @@ def _detect_postgres_driver() -> str | None:
         if find_spec(module_name) is not None:
             return module_name
     return None
+
+
+def _fallback_reason(postgres_dsn: str | None, driver_name: str | None) -> str:
+    if not postgres_dsn:
+        return "TP_POSTGRES_DSN not configured; using empty in-memory store"
+    if driver_name is None:
+        return "PostgreSQL driver unavailable; using empty in-memory store"
+    return "PostgreSQL read repository unavailable; using empty in-memory store"
