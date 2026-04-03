@@ -172,7 +172,7 @@ def list_orders(
                 sum(tf.fill_qty) as filled_qty,
                 case
                     when sum(tf.fill_qty) > 0
-                    then sum(tf.fill_price * tf.fill_qty) / sum(tf.fill_qty)
+                    then round(sum(tf.fill_price * tf.fill_qty) / sum(tf.fill_qty), 16)
                     else null
                 end as avg_fill_price,
                 sum(tf.fee_amount) as fee_amount
@@ -222,7 +222,7 @@ def get_order_detail(
                 sum(tf.fill_qty) as filled_qty,
                 case
                     when sum(tf.fill_qty) > 0
-                    then sum(tf.fill_price * tf.fill_qty) / sum(tf.fill_qty)
+                    then round(sum(tf.fill_price * tf.fill_qty) / sum(tf.fill_qty), 16)
                     else null
                 end as avg_fill_price,
                 sum(tf.fee_amount) as fee_amount

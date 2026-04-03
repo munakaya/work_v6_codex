@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import shutil
 import socket
+import subprocess
 from typing import Final
 from urllib.parse import urlparse
 
@@ -45,6 +47,15 @@ def _status_from_url(raw_url: str | None, default_port: int) -> DependencyStatus
     host = parsed.hostname
     port = parsed.port or default_port
     if not host:
+        if parsed.scheme.startswith("postgres") and parsed.path and parsed.path != "/":
+            reachable = _postgres_local_socket_reachable(parsed.path.lstrip("/"))
+            return DependencyStatus(
+                configured=True,
+                reachable=reachable,
+                state="reachable_local_socket" if reachable else "unreachable_local_socket",
+                host="local_socket",
+                port=None,
+            )
         return DependencyStatus(
             configured=True,
             reachable=False,
@@ -68,4 +79,21 @@ def _tcp_reachable(host: str, port: int) -> bool:
         with socket.create_connection((host, port), timeout=TCP_TIMEOUT_SECONDS):
             return True
     except OSError:
+        return False
+
+
+def _postgres_local_socket_reachable(database_name: str) -> bool:
+    pg_isready = shutil.which("pg_isready")
+    if pg_isready is None:
+        return False
+    try:
+        subprocess.run(
+            [pg_isready, "-q", "-d", database_name],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        return True
+    except (OSError, subprocess.SubprocessError):
         return False

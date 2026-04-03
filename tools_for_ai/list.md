@@ -1,1 +1,2 @@
 - db_inspect.py: PostgreSQL/Redis 설정과 코드 기준 스키마를 읽기 전용으로 요약해 `.tmp/db_report/`에 저장
+- db_bootstrap_local.py: 로컬 PostgreSQL 개발 DB를 생성하고 migrations와 sample seed를 적용해 `postgres_readonly` 검증용 상태를 만든다
