@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from http import HTTPStatus
 import json
@@ -183,3 +184,27 @@ def is_positive_number_text(value: str | None) -> bool:
     if not decimal.is_finite():
         return False
     return decimal > 0
+
+
+def is_nonnegative_number_text(value: str | None) -> bool:
+    if value is None:
+        return False
+    try:
+        decimal = Decimal(value)
+    except (InvalidOperation, ValueError):
+        return False
+    if not decimal.is_finite():
+        return False
+    return decimal >= 0
+
+
+def json_datetime_text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC).isoformat().replace("+00:00", "Z")

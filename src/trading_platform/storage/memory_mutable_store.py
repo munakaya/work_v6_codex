@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from .order_mutation_views import create_order as build_order_create
+from .order_mutation_views import create_fill as build_fill_create
 from .order_mutation_views import create_order_intent as build_order_intent_create
 from .read_store import MemoryReadStore, _sample_time
 
@@ -189,6 +190,30 @@ class MemoryMutableStore(MemoryReadStore):
             requested_qty=requested_qty,
             status=status,
             raw_payload=raw_payload,
+        )
+
+    def create_fill(
+        self,
+        *,
+        order_id: str,
+        exchange_trade_id: str | None,
+        fill_price: str,
+        fill_qty: str,
+        fee_asset: str | None,
+        fee_amount: str | None,
+        filled_at: str,
+    ) -> tuple[str, dict[str, object] | None]:
+        return build_fill_create(
+            orders=self.orders,
+            order_intents=self.order_intents,
+            fills=self.fills,
+            order_id=order_id,
+            exchange_trade_id=exchange_trade_id,
+            fill_price=fill_price,
+            fill_qty=fill_qty,
+            fee_asset=fee_asset,
+            fee_amount=fee_amount,
+            filled_at=filled_at,
         )
 
     def assign_config(

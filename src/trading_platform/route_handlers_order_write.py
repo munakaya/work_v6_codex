@@ -3,7 +3,9 @@ from __future__ import annotations
 from http import HTTPStatus
 
 from .request_utils import (
+    is_nonnegative_number_text,
     is_positive_number_text,
+    json_datetime_text,
     json_number_text,
     json_string,
     optional_object,
@@ -242,3 +244,128 @@ class ControlPlaneOrderWriteRouteMixin:
                 ),
             )
         return HTTPStatus.CREATED, self._response(data=order)
+
+    def _create_fill_response(self) -> tuple[HTTPStatus, dict[str, object]]:
+        unsupported = self._ensure_mutation_supported()
+        if unsupported is not None:
+            return unsupported
+
+        body, error = self._read_json_body()
+        if error is not None:
+            return error
+
+        required_fields = {
+            "order_id": json_string(body.get("order_id")),
+            "fill_price": json_number_text(body.get("fill_price")),
+            "fill_qty": json_number_text(body.get("fill_qty")),
+            "filled_at": json_datetime_text(body.get("filled_at")),
+        }
+        invalid_fields = [
+            key
+            for key, value in required_fields.items()
+            if key in body and value is None
+        ]
+        exchange_trade_id = json_string(body.get("exchange_trade_id"))
+        fee_asset = json_string(body.get("fee_asset"))
+        fee_amount = json_number_text(body.get("fee_amount"))
+        if "exchange_trade_id" in body and exchange_trade_id is None:
+            invalid_fields.append("exchange_trade_id")
+        if "fee_asset" in body and fee_asset is None:
+            invalid_fields.append("fee_asset")
+        if "fee_amount" in body and fee_amount is None:
+            invalid_fields.append("fee_amount")
+        if invalid_fields:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "invalid fields: " + ", ".join(sorted(set(invalid_fields))),
+                    }
+                ),
+            )
+
+        missing = [key for key, value in required_fields.items() if not value]
+        if missing:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": f"missing required fields: {', '.join(missing)}",
+                    }
+                ),
+            )
+        if not is_positive_number_text(required_fields["fill_price"]):
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "fill_price must be a positive number",
+                    }
+                ),
+            )
+        if not is_positive_number_text(required_fields["fill_qty"]):
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "fill_qty must be a positive number",
+                    }
+                ),
+            )
+        if fee_amount is not None and not is_nonnegative_number_text(fee_amount):
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "fee_amount must be a non-negative number",
+                    }
+                ),
+            )
+
+        outcome, fill = self.server.read_store.create_fill(
+            order_id=required_fields["order_id"],
+            exchange_trade_id=exchange_trade_id,
+            fill_price=required_fields["fill_price"],
+            fill_qty=required_fields["fill_qty"],
+            fee_asset=fee_asset,
+            fee_amount=fee_amount,
+            filled_at=required_fields["filled_at"],
+        )
+        if outcome == "not_found":
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "ORDER_NOT_FOUND",
+                        "message": "order_id not found",
+                    }
+                ),
+            )
+        if outcome == "conflict":
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "FILL_CONFLICT",
+                        "message": "exchange_trade_id already exists for order",
+                    }
+                ),
+            )
+        if outcome == "invalid":
+            return (
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                self._response(
+                    error={
+                        "code": "FILL_VALIDATION_FAILED",
+                        "message": (
+                            "fill exceeds requested quantity or order is already terminal"
+                        ),
+                    }
+                ),
+            )
+        return HTTPStatus.CREATED, self._response(data=fill)

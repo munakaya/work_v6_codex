@@ -188,6 +188,7 @@ def fill(row: dict[str, object]) -> dict[str, object]:
         "bot_id": row.get("bot_id"),
         "strategy_run_id": row.get("strategy_run_id"),
         "exchange_name": row["exchange_name"],
+        "exchange_trade_id": row.get("exchange_trade_id"),
         "market": row["market"],
         "side": row["side"],
         "fill_price": decimal_text(row["fill_price"]),

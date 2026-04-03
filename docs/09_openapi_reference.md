@@ -401,6 +401,68 @@ paths:
         '422':
           description: Order validation failed
 
+  /api/v1/fills:
+    get:
+      tags: [Orders]
+      summary: List fills
+      operationId: listFills
+      parameters:
+        - in: query
+          name: bot_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: exchange_name
+          schema:
+            type: string
+        - in: query
+          name: market
+          schema:
+            type: string
+        - in: query
+          name: strategy_run_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: order_id
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Fill list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FillListResponse'
+    post:
+      tags: [Orders]
+      summary: Create fill
+      operationId: createFill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFillRequest'
+      responses:
+        '201':
+          description: Fill created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FillResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Order not found
+        '409':
+          description: Duplicate exchange trade
+        '422':
+          description: Fill validation failed
+
   /api/v1/alerts:
     get:
       tags: [Alerts]
@@ -704,6 +766,27 @@ components:
           type: object
           additionalProperties: true
 
+    CreateFillRequest:
+      type: object
+      required: [order_id, fill_price, fill_qty, filled_at]
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        exchange_trade_id:
+          type: string
+        fill_price:
+          type: string
+        fill_qty:
+          type: string
+        fee_asset:
+          type: string
+        fee_amount:
+          type: string
+        filled_at:
+          type: string
+          format: date-time
+
     StrategyRunSummary:
       type: object
       properties:
@@ -917,8 +1000,7 @@ components:
         fills:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/FillSummary'
         reconciliation_events:
           type: array
           items:
@@ -951,6 +1033,87 @@ components:
           type: boolean
         data:
           $ref: '#/components/schemas/OrderDetail'
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    FillSummary:
+      type: object
+      properties:
+        fill_id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+          format: uuid
+        order_intent_id:
+          type: string
+          format: uuid
+          nullable: true
+        bot_id:
+          type: string
+          format: uuid
+          nullable: true
+        strategy_run_id:
+          type: string
+          format: uuid
+          nullable: true
+        exchange_name:
+          type: string
+        exchange_trade_id:
+          type: string
+          nullable: true
+        market:
+          type: string
+        side:
+          type: string
+          enum: [buy, sell]
+        fill_price:
+          type: string
+        fill_qty:
+          type: string
+        fee_asset:
+          type: string
+          nullable: true
+        fee_amount:
+          type: string
+          nullable: true
+        order_status:
+          $ref: '#/components/schemas/OrderStatus'
+        filled_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    FillListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/FillSummary'
+            count:
+              type: integer
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    FillResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/FillSummary'
         error:
           oneOf:
             - type: 'null'

@@ -67,6 +67,11 @@ class PostgresReadStore:
     def list_fills(self, **kwargs) -> list[dict[str, object]]:
         return list_fills(self.adapter, **kwargs)
 
+    def create_fill(
+        self, **kwargs
+    ) -> tuple[str, dict[str, object] | None]:
+        raise RuntimeError("mutation not supported for postgres read-only backend")
+
     def list_heartbeats(
         self, bot_id: str, limit: int = 20
     ) -> list[dict[str, object]] | None:

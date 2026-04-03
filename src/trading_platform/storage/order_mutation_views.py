@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import uuid4
 
 
@@ -105,3 +106,74 @@ def create_order(
     if intent["status"] == "created":
         intent["status"] = "submitted"
     return "created", order
+
+
+def create_fill(
+    *,
+    orders: dict[str, dict[str, object]],
+    order_intents: dict[str, dict[str, object]],
+    fills: list[dict[str, object]],
+    order_id: str,
+    exchange_trade_id: str | None,
+    fill_price: str,
+    fill_qty: str,
+    fee_asset: str | None,
+    fee_amount: str | None,
+    filled_at: str,
+) -> tuple[str, dict[str, object] | None]:
+    order = orders.get(order_id)
+    if order is None:
+        return "not_found", None
+    if str(order.get("status")) in {"cancelled", "rejected", "expired", "filled"}:
+        return "invalid", None
+    if exchange_trade_id is not None:
+        existing = next(
+            (
+                fill
+                for fill in fills
+                if fill.get("order_id") == order_id
+                and fill.get("exchange_trade_id") == exchange_trade_id
+            ),
+            None,
+        )
+        if existing is not None:
+            return "conflict", existing
+
+    requested_qty = Decimal(str(order["requested_qty"]))
+    current_filled_qty = sum(
+        Decimal(str(fill["fill_qty"]))
+        for fill in fills
+        if fill.get("order_id") == order_id
+    )
+    next_filled_qty = current_filled_qty + Decimal(fill_qty)
+    if next_filled_qty > requested_qty:
+        return "invalid", None
+
+    created_at = _sample_time()
+    next_status = "filled" if next_filled_qty == requested_qty else "partially_filled"
+    order["status"] = next_status
+    order["updated_at"] = created_at
+
+    intent = order_intents.get(str(order.get("order_intent_id")))
+    fill = {
+        "fill_id": str(uuid4()),
+        "order_id": order_id,
+        "order_intent_id": order.get("order_intent_id"),
+        "bot_id": order.get("bot_id"),
+        "strategy_run_id": order.get("strategy_run_id"),
+        "exchange_name": order["exchange_name"],
+        "exchange_trade_id": exchange_trade_id,
+        "market": order["market"],
+        "side": order["side"],
+        "fill_price": fill_price,
+        "fill_qty": fill_qty,
+        "fee_asset": fee_asset,
+        "fee_amount": fee_amount,
+        "order_status": next_status,
+        "filled_at": filled_at,
+        "created_at": created_at,
+    }
+    fills.insert(0, fill)
+    if intent is not None and intent.get("status") == "created":
+        intent["status"] = "submitted"
+    return "created", fill

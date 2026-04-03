@@ -95,6 +95,18 @@ class ControlPlaneStoreProtocol(Protocol):
         created_to: str | None = None,
     ) -> list[dict[str, object]]: ...
 
+    def create_fill(
+        self,
+        *,
+        order_id: str,
+        exchange_trade_id: str | None,
+        fill_price: str,
+        fill_qty: str,
+        fee_asset: str | None,
+        fee_amount: str | None,
+        filled_at: str,
+    ) -> tuple[str, dict[str, object] | None]: ...
+
     def list_heartbeats(
         self, bot_id: str, limit: int = 20
     ) -> list[dict[str, object]] | None: ...

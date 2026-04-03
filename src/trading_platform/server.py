@@ -148,6 +148,9 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
         if path == "/api/v1/orders":
             return self._create_order_response()
 
+        if path == "/api/v1/fills":
+            return self._create_fill_response()
+
         for resolver in (
             lambda: self._acknowledge_alert_response(path),
             lambda: self._assign_config_response(path),

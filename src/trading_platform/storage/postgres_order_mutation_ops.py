@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 
-from .postgres_order_views import get_order_detail, get_order_intent
+from .postgres_order_views import get_fill, get_order_detail, get_order_intent
 from .postgres_driver import PostgresDriverAdapter
 from .postgres_view_utils import uuid_or_none
 
@@ -187,3 +188,106 @@ def create_order(
         (intent_uuid,),
     )
     return "created", get_order_detail(adapter, str(row["order_id"]))
+
+
+def create_fill(
+    adapter: PostgresDriverAdapter,
+    *,
+    order_id: str,
+    exchange_trade_id: str | None,
+    fill_price: str,
+    fill_qty: str,
+    fee_asset: str | None,
+    fee_amount: str | None,
+    filled_at: str,
+) -> tuple[str, dict[str, object] | None]:
+    order_uuid = uuid_or_none(order_id)
+    if order_uuid is None:
+        return "not_found", None
+    order_row = adapter.fetch_one(
+        """
+        select
+            o.id::text as order_id,
+            o.status::text as status,
+            o.quantity as requested_qty,
+            coalesce(sum(tf.fill_qty), 0) as current_filled_qty
+        from orders o
+        left join trade_fills tf on tf.order_id = o.id
+        where o.id = %s::uuid
+        group by o.id, o.status, o.quantity
+        """,
+        (order_uuid,),
+    )
+    if order_row is None:
+        return "not_found", None
+    if str(order_row["status"]) in {"cancelled", "rejected", "expired", "filled"}:
+        return "invalid", None
+    if exchange_trade_id is not None:
+        existing_id = adapter.fetch_value(
+            """
+            select id::text
+            from trade_fills
+            where order_id = %s::uuid
+              and exchange_trade_id = %s
+            limit 1
+            """,
+            (order_uuid, exchange_trade_id),
+        )
+        if existing_id is not None:
+            return "conflict", get_fill(adapter, str(existing_id))
+
+    requested_qty = Decimal(str(order_row["requested_qty"]))
+    current_filled_qty = Decimal(str(order_row["current_filled_qty"]))
+    next_filled_qty = current_filled_qty + Decimal(fill_qty)
+    if next_filled_qty > requested_qty:
+        return "invalid", None
+    next_status = "filled" if next_filled_qty == requested_qty else "partially_filled"
+    row = adapter.fetch_one(
+        """
+        with inserted_fill as (
+            insert into trade_fills (
+                order_id,
+                exchange_trade_id,
+                fill_price,
+                fill_qty,
+                fee_asset,
+                fee_amount,
+                filled_at
+            )
+            values (
+                %s::uuid,
+                %s,
+                %s::numeric,
+                %s::numeric,
+                %s,
+                %s::numeric,
+                %s::timestamptz
+            )
+            returning id::text as fill_id
+        ), updated_order as (
+            update orders
+            set
+                status = %s::order_status,
+                updated_at = now()
+            where id = %s::uuid
+            returning id::text as order_id
+        )
+        select inserted_fill.fill_id
+        from inserted_fill
+        join updated_order on true
+        """,
+        (
+            order_uuid,
+            exchange_trade_id,
+            fill_price,
+            fill_qty,
+            fee_asset,
+            fee_amount,
+            filled_at,
+            next_status,
+            order_uuid,
+        ),
+    )
+    if row is None:
+        raise RuntimeError("failed to create fill")
+    return "created", get_fill(adapter, str(row["fill_id"]))

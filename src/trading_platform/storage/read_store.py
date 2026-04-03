@@ -164,6 +164,7 @@ class MemoryReadStore:
     ) -> list[dict[str, object]]:
         return filter_orders(
             self.orders,
+            self.fills,
             bot_id=bot_id,
             exchange_name=exchange_name,
             status=status,
@@ -212,6 +213,19 @@ class MemoryReadStore:
             created_from=created_from,
             created_to=created_to,
         )
+
+    def create_fill(
+        self,
+        *,
+        order_id: str,
+        exchange_trade_id: str | None,
+        fill_price: str,
+        fill_qty: str,
+        fee_asset: str | None,
+        fee_amount: str | None,
+        filled_at: str,
+    ) -> tuple[str, dict[str, object] | None]:
+        raise RuntimeError("mutation not supported for base memory store")
 
     def list_heartbeats(self, bot_id: str, limit: int = 20) -> list[dict[str, object]] | None:
         entries = self.heartbeats.get(bot_id)

@@ -302,6 +302,7 @@ def list_fills(
             o.bot_id::text as bot_id,
             oi.strategy_run_id::text as strategy_run_id,
             o.exchange_name,
+            tf.exchange_trade_id,
             o.market,
             o.side,
             tf.fill_price,
@@ -320,3 +321,36 @@ def list_fills(
         tuple(params),
     )
     return [fill(row) for row in rows]
+
+
+def get_fill(adapter: PostgresDriverAdapter, fill_id: str) -> dict[str, object] | None:
+    fill_uuid = uuid_or_none(fill_id)
+    if fill_uuid is None:
+        return None
+    row = adapter.fetch_one(
+        """
+        select
+            tf.id::text as fill_id,
+            tf.order_id::text as order_id,
+            o.order_intent_id::text as order_intent_id,
+            o.bot_id::text as bot_id,
+            oi.strategy_run_id::text as strategy_run_id,
+            o.exchange_name,
+            tf.exchange_trade_id,
+            o.market,
+            o.side,
+            tf.fill_price,
+            tf.fill_qty,
+            tf.fee_asset,
+            tf.fee_amount,
+            o.status::text as order_status,
+            tf.filled_at,
+            tf.created_at
+        from trade_fills tf
+        join orders o on o.id = tf.order_id
+        left join order_intents oi on oi.id = o.order_intent_id
+        where tf.id = %s::uuid
+        """,
+        (fill_uuid,),
+    )
+    return None if row is None else fill(row)

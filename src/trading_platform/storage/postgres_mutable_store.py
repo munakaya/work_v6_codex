@@ -12,6 +12,7 @@ from .postgres_mutation_ops import (
     stop_strategy_run,
 )
 from .postgres_order_mutation_ops import (
+    create_fill,
     create_order,
     create_order_intent,
 )
@@ -52,6 +53,11 @@ class PostgresMutableStore(PostgresReadStore):
         self, **kwargs
     ) -> tuple[str, dict[str, object] | None]:
         return create_order(self.adapter, **kwargs)
+
+    def create_fill(
+        self, **kwargs
+    ) -> tuple[str, dict[str, object] | None]:
+        return create_fill(self.adapter, **kwargs)
 
     def assign_config(self, **kwargs) -> dict[str, object] | None:
         return assign_config(self.adapter, **kwargs)
