@@ -5,6 +5,7 @@ from importlib.util import find_spec
 import shutil
 
 from ..config import AppConfig
+from .memory_mutable_store import MemoryMutableStore
 from .postgres_driver import PostgresDriverAdapter, PsqlCliAdapter
 from .postgres_mutable_store import PostgresMutableStore
 from .postgres_read_store import PostgresReadStore
@@ -100,7 +101,7 @@ def empty_read_store() -> MemoryReadStore:
 
 def sample_read_store() -> MemoryReadStore:
     state = build_sample_state(_sample_time)
-    return MemoryReadStore(
+    return MemoryMutableStore(
         bots=state["bots"],
         bot_details=state["bot_details"],
         strategy_runs=state["strategy_runs"],

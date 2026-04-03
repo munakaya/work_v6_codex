@@ -327,6 +327,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrderIntentListResponse'
+    post:
+      tags: [OrderIntents]
+      summary: Create order intent
+      operationId: createOrderIntent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderIntentRequest'
+      responses:
+        '201':
+          description: Order intent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderIntentResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Strategy run not found
 
   /api/v1/orders:
     get:
@@ -354,6 +375,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrderListResponse'
+    post:
+      tags: [Orders]
+      summary: Create order
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Order intent not found
+        '409':
+          description: Duplicate exchange order
+        '422':
+          description: Order validation failed
 
   /api/v1/alerts:
     get:
@@ -605,6 +651,59 @@ components:
         mode:
           $ref: '#/components/schemas/RunMode'
 
+    CreateOrderIntentRequest:
+      type: object
+      required: [strategy_run_id, market, buy_exchange, sell_exchange, side_pair, target_qty]
+      properties:
+        strategy_run_id:
+          type: string
+          format: uuid
+        market:
+          type: string
+        buy_exchange:
+          type: string
+        sell_exchange:
+          type: string
+        side_pair:
+          type: string
+        target_qty:
+          type: string
+        expected_profit:
+          type: string
+        expected_profit_ratio:
+          type: string
+        status:
+          $ref: '#/components/schemas/OrderIntentStatus'
+        decision_context:
+          type: object
+          additionalProperties: true
+
+    CreateOrderRequest:
+      type: object
+      required: [order_intent_id, exchange_name, market, side, requested_qty]
+      properties:
+        order_intent_id:
+          type: string
+          format: uuid
+        exchange_name:
+          type: string
+        exchange_order_id:
+          type: string
+        market:
+          type: string
+        side:
+          type: string
+          enum: [buy, sell]
+        requested_price:
+          type: string
+        requested_qty:
+          type: string
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        raw_payload:
+          type: object
+          additionalProperties: true
+
     StrategyRunSummary:
       type: object
       properties:
@@ -678,6 +777,43 @@ components:
           type: string
           format: date-time
 
+    OrderIntentDetail:
+      type: object
+      properties:
+        intent_id:
+          type: string
+          format: uuid
+        bot_id:
+          type: string
+          format: uuid
+        strategy_run_id:
+          type: string
+          format: uuid
+        market:
+          type: string
+        buy_exchange:
+          type: string
+        sell_exchange:
+          type: string
+        side_pair:
+          type: string
+        target_qty:
+          type: string
+        expected_profit:
+          type: string
+          nullable: true
+        expected_profit_ratio:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/OrderIntentStatus'
+        created_at:
+          type: string
+          format: date-time
+        decision_context:
+          type: object
+          additionalProperties: true
+
     OrderIntentListResponse:
       type: object
       properties:
@@ -687,6 +823,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrderIntentSummary'
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    OrderIntentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/OrderIntentDetail'
         error:
           oneOf:
             - type: 'null'
@@ -711,6 +859,77 @@ components:
         status:
           $ref: '#/components/schemas/OrderStatus'
 
+    OrderDetail:
+      type: object
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        order_intent_id:
+          type: string
+          format: uuid
+        bot_id:
+          type: string
+          format: uuid
+        strategy_run_id:
+          type: string
+          format: uuid
+        exchange_name:
+          type: string
+        exchange_order_id:
+          type: string
+          nullable: true
+        market:
+          type: string
+        side:
+          type: string
+          enum: [buy, sell]
+        requested_price:
+          type: string
+          nullable: true
+        requested_qty:
+          type: string
+        filled_qty:
+          type: string
+        avg_fill_price:
+          type: string
+          nullable: true
+        fee_amount:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        internal_error_code:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        submitted_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+        order_intent:
+          $ref: '#/components/schemas/OrderIntentDetail'
+        fills:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        reconciliation_events:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        decision_record:
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: true
+
     OrderListResponse:
       type: object
       properties:
@@ -720,6 +939,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrderSummary'
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    OrderResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/OrderDetail'
         error:
           oneOf:
             - type: 'null'

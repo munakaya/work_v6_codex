@@ -40,6 +40,21 @@ class ControlPlaneStoreProtocol(Protocol):
 
     def get_order_intent(self, intent_id: str) -> dict[str, object] | None: ...
 
+    def create_order_intent(
+        self,
+        *,
+        strategy_run_id: str,
+        market: str,
+        buy_exchange: str,
+        sell_exchange: str,
+        side_pair: str,
+        target_qty: str,
+        expected_profit: str | None,
+        expected_profit_ratio: str | None,
+        status: str,
+        decision_context: dict[str, object] | None,
+    ) -> tuple[str, dict[str, object] | None]: ...
+
     def list_orders(
         self,
         *,
@@ -53,6 +68,20 @@ class ControlPlaneStoreProtocol(Protocol):
     ) -> list[dict[str, object]]: ...
 
     def get_order_detail(self, order_id: str) -> dict[str, object] | None: ...
+
+    def create_order(
+        self,
+        *,
+        order_intent_id: str,
+        exchange_name: str,
+        exchange_order_id: str | None,
+        market: str,
+        side: str,
+        requested_price: str | None,
+        requested_qty: str,
+        status: str,
+        raw_payload: dict[str, object] | None,
+    ) -> tuple[str, dict[str, object] | None]: ...
 
     def list_fills(
         self,

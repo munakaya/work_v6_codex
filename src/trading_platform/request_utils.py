@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from http import HTTPStatus
 import json
 
@@ -153,3 +154,32 @@ def optional_object(value: object) -> dict[str, object] | None:
     if isinstance(value, dict):
         return value
     return None
+
+
+def json_number_text(value: object) -> str | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float, str)):
+        try:
+            decimal = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return None
+        if not decimal.is_finite():
+            return None
+        normalized = format(decimal.normalize(), "f")
+        if "." in normalized:
+            normalized = normalized.rstrip("0").rstrip(".")
+        return normalized or "0"
+    return None
+
+
+def is_positive_number_text(value: str | None) -> bool:
+    if value is None:
+        return False
+    try:
+        decimal = Decimal(value)
+    except (InvalidOperation, ValueError):
+        return False
+    if not decimal.is_finite():
+        return False
+    return decimal > 0

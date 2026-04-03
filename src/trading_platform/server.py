@@ -142,6 +142,12 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
         if path == "/api/v1/strategy-runs":
             return self._create_strategy_run_response()
 
+        if path == "/api/v1/order-intents":
+            return self._create_order_intent_response()
+
+        if path == "/api/v1/orders":
+            return self._create_order_response()
+
         for resolver in (
             lambda: self._acknowledge_alert_response(path),
             lambda: self._assign_config_response(path),

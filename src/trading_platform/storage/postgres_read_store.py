@@ -48,11 +48,21 @@ class PostgresReadStore:
     def get_order_intent(self, intent_id: str) -> dict[str, object] | None:
         return get_order_intent(self.adapter, intent_id)
 
+    def create_order_intent(
+        self, **kwargs
+    ) -> tuple[str, dict[str, object] | None]:
+        raise RuntimeError("mutation not supported for postgres read-only backend")
+
     def list_orders(self, **kwargs) -> list[dict[str, object]]:
         return list_orders(self.adapter, **kwargs)
 
     def get_order_detail(self, order_id: str) -> dict[str, object] | None:
         return get_order_detail(self.adapter, order_id)
+
+    def create_order(
+        self, **kwargs
+    ) -> tuple[str, dict[str, object] | None]:
+        raise RuntimeError("mutation not supported for postgres read-only backend")
 
     def list_fills(self, **kwargs) -> list[dict[str, object]]:
         return list_fills(self.adapter, **kwargs)

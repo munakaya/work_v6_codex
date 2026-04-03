@@ -11,6 +11,10 @@ from .postgres_mutation_ops import (
     start_strategy_run,
     stop_strategy_run,
 )
+from .postgres_order_mutation_ops import (
+    create_order,
+    create_order_intent,
+)
 from .postgres_read_store import PostgresReadStore
 
 
@@ -38,6 +42,16 @@ class PostgresMutableStore(PostgresReadStore):
         self, run_id: str
     ) -> tuple[str, dict[str, object] | None]:
         return stop_strategy_run(self.adapter, run_id)
+
+    def create_order_intent(
+        self, **kwargs
+    ) -> tuple[str, dict[str, object] | None]:
+        return create_order_intent(self.adapter, **kwargs)
+
+    def create_order(
+        self, **kwargs
+    ) -> tuple[str, dict[str, object] | None]:
+        return create_order(self.adapter, **kwargs)
 
     def assign_config(self, **kwargs) -> dict[str, object] | None:
         return assign_config(self.adapter, **kwargs)
