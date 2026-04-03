@@ -78,6 +78,36 @@ class ControlPlaneReadRouteMixin:
         )
         return self._response(data={"items": intents, "count": len(intents)})
 
+    def _orders_response(self, query: str) -> dict[str, object]:
+        params = parse_qs(query)
+        orders = self.server.read_store.list_orders(
+            bot_id=single_query_value(params, "bot_id"),
+            exchange_name=single_query_value(params, "exchange_name")
+            or single_query_value(params, "exchange"),
+            status=single_query_value(params, "status"),
+            market=single_query_value(params, "market")
+            or single_query_value(params, "canonical_symbol"),
+            strategy_run_id=single_query_value(params, "strategy_run_id"),
+            created_from=single_query_value(params, "from"),
+            created_to=single_query_value(params, "to"),
+        )
+        return self._response(data={"items": orders, "count": len(orders)})
+
+    def _fills_response(self, query: str) -> dict[str, object]:
+        params = parse_qs(query)
+        fills = self.server.read_store.list_fills(
+            bot_id=single_query_value(params, "bot_id"),
+            exchange_name=single_query_value(params, "exchange_name")
+            or single_query_value(params, "exchange"),
+            market=single_query_value(params, "market")
+            or single_query_value(params, "canonical_symbol"),
+            strategy_run_id=single_query_value(params, "strategy_run_id"),
+            order_id=single_query_value(params, "order_id"),
+            created_from=single_query_value(params, "from"),
+            created_to=single_query_value(params, "to"),
+        )
+        return self._response(data={"items": fills, "count": len(fills)})
+
     def _match_latest_config(
         self, path: str
     ) -> tuple[HTTPStatus, dict[str, object]] | None:
@@ -195,3 +225,24 @@ class ControlPlaneReadRouteMixin:
                 ),
             )
         return HTTPStatus.OK, self._response(data=intent)
+
+    def _match_order_detail(
+        self, path: str
+    ) -> tuple[HTTPStatus, dict[str, object]] | None:
+        prefix = "/api/v1/orders/"
+        if not path.startswith(prefix):
+            return None
+
+        order_id = path[len(prefix) :]
+        if not order_id or "/" in order_id:
+            return None
+
+        order = self.server.read_store.get_order_detail(order_id)
+        if order is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={"code": "ORDER_NOT_FOUND", "message": "order_id not found"}
+                ),
+            )
+        return HTTPStatus.OK, self._response(data=order)

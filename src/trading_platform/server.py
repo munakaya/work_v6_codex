@@ -11,7 +11,8 @@ from urllib.parse import urlparse
 from .config import AppConfig
 from .observability import AlertHookNotifier, MetricsRegistry
 from .route_handlers import ControlPlaneRouteMixin
-from .storage.read_store import MemoryReadStore, build_read_store
+from .storage.read_store import MemoryReadStore
+from .storage.store_factory import build_read_store
 
 
 LOGGER = logging.getLogger(__name__)
@@ -99,6 +100,12 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
         if path == "/api/v1/order-intents":
             return HTTPStatus.OK, self._order_intents_response(query), False
 
+        if path == "/api/v1/orders":
+            return HTTPStatus.OK, self._orders_response(query), False
+
+        if path == "/api/v1/fills":
+            return HTTPStatus.OK, self._fills_response(query), False
+
         if path == "/api/v1/alerts":
             return HTTPStatus.OK, self._alerts_response(query), False
 
@@ -107,6 +114,7 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
             lambda: self._match_bot_heartbeats(path, query),
             lambda: self._match_strategy_run_detail(path),
             lambda: self._match_order_intent_detail(path),
+            lambda: self._match_order_detail(path),
             lambda: self._match_bot_detail(path),
         ):
             result = resolver()

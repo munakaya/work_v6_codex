@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from ..config import AppConfig
+from .order_views import get_order_detail as build_order_detail
+from .order_views import list_fills as filter_fills
+from .order_views import list_orders as filter_orders
 
 
 def _iso(dt: datetime) -> str:
@@ -22,6 +24,8 @@ class MemoryReadStore:
         bot_details: dict[str, dict[str, object]],
         strategy_runs: dict[str, dict[str, object]],
         order_intents: dict[str, dict[str, object]],
+        orders: dict[str, dict[str, object]],
+        fills: list[dict[str, object]],
         heartbeats: dict[str, list[dict[str, object]]],
         alerts: list[dict[str, object]],
         config_versions: dict[str, list[dict[str, object]]],
@@ -30,6 +34,8 @@ class MemoryReadStore:
         self.bot_details = bot_details
         self.strategy_runs = strategy_runs
         self.order_intents = order_intents
+        self.orders = orders
+        self.fills = fills
         self.heartbeats = heartbeats
         self.alerts = alerts
         self.config_versions = config_versions
@@ -121,6 +127,53 @@ class MemoryReadStore:
 
     def get_order_intent(self, intent_id: str) -> dict[str, object] | None:
         return self.order_intents.get(intent_id)
+
+    def list_orders(
+        self,
+        *,
+        bot_id: str | None = None,
+        exchange_name: str | None = None,
+        status: str | None = None,
+        market: str | None = None,
+        strategy_run_id: str | None = None,
+        created_from: str | None = None,
+        created_to: str | None = None,
+    ) -> list[dict[str, object]]:
+        return filter_orders(
+            self.orders,
+            bot_id=bot_id,
+            exchange_name=exchange_name,
+            status=status,
+            market=market,
+            strategy_run_id=strategy_run_id,
+            created_from=created_from,
+            created_to=created_to,
+        )
+
+    def get_order_detail(self, order_id: str) -> dict[str, object] | None:
+        return build_order_detail(self.orders, self.order_intents, self.fills, order_id)
+
+    def list_fills(
+        self,
+        *,
+        bot_id: str | None = None,
+        exchange_name: str | None = None,
+        market: str | None = None,
+        strategy_run_id: str | None = None,
+        order_id: str | None = None,
+        created_from: str | None = None,
+        created_to: str | None = None,
+    ) -> list[dict[str, object]]:
+        return filter_fills(
+            self.fills,
+            bot_id=bot_id,
+            exchange_name=exchange_name,
+            market=market,
+            strategy_run_id=strategy_run_id,
+            order_id=order_id,
+            created_from=created_from,
+            created_to=created_to,
+        )
 
     def list_heartbeats(self, bot_id: str, limit: int = 20) -> list[dict[str, object]] | None:
         entries = self.heartbeats.get(bot_id)
@@ -423,32 +476,3 @@ class MemoryReadStore:
             "status": detail["status"],
             "recorded_at": heartbeat["created_at"],
         }
-
-
-def build_read_store(config: AppConfig) -> MemoryReadStore:
-    if config.use_sample_read_model:
-        return sample_read_store()
-    return MemoryReadStore(
-        bots=[],
-        bot_details={},
-        strategy_runs={},
-        order_intents={},
-        heartbeats={},
-        alerts=[],
-        config_versions={},
-    )
-
-
-def sample_read_store() -> MemoryReadStore:
-    from .sample_data import build_sample_state
-
-    state = build_sample_state(_sample_time)
-    return MemoryReadStore(
-        bots=state["bots"],
-        bot_details=state["bot_details"],
-        strategy_runs=state["strategy_runs"],
-        order_intents=state["order_intents"],
-        heartbeats=state["heartbeats"],
-        alerts=state["alerts"],
-        config_versions=state["config_versions"],
-    )
