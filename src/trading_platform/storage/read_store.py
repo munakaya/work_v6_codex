@@ -20,12 +20,14 @@ class MemoryReadStore:
         *,
         bots: list[dict[str, object]],
         bot_details: dict[str, dict[str, object]],
+        strategy_runs: dict[str, dict[str, object]],
         heartbeats: dict[str, list[dict[str, object]]],
         alerts: list[dict[str, object]],
         config_versions: dict[str, list[dict[str, object]]],
     ) -> None:
         self.bots = bots
         self.bot_details = bot_details
+        self.strategy_runs = strategy_runs
         self.heartbeats = heartbeats
         self.alerts = alerts
         self.config_versions = config_versions
@@ -48,6 +50,31 @@ class MemoryReadStore:
 
     def get_bot_detail(self, bot_id: str) -> dict[str, object] | None:
         return self.bot_details.get(bot_id)
+
+    def list_strategy_runs(
+        self,
+        *,
+        bot_id: str | None = None,
+        status: str | None = None,
+        mode: str | None = None,
+    ) -> list[dict[str, object]]:
+        runs = list(self.strategy_runs.values())
+        if bot_id:
+            runs = [run for run in runs if run.get("bot_id") == bot_id]
+        if status:
+            runs = [run for run in runs if run.get("status") == status]
+        if mode:
+            runs = [run for run in runs if run.get("mode") == mode]
+        return sorted(
+            runs,
+            key=lambda run: str(
+                run.get("started_at") or run.get("created_at") or run.get("stopped_at") or ""
+            ),
+            reverse=True,
+        )
+
+    def get_strategy_run(self, run_id: str) -> dict[str, object] | None:
+        return self.strategy_runs.get(run_id)
 
     def list_heartbeats(self, bot_id: str, limit: int = 20) -> list[dict[str, object]] | None:
         entries = self.heartbeats.get(bot_id)
@@ -85,12 +112,7 @@ class MemoryReadStore:
         return sum(1 for bot in self.bots if bot.get("status") == "running")
 
     def active_strategy_run_count(self) -> int:
-        return sum(
-            1
-            for detail in self.bot_details.values()
-            if isinstance(detail.get("latest_strategy_run"), dict)
-            and detail["latest_strategy_run"].get("status") == "running"
-        )
+        return sum(1 for run in self.strategy_runs.values() if run.get("status") == "running")
 
     def emit_alert(
         self,
@@ -137,6 +159,85 @@ class MemoryReadStore:
         }
         versions.insert(0, version)
         return version
+
+    def create_strategy_run(
+        self,
+        *,
+        bot_id: str,
+        strategy_name: str,
+        mode: str,
+    ) -> tuple[str, dict[str, object] | None]:
+        detail = self.bot_details.get(bot_id)
+        if detail is None:
+            return "not_found", None
+
+        existing_active_run = next(
+            (
+                run
+                for run in self.strategy_runs.values()
+                if run.get("bot_id") == bot_id and run.get("status") in {"created", "running"}
+            ),
+            None,
+        )
+        if existing_active_run is not None:
+            return "conflict", existing_active_run
+
+        run = {
+            "run_id": str(uuid4()),
+            "bot_id": bot_id,
+            "strategy_name": strategy_name,
+            "mode": mode,
+            "status": "created",
+            "created_at": _sample_time(0),
+            "started_at": None,
+            "stopped_at": None,
+            "decision_count": 0,
+        }
+        self.strategy_runs[run["run_id"]] = run
+        detail["latest_strategy_run"] = run
+        return "created", run
+
+    def start_strategy_run(self, run_id: str) -> tuple[str, dict[str, object] | None]:
+        run = self.strategy_runs.get(run_id)
+        if run is None:
+            return "not_found", None
+        if run["status"] != "created":
+            return "conflict", run
+
+        running_for_bot = next(
+            (
+                item
+                for item in self.strategy_runs.values()
+                if item.get("bot_id") == run.get("bot_id")
+                and item.get("run_id") != run_id
+                and item.get("status") == "running"
+            ),
+            None,
+        )
+        if running_for_bot is not None:
+            return "conflict", run
+
+        run["status"] = "running"
+        run["started_at"] = _sample_time(0)
+        run["stopped_at"] = None
+        detail = self.bot_details.get(str(run["bot_id"]))
+        if detail is not None:
+            detail["latest_strategy_run"] = run
+        return "started", run
+
+    def stop_strategy_run(self, run_id: str) -> tuple[str, dict[str, object] | None]:
+        run = self.strategy_runs.get(run_id)
+        if run is None:
+            return "not_found", None
+        if run["status"] != "running":
+            return "conflict", run
+
+        run["status"] = "stopped"
+        run["stopped_at"] = _sample_time(0)
+        detail = self.bot_details.get(str(run["bot_id"]))
+        if detail is not None:
+            detail["latest_strategy_run"] = run
+        return "stopped", run
 
     def assign_config(
         self,
@@ -284,6 +385,7 @@ def build_read_store(config: AppConfig) -> MemoryReadStore:
     return MemoryReadStore(
         bots=[],
         bot_details={},
+        strategy_runs={},
         heartbeats={},
         alerts=[],
         config_versions={},
@@ -392,29 +494,45 @@ def sample_read_store() -> MemoryReadStore:
         ]
     }
 
+    strategy_run_1 = {
+        "run_id": "eb8f7c39-d23f-433f-b839-6d2e89d4bbd6",
+        "bot_id": bot_1_id,
+        "strategy_name": "arbitrage",
+        "status": "running",
+        "mode": "shadow",
+        "created_at": _sample_time(12),
+        "started_at": _sample_time(12),
+        "stopped_at": None,
+        "decision_count": 184,
+    }
+    strategy_run_2 = {
+        "run_id": "7d9cf351-5b29-44a4-9cb4-ff5d1c4e0a0f",
+        "bot_id": bot_2_id,
+        "strategy_name": "arbitrage",
+        "status": "running",
+        "mode": "dry_run",
+        "created_at": _sample_time(30),
+        "started_at": _sample_time(30),
+        "stopped_at": None,
+        "decision_count": 42,
+    }
+
+    strategy_runs = {
+        strategy_run_1["run_id"]: strategy_run_1,
+        strategy_run_2["run_id"]: strategy_run_2,
+    }
+
     bot_details = {
         bot_1_id: {
             **bots[0],
             "latest_heartbeat": bot_1_heartbeat,
-            "latest_strategy_run": {
-                "run_id": "eb8f7c39-d23f-433f-b839-6d2e89d4bbd6",
-                "status": "running",
-                "mode": "shadow",
-                "started_at": _sample_time(12),
-                "decision_count": 184,
-            },
+            "latest_strategy_run": strategy_run_1,
             "recent_alerts": [alerts[1]],
         },
         bot_2_id: {
             **bots[1],
             "latest_heartbeat": bot_2_heartbeat,
-            "latest_strategy_run": {
-                "run_id": "7d9cf351-5b29-44a4-9cb4-ff5d1c4e0a0f",
-                "status": "running",
-                "mode": "dry_run",
-                "started_at": _sample_time(30),
-                "decision_count": 42,
-            },
+            "latest_strategy_run": strategy_run_2,
             "recent_alerts": [alerts[0]],
         },
     }
@@ -453,6 +571,7 @@ def sample_read_store() -> MemoryReadStore:
     return MemoryReadStore(
         bots=bots,
         bot_details=bot_details,
+        strategy_runs=strategy_runs,
         heartbeats=heartbeats,
         alerts=alerts,
         config_versions=config_versions,

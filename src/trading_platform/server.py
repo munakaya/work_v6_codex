@@ -66,6 +66,11 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
                 self._write_json(status, self._bots_response(parsed.query))
                 return
 
+            if parsed.path == "/api/v1/strategy-runs":
+                status = HTTPStatus.OK
+                self._write_json(status, self._strategy_runs_response(parsed.query))
+                return
+
             if parsed.path == "/api/v1/alerts":
                 status = HTTPStatus.OK
                 self._write_json(status, self._alerts_response(parsed.query))
@@ -80,6 +85,12 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
             bot_heartbeats_response = self._match_bot_heartbeats(parsed.path, parsed.query)
             if bot_heartbeats_response is not None:
                 status, payload = bot_heartbeats_response
+                self._write_json(status, payload)
+                return
+
+            strategy_run_detail_response = self._match_strategy_run_detail(parsed.path)
+            if strategy_run_detail_response is not None:
+                status, payload = strategy_run_detail_response
                 self._write_json(status, payload)
                 return
 
@@ -114,6 +125,11 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
                 self._write_json(status, payload)
                 return
 
+            if parsed.path == "/api/v1/strategy-runs":
+                status, payload = self._create_strategy_run_response()
+                self._write_json(status, payload)
+                return
+
             alert_ack_response = self._acknowledge_alert_response(parsed.path)
             if alert_ack_response is not None:
                 status, payload = alert_ack_response
@@ -123,6 +139,12 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
             config_assign_response = self._assign_config_response(parsed.path)
             if config_assign_response is not None:
                 status, payload = config_assign_response
+                self._write_json(status, payload)
+                return
+
+            strategy_run_action_response = self._strategy_run_action_response(parsed.path)
+            if strategy_run_action_response is not None:
+                status, payload = strategy_run_action_response
                 self._write_json(status, payload)
                 return
 
@@ -330,6 +352,68 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
         )
         return HTTPStatus.CREATED, self._response(data=result)
 
+    def _create_strategy_run_response(self) -> tuple[HTTPStatus, dict[str, Any]]:
+        body, error = self._read_json_body()
+        if error is not None:
+            return error
+
+        bot_id = _json_string(body.get("bot_id"))
+        strategy_name = _json_string(body.get("strategy_name"))
+        mode = _json_string(body.get("mode"))
+        invalid_string_fields = [
+            key
+            for key in ("bot_id", "strategy_name", "mode")
+            if key in body and _json_string(body.get(key)) is None
+        ]
+        if invalid_string_fields:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": (
+                            "fields must be strings: "
+                            + ", ".join(sorted(set(invalid_string_fields)))
+                        ),
+                    }
+                ),
+            )
+
+        if not bot_id or not strategy_name or not mode:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "bot_id, strategy_name, mode are required",
+                    }
+                ),
+            )
+
+        outcome, result = self.server.read_store.create_strategy_run(
+            bot_id=bot_id,
+            strategy_name=strategy_name,
+            mode=mode,
+        )
+        if outcome == "not_found":
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={"code": "BOT_NOT_FOUND", "message": "bot_id not found"}
+                ),
+            )
+        if outcome == "conflict":
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "STRATEGY_RUN_CONFLICT",
+                        "message": "bot already has an active strategy run",
+                    }
+                ),
+            )
+        return HTTPStatus.CREATED, self._response(data=result)
+
     def _acknowledge_alert_response(
         self, path: str
     ) -> tuple[HTTPStatus, dict[str, Any]] | None:
@@ -419,6 +503,80 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
         self.server.metrics.observe_alert_emitted("info")
         return HTTPStatus.ACCEPTED, self._response(data=result)
 
+    def _strategy_run_action_response(
+        self, path: str
+    ) -> tuple[HTTPStatus, dict[str, Any]] | None:
+        prefix = "/api/v1/strategy-runs/"
+        if not path.startswith(prefix):
+            return None
+
+        suffix = path[len(prefix) :]
+        if suffix.endswith("/start"):
+            run_id = suffix[: -len("/start")]
+            return self._start_strategy_run_response(run_id)
+        if suffix.endswith("/stop"):
+            run_id = suffix[: -len("/stop")]
+            return self._stop_strategy_run_response(run_id)
+        return None
+
+    def _start_strategy_run_response(
+        self, run_id: str
+    ) -> tuple[HTTPStatus, dict[str, Any]] | None:
+        if not run_id:
+            return None
+
+        outcome, run = self.server.read_store.start_strategy_run(run_id)
+        if outcome == "not_found":
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "STRATEGY_RUN_NOT_FOUND",
+                        "message": "run_id not found",
+                    }
+                ),
+            )
+        if outcome == "conflict":
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "STRATEGY_RUN_CONFLICT",
+                        "message": "strategy run cannot be started from current state",
+                    }
+                ),
+            )
+        return HTTPStatus.ACCEPTED, self._response(data=run)
+
+    def _stop_strategy_run_response(
+        self, run_id: str
+    ) -> tuple[HTTPStatus, dict[str, Any]] | None:
+        if not run_id:
+            return None
+
+        outcome, run = self.server.read_store.stop_strategy_run(run_id)
+        if outcome == "not_found":
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "STRATEGY_RUN_NOT_FOUND",
+                        "message": "run_id not found",
+                    }
+                ),
+            )
+        if outcome == "conflict":
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "STRATEGY_RUN_CONFLICT",
+                        "message": "strategy run cannot be stopped from current state",
+                    }
+                ),
+            )
+        return HTTPStatus.ACCEPTED, self._response(data=run)
+
     def _emit_heartbeat_alert_if_needed(
         self,
         *,
@@ -472,6 +630,15 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
         )
         return self._response(data={"items": alerts, "count": len(alerts)})
 
+    def _strategy_runs_response(self, query: str) -> dict[str, Any]:
+        params = parse_qs(query)
+        runs = self.server.read_store.list_strategy_runs(
+            bot_id=_single_query_value(params, "bot_id"),
+            status=_single_query_value(params, "status"),
+            mode=_single_query_value(params, "mode"),
+        )
+        return self._response(data={"items": runs, "count": len(runs)})
+
     def _match_latest_config(self, path: str) -> tuple[HTTPStatus, dict[str, Any]] | None:
         prefix = "/api/v1/configs/"
         suffix = "/latest"
@@ -494,6 +661,30 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
                 ),
             )
         return HTTPStatus.OK, self._response(data=version)
+
+    def _match_strategy_run_detail(
+        self, path: str
+    ) -> tuple[HTTPStatus, dict[str, Any]] | None:
+        prefix = "/api/v1/strategy-runs/"
+        if not path.startswith(prefix):
+            return None
+
+        run_id = path[len(prefix) :]
+        if not run_id or "/" in run_id:
+            return None
+
+        run = self.server.read_store.get_strategy_run(run_id)
+        if run is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "STRATEGY_RUN_NOT_FOUND",
+                        "message": "run_id not found",
+                    }
+                ),
+            )
+        return HTTPStatus.OK, self._response(data=run)
 
     def _match_bot_detail(self, path: str) -> tuple[HTTPStatus, dict[str, Any]] | None:
         prefix = "/api/v1/bots/"
