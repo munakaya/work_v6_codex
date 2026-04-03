@@ -81,6 +81,41 @@ class MemoryReadStore:
             return None
         return versions[0]
 
+    def active_bot_count(self) -> int:
+        return sum(1 for bot in self.bots if bot.get("status") == "running")
+
+    def active_strategy_run_count(self) -> int:
+        return sum(
+            1
+            for detail in self.bot_details.values()
+            if isinstance(detail.get("latest_strategy_run"), dict)
+            and detail["latest_strategy_run"].get("status") == "running"
+        )
+
+    def emit_alert(
+        self,
+        *,
+        bot_id: str | None,
+        level: str,
+        code: str,
+        message: str,
+    ) -> dict[str, object]:
+        alert = {
+            "alert_id": str(uuid4()),
+            "bot_id": bot_id,
+            "level": level,
+            "code": code,
+            "message": message,
+            "created_at": _sample_time(0),
+            "acknowledged_at": None,
+        }
+        self.alerts.insert(0, alert)
+        if bot_id is not None:
+            detail = self.bot_details.get(bot_id)
+            if detail is not None:
+                detail.setdefault("recent_alerts", []).insert(0, alert)
+        return alert
+
     def create_config_version(
         self,
         *,
@@ -134,17 +169,12 @@ class MemoryReadStore:
                 bot["assigned_config_version"] = assigned
                 break
 
-        alert = {
-            "alert_id": str(uuid4()),
-            "bot_id": bot_id,
-            "level": "info",
-            "code": "CONFIG_ASSIGNED",
-            "message": f"config {config_scope} v{version_no} assigned",
-            "created_at": _sample_time(0),
-            "acknowledged_at": None,
-        }
-        self.alerts.insert(0, alert)
-        detail.setdefault("recent_alerts", []).insert(0, alert)
+        self.emit_alert(
+            bot_id=bot_id,
+            level="info",
+            code="CONFIG_ASSIGNED",
+            message=f"config {config_scope} v{version_no} assigned",
+        )
         return assigned
 
     def acknowledge_alert(self, alert_id: str) -> dict[str, object] | None:

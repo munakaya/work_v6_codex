@@ -5,9 +5,7 @@ from pathlib import Path
 import logging
 
 from .config import AppConfig
-
-
-LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
+from .observability import JsonLogFormatter
 
 
 def _build_log_path(log_dir: Path) -> Path:
@@ -23,7 +21,7 @@ def configure_logging(config: AppConfig) -> Path:
     root_logger.setLevel(config.log_level)
     root_logger.handlers.clear()
 
-    formatter = logging.Formatter(LOG_FORMAT)
+    formatter = JsonLogFormatter(config.service_name)
 
     file_handler = logging.FileHandler(log_path, encoding="utf-8")
     file_handler.setFormatter(formatter)

@@ -30,6 +30,7 @@ class AppConfig:
     log_dir: Path
     tmp_dir: Path
     migrations_dir: Path
+    alert_hook_path: Path | None
     postgres_dsn: str | None
     redis_url: str | None
     redis_key_prefix: str
@@ -42,6 +43,7 @@ class AppConfig:
 
 def load_config() -> AppConfig:
     root_dir = Path(__file__).resolve().parents[2]
+    alert_hook_raw = os.getenv("TP_ALERT_HOOK_PATH")
     return AppConfig(
         project_root=root_dir,
         service_name=os.getenv("TP_SERVICE_NAME", "control-plane"),
@@ -52,6 +54,7 @@ def load_config() -> AppConfig:
         log_dir=root_dir / "logs",
         tmp_dir=root_dir / ".tmp",
         migrations_dir=root_dir / "migrations",
+        alert_hook_path=Path(alert_hook_raw) if alert_hook_raw else None,
         postgres_dsn=os.getenv("TP_POSTGRES_DSN"),
         redis_url=os.getenv("TP_REDIS_URL"),
         redis_key_prefix=os.getenv("TP_REDIS_KEY_PREFIX", "tp"),

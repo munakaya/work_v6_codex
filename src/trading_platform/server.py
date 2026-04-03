@@ -5,11 +5,13 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
+from time import perf_counter
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from .config import AppConfig
+from .observability import AlertHookNotifier, MetricsRegistry
 from .storage.dependencies import postgres_status, redis_status
 from .storage.read_store import MemoryReadStore, build_read_store
 
@@ -25,96 +27,130 @@ class ControlPlaneServer(ThreadingHTTPServer):
         server_address: tuple[str, int],
         config: AppConfig,
         read_store: MemoryReadStore,
+        metrics: MetricsRegistry,
+        alert_hook: AlertHookNotifier,
     ):
         super().__init__(server_address, ControlPlaneRequestHandler)
         self.config = config
         self.read_store = read_store
+        self.metrics = metrics
+        self.alert_hook = alert_hook
 
 
 class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
     server: ControlPlaneServer
 
     def do_GET(self) -> None:
+        started = perf_counter()
         parsed = urlparse(self.path)
+        status = HTTPStatus.NOT_FOUND
 
-        if parsed.path == "/api/v1/health":
-            self._write_json(HTTPStatus.OK, self._health_payload())
-            return
+        try:
+            if parsed.path == "/api/v1/health":
+                status = HTTPStatus.OK
+                self._write_json(status, self._health_payload())
+                return
 
-        if parsed.path == "/api/v1/ready":
-            status_code, payload = self._ready_response()
-            self._write_json(status_code, payload)
-            return
+            if parsed.path == "/api/v1/ready":
+                status, payload = self._ready_response()
+                self._write_json(status, payload)
+                return
 
-        if parsed.path == "/api/v1/bots":
-            self._write_json(HTTPStatus.OK, self._bots_response(parsed.query))
-            return
+            if parsed.path == "/metrics":
+                status = HTTPStatus.OK
+                self._write_text(status, self.server.metrics.render(self.server.read_store))
+                return
 
-        if parsed.path == "/api/v1/alerts":
-            self._write_json(HTTPStatus.OK, self._alerts_response(parsed.query))
-            return
+            if parsed.path == "/api/v1/bots":
+                status = HTTPStatus.OK
+                self._write_json(status, self._bots_response(parsed.query))
+                return
 
-        config_latest_response = self._match_latest_config(parsed.path)
-        if config_latest_response is not None:
-            status_code, payload = config_latest_response
-            self._write_json(status_code, payload)
-            return
+            if parsed.path == "/api/v1/alerts":
+                status = HTTPStatus.OK
+                self._write_json(status, self._alerts_response(parsed.query))
+                return
 
-        bot_heartbeats_response = self._match_bot_heartbeats(parsed.path, parsed.query)
-        if bot_heartbeats_response is not None:
-            status_code, payload = bot_heartbeats_response
-            self._write_json(status_code, payload)
-            return
+            config_latest_response = self._match_latest_config(parsed.path)
+            if config_latest_response is not None:
+                status, payload = config_latest_response
+                self._write_json(status, payload)
+                return
 
-        bot_detail_response = self._match_bot_detail(parsed.path)
-        if bot_detail_response is not None:
-            status_code, payload = bot_detail_response
-            self._write_json(status_code, payload)
-            return
+            bot_heartbeats_response = self._match_bot_heartbeats(parsed.path, parsed.query)
+            if bot_heartbeats_response is not None:
+                status, payload = bot_heartbeats_response
+                self._write_json(status, payload)
+                return
 
-        self._write_json(
-            HTTPStatus.NOT_FOUND,
-            self._response(error={"code": "NOT_FOUND", "message": "route not found"}),
-        )
+            bot_detail_response = self._match_bot_detail(parsed.path)
+            if bot_detail_response is not None:
+                status, payload = bot_detail_response
+                self._write_json(status, payload)
+                return
+
+            self._write_json(
+                status,
+                self._response(error={"code": "NOT_FOUND", "message": "route not found"}),
+            )
+        finally:
+            self.server.metrics.observe_request(
+                "GET", status.value, perf_counter() - started
+            )
 
     def do_POST(self) -> None:
+        started = perf_counter()
         parsed = urlparse(self.path)
+        status = HTTPStatus.NOT_FOUND
 
-        if parsed.path == "/api/v1/bots/register":
-            status_code, payload = self._register_bot_response()
-            self._write_json(status_code, payload)
-            return
+        try:
+            if parsed.path == "/api/v1/bots/register":
+                status, payload = self._register_bot_response()
+                self._write_json(status, payload)
+                return
 
-        if parsed.path == "/api/v1/configs":
-            status_code, payload = self._create_config_response()
-            self._write_json(status_code, payload)
-            return
+            if parsed.path == "/api/v1/configs":
+                status, payload = self._create_config_response()
+                self._write_json(status, payload)
+                return
 
-        alert_ack_response = self._acknowledge_alert_response(parsed.path)
-        if alert_ack_response is not None:
-            status_code, payload = alert_ack_response
-            self._write_json(status_code, payload)
-            return
+            alert_ack_response = self._acknowledge_alert_response(parsed.path)
+            if alert_ack_response is not None:
+                status, payload = alert_ack_response
+                self._write_json(status, payload)
+                return
 
-        config_assign_response = self._assign_config_response(parsed.path)
-        if config_assign_response is not None:
-            status_code, payload = config_assign_response
-            self._write_json(status_code, payload)
-            return
+            config_assign_response = self._assign_config_response(parsed.path)
+            if config_assign_response is not None:
+                status, payload = config_assign_response
+                self._write_json(status, payload)
+                return
 
-        heartbeat_response = self._record_heartbeat_response(parsed.path)
-        if heartbeat_response is not None:
-            status_code, payload = heartbeat_response
-            self._write_json(status_code, payload)
-            return
+            heartbeat_response = self._record_heartbeat_response(parsed.path)
+            if heartbeat_response is not None:
+                status, payload = heartbeat_response
+                self._write_json(status, payload)
+                return
 
-        self._write_json(
-            HTTPStatus.NOT_FOUND,
-            self._response(error={"code": "NOT_FOUND", "message": "route not found"}),
-        )
+            self._write_json(
+                status,
+                self._response(error={"code": "NOT_FOUND", "message": "route not found"}),
+            )
+        finally:
+            self.server.metrics.observe_request(
+                "POST", status.value, perf_counter() - started
+            )
 
     def log_message(self, format: str, *args: Any) -> None:
-        LOGGER.info("%s - %s", self.client_address[0], format % args)
+        LOGGER.info(
+            format % args,
+            extra={
+                "event_name": "http_access",
+                "client_ip": self.client_address[0],
+                "http_method": self.command,
+                "path": self.path,
+            },
+        )
 
     def _health_payload(self) -> dict[str, Any]:
         config = self.server.config
@@ -234,6 +270,14 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
                     error={"code": "BOT_NOT_FOUND", "message": "bot_id not found"}
                 ),
             )
+        emitted_alert = self._emit_heartbeat_alert_if_needed(
+            bot_id=bot_id,
+            is_process_alive=body["is_process_alive"],
+            is_market_data_alive=body["is_market_data_alive"],
+            is_ordering_alive=body["is_ordering_alive"],
+        )
+        if emitted_alert is not None:
+            self.server.metrics.observe_alert_emitted(emitted_alert["level"])
         return HTTPStatus.ACCEPTED, self._response(data=result)
 
     def _create_config_response(self) -> tuple[HTTPStatus, dict[str, Any]]:
@@ -306,6 +350,7 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
                     error={"code": "ALERT_NOT_FOUND", "message": "alert_id not found"}
                 ),
             )
+        self.server.metrics.observe_alert_acknowledged()
         return HTTPStatus.ACCEPTED, self._response(data=result)
 
     def _assign_config_response(
@@ -371,7 +416,42 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
                     }
                 ),
             )
+        self.server.metrics.observe_alert_emitted("info")
         return HTTPStatus.ACCEPTED, self._response(data=result)
+
+    def _emit_heartbeat_alert_if_needed(
+        self,
+        *,
+        bot_id: str,
+        is_process_alive: bool,
+        is_market_data_alive: bool,
+        is_ordering_alive: bool,
+    ) -> dict[str, object] | None:
+        if is_process_alive and is_market_data_alive and is_ordering_alive:
+            return None
+
+        if not is_process_alive:
+            level = "critical"
+            code = "BOT_PROCESS_DOWN"
+            message = "bot process is not alive"
+        elif not is_ordering_alive:
+            level = "critical"
+            code = "ORDERING_PIPELINE_DOWN"
+            message = "ordering pipeline is not alive"
+        else:
+            level = "warn"
+            code = "MARKET_DATA_DEGRADED"
+            message = "market data pipeline is not alive"
+
+        alert = self.server.read_store.emit_alert(
+            bot_id=bot_id,
+            level=level,
+            code=code,
+            message=message,
+        )
+        if level == "critical":
+            self.server.alert_hook.emit(alert=alert)
+        return alert
 
     def _bots_response(self, query: str) -> dict[str, Any]:
         params = parse_qs(query)
@@ -478,6 +558,19 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
+    def _write_text(
+        self,
+        status: HTTPStatus,
+        payload: str,
+        content_type: str = "text/plain; version=0.0.4; charset=utf-8",
+    ) -> None:
+        encoded = payload.encode("utf-8")
+        self.send_response(status.value)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
     def _read_json_body(
         self,
     ) -> tuple[dict[str, Any], tuple[HTTPStatus, dict[str, Any]] | None]:
@@ -526,7 +619,13 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
 
 def build_server(config: AppConfig) -> ControlPlaneServer:
     LOGGER.debug("building control plane server with config: %s", asdict(config))
-    return ControlPlaneServer((config.host, config.port), config, build_read_store(config))
+    return ControlPlaneServer(
+        (config.host, config.port),
+        config,
+        build_read_store(config),
+        MetricsRegistry(),
+        AlertHookNotifier(config.alert_hook_path, config.service_name),
+    )
 
 
 def _single_query_value(params: dict[str, list[str]], key: str) -> str | None:
