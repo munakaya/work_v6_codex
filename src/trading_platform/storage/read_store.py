@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from .config_alert_views import get_alert_detail, list_config_versions as build_config_versions
 from .order_views import get_order_detail as build_order_detail
 from .order_views import list_fills as filter_fills
 from .order_views import list_orders as filter_orders
@@ -213,6 +214,12 @@ class MemoryReadStore:
         if not versions:
             return None
         return versions[0]
+
+    def list_config_versions(self, config_scope: str) -> list[dict[str, object]]:
+        return build_config_versions(self.config_versions, config_scope)
+
+    def get_alert_detail(self, alert_id: str) -> dict[str, object] | None:
+        return get_alert_detail(self.alerts, alert_id)
 
     def active_bot_count(self) -> int:
         return sum(1 for bot in self.bots if bot.get("status") == "running")

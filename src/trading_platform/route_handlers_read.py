@@ -58,6 +58,11 @@ class ControlPlaneReadRouteMixin:
         )
         return self._response(data={"items": alerts, "count": len(alerts)})
 
+    def _config_versions_response(
+        self, versions: list[dict[str, object]]
+    ) -> dict[str, object]:
+        return self._response(data={"items": versions, "count": len(versions)})
+
     def _strategy_runs_response(self, query: str) -> dict[str, object]:
         params = parse_qs(query)
         runs = self.server.read_store.list_strategy_runs(
@@ -133,6 +138,31 @@ class ControlPlaneReadRouteMixin:
                 ),
             )
         return HTTPStatus.OK, self._response(data=version)
+
+    def _match_config_versions(
+        self, path: str
+    ) -> tuple[HTTPStatus, dict[str, object]] | None:
+        prefix = "/api/v1/configs/"
+        suffix = "/versions"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+
+        config_scope = path[len(prefix) : -len(suffix)]
+        if not config_scope:
+            return None
+
+        versions = self.server.read_store.list_config_versions(config_scope)
+        if not versions:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "CONFIG_NOT_FOUND",
+                        "message": "config scope not found",
+                    }
+                ),
+            )
+        return HTTPStatus.OK, self._config_versions_response(versions)
 
     def _match_strategy_run_detail(
         self, path: str
@@ -247,3 +277,24 @@ class ControlPlaneReadRouteMixin:
                 ),
             )
         return HTTPStatus.OK, self._response(data=order)
+
+    def _match_alert_detail(
+        self, path: str
+    ) -> tuple[HTTPStatus, dict[str, object]] | None:
+        prefix = "/api/v1/alerts/"
+        if not path.startswith(prefix):
+            return None
+
+        alert_id = path[len(prefix) :]
+        if not alert_id or "/" in alert_id:
+            return None
+
+        alert = self.server.read_store.get_alert_detail(alert_id)
+        if alert is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={"code": "ALERT_NOT_FOUND", "message": "alert_id not found"}
+                ),
+            )
+        return HTTPStatus.OK, self._response(data=alert)

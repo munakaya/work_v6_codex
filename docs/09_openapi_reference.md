@@ -190,6 +190,27 @@ paths:
         '404':
           description: Config scope not found
 
+  /api/v1/configs/{config_scope}/versions:
+    get:
+      tags: [Configs]
+      summary: List config versions by scope
+      operationId: listConfigVersions
+      parameters:
+        - in: path
+          name: config_scope
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Config version list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigVersionListResponse'
+        '404':
+          description: Config scope not found
+
   /api/v1/bots/{bot_id}/assign-config:
     post:
       tags: [Configs]
@@ -366,6 +387,23 @@ paths:
       responses:
         '200':
           description: Alert acknowledged
+        '404':
+          description: Alert not found
+
+  /api/v1/alerts/{alert_id}:
+    get:
+      tags: [Alerts]
+      summary: Get alert detail
+      operationId: getAlertDetail
+      parameters:
+        - $ref: '#/components/parameters/AlertId'
+      responses:
+        '200':
+          description: Alert detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertEventResponse'
         '404':
           description: Alert not found
 
@@ -719,6 +757,37 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AlertEventSummary'
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    ConfigVersionListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ConfigVersionSummary'
+            count:
+              type: integer
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    AlertEventResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/AlertEventSummary'
         error:
           oneOf:
             - type: 'null'

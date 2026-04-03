@@ -3,9 +3,11 @@ from __future__ import annotations
 from .postgres_bot_views import (
     active_bot_count,
     active_strategy_run_count,
+    get_alert_detail,
     get_bot_detail,
     get_strategy_run,
     latest_config,
+    list_config_versions,
     list_alerts,
     list_bots,
     list_heartbeats,
@@ -65,6 +67,12 @@ class PostgresReadStore:
 
     def latest_config(self, config_scope: str) -> dict[str, object] | None:
         return latest_config(self.adapter, config_scope)
+
+    def list_config_versions(self, config_scope: str) -> list[dict[str, object]]:
+        return list_config_versions(self.adapter, config_scope)
+
+    def get_alert_detail(self, alert_id: str) -> dict[str, object] | None:
+        return get_alert_detail(self.adapter, alert_id)
 
     def active_bot_count(self) -> int:
         return active_bot_count(self.adapter)

@@ -276,6 +276,53 @@ def latest_config(
     return None if row is None else config_version(row)
 
 
+def list_config_versions(
+    adapter: PostgresDriverAdapter, config_scope: str
+) -> list[dict[str, object]]:
+    rows = adapter.fetch_all(
+        """
+        select
+            id::text as config_version_id,
+            config_scope,
+            version_no,
+            config_json,
+            checksum,
+            created_by,
+            created_at
+        from config_versions
+        where config_scope = %s
+        order by version_no desc, created_at desc
+        """,
+        (config_scope,),
+    )
+    return [config_version(row) for row in rows]
+
+
+def get_alert_detail(
+    adapter: PostgresDriverAdapter, alert_id: str
+) -> dict[str, object] | None:
+    alert_uuid = uuid_or_none(alert_id)
+    if alert_uuid is None:
+        return None
+    row = adapter.fetch_one(
+        """
+        select
+            id::text as alert_id,
+            bot_id::text as bot_id,
+            level::text as level,
+            code,
+            message,
+            created_at,
+            acknowledged_at
+        from alert_events
+        where id = %s::uuid
+        limit 1
+        """,
+        (alert_uuid,),
+    )
+    return None if row is None else alert_event(row)
+
+
 def active_bot_count(adapter: PostgresDriverAdapter) -> int:
     value = adapter.fetch_value("select count(*) from bots where status::text = 'running'")
     return int(value or 0)
