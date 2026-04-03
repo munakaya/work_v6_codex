@@ -96,6 +96,9 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
         if path == "/api/v1/strategy-runs":
             return HTTPStatus.OK, self._strategy_runs_response(query), False
 
+        if path == "/api/v1/order-intents":
+            return HTTPStatus.OK, self._order_intents_response(query), False
+
         if path == "/api/v1/alerts":
             return HTTPStatus.OK, self._alerts_response(query), False
 
@@ -103,6 +106,7 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
             lambda: self._match_latest_config(path),
             lambda: self._match_bot_heartbeats(path, query),
             lambda: self._match_strategy_run_detail(path),
+            lambda: self._match_order_intent_detail(path),
             lambda: self._match_bot_detail(path),
         ):
             result = resolver()

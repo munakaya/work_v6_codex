@@ -21,6 +21,7 @@ class MemoryReadStore:
         bots: list[dict[str, object]],
         bot_details: dict[str, dict[str, object]],
         strategy_runs: dict[str, dict[str, object]],
+        order_intents: dict[str, dict[str, object]],
         heartbeats: dict[str, list[dict[str, object]]],
         alerts: list[dict[str, object]],
         config_versions: dict[str, list[dict[str, object]]],
@@ -28,6 +29,7 @@ class MemoryReadStore:
         self.bots = bots
         self.bot_details = bot_details
         self.strategy_runs = strategy_runs
+        self.order_intents = order_intents
         self.heartbeats = heartbeats
         self.alerts = alerts
         self.config_versions = config_versions
@@ -75,6 +77,50 @@ class MemoryReadStore:
 
     def get_strategy_run(self, run_id: str) -> dict[str, object] | None:
         return self.strategy_runs.get(run_id)
+
+    def list_order_intents(
+        self,
+        *,
+        bot_id: str | None = None,
+        strategy_run_id: str | None = None,
+        status: str | None = None,
+        market: str | None = None,
+        created_from: str | None = None,
+        created_to: str | None = None,
+    ) -> list[dict[str, object]]:
+        intents = list(self.order_intents.values())
+        if bot_id:
+            intents = [intent for intent in intents if intent.get("bot_id") == bot_id]
+        if strategy_run_id:
+            intents = [
+                intent
+                for intent in intents
+                if intent.get("strategy_run_id") == strategy_run_id
+            ]
+        if status:
+            intents = [intent for intent in intents if intent.get("status") == status]
+        if market:
+            intents = [intent for intent in intents if intent.get("market") == market]
+        if created_from:
+            intents = [
+                intent
+                for intent in intents
+                if str(intent.get("created_at", "")) >= created_from
+            ]
+        if created_to:
+            intents = [
+                intent
+                for intent in intents
+                if str(intent.get("created_at", "")) <= created_to
+            ]
+        return sorted(
+            intents,
+            key=lambda intent: str(intent.get("created_at", "")),
+            reverse=True,
+        )
+
+    def get_order_intent(self, intent_id: str) -> dict[str, object] | None:
+        return self.order_intents.get(intent_id)
 
     def list_heartbeats(self, bot_id: str, limit: int = 20) -> list[dict[str, object]] | None:
         entries = self.heartbeats.get(bot_id)
@@ -386,6 +432,7 @@ def build_read_store(config: AppConfig) -> MemoryReadStore:
         bots=[],
         bot_details={},
         strategy_runs={},
+        order_intents={},
         heartbeats={},
         alerts=[],
         config_versions={},
@@ -393,186 +440,15 @@ def build_read_store(config: AppConfig) -> MemoryReadStore:
 
 
 def sample_read_store() -> MemoryReadStore:
-    bot_1_id = "9d0f9b5d-8f1d-4fe0-bd90-5b7bcb3b4e21"
-    bot_2_id = "0ecf5f88-c7d3-4307-b4e7-e54caef0eab3"
+    from .sample_data import build_sample_state
 
-    bot_1_heartbeat = {
-        "created_at": _sample_time(1),
-        "is_process_alive": True,
-        "is_market_data_alive": True,
-        "is_ordering_alive": True,
-        "lag_ms": 240,
-        "payload": {
-            "orderbook_stale_count": 0,
-            "balance_refresh_age_ms": 1800,
-        },
-    }
-    bot_2_heartbeat = {
-        "created_at": _sample_time(3),
-        "is_process_alive": True,
-        "is_market_data_alive": False,
-        "is_ordering_alive": True,
-        "lag_ms": 1450,
-        "payload": {
-            "orderbook_stale_count": 4,
-            "balance_refresh_age_ms": 6400,
-        },
-    }
-
-    bots = [
-        {
-            "bot_id": bot_1_id,
-            "bot_key": "arb-upbit-bithumb-001",
-            "strategy_name": "arbitrage",
-            "mode": "shadow",
-            "status": "running",
-            "hostname": "trade-host-01",
-            "last_seen_at": bot_1_heartbeat["created_at"],
-            "assigned_config_version": {"config_scope": "default", "version_no": 3},
-        },
-        {
-            "bot_id": bot_2_id,
-            "bot_key": "arb-upbit-coinone-002",
-            "strategy_name": "arbitrage",
-            "mode": "dry_run",
-            "status": "running",
-            "hostname": "trade-host-02",
-            "last_seen_at": bot_2_heartbeat["created_at"],
-            "assigned_config_version": {"config_scope": "default", "version_no": 2},
-        },
-    ]
-
-    alerts = [
-        {
-            "alert_id": "2274470a-1b8d-4bb1-8b60-68ba2f2c17c9",
-            "bot_id": bot_2_id,
-            "level": "warn",
-            "code": "ORDERBOOK_STALE",
-            "message": "coinone orderbook freshness exceeded threshold",
-            "created_at": _sample_time(4),
-            "acknowledged_at": None,
-        },
-        {
-            "alert_id": "47083d47-1b3f-43ab-a76a-f967f2e824a8",
-            "bot_id": bot_1_id,
-            "level": "info",
-            "code": "CONFIG_APPLIED",
-            "message": "config version 3 applied",
-            "created_at": _sample_time(9),
-            "acknowledged_at": _sample_time(8),
-        },
-    ]
-
-    config_versions = {
-        "default": [
-            {
-                "config_version_id": "5375618a-fd27-430f-a8eb-c5dadfc1d498",
-                "config_scope": "default",
-                "version_no": 3,
-                "config_json": {
-                    "strategy_name": "arbitrage",
-                    "min_profit": "1000",
-                    "max_order_notional": "500000",
-                },
-                "checksum": "chk-default-v3",
-                "created_by": "system",
-                "created_at": _sample_time(20),
-            },
-            {
-                "config_version_id": "8ea92369-7267-497d-9ac9-47758cc884d2",
-                "config_scope": "default",
-                "version_no": 2,
-                "config_json": {
-                    "strategy_name": "arbitrage",
-                    "min_profit": "900",
-                    "max_order_notional": "450000",
-                },
-                "checksum": "chk-default-v2",
-                "created_by": "system",
-                "created_at": _sample_time(40),
-            },
-        ]
-    }
-
-    strategy_run_1 = {
-        "run_id": "eb8f7c39-d23f-433f-b839-6d2e89d4bbd6",
-        "bot_id": bot_1_id,
-        "strategy_name": "arbitrage",
-        "status": "running",
-        "mode": "shadow",
-        "created_at": _sample_time(12),
-        "started_at": _sample_time(12),
-        "stopped_at": None,
-        "decision_count": 184,
-    }
-    strategy_run_2 = {
-        "run_id": "7d9cf351-5b29-44a4-9cb4-ff5d1c4e0a0f",
-        "bot_id": bot_2_id,
-        "strategy_name": "arbitrage",
-        "status": "running",
-        "mode": "dry_run",
-        "created_at": _sample_time(30),
-        "started_at": _sample_time(30),
-        "stopped_at": None,
-        "decision_count": 42,
-    }
-
-    strategy_runs = {
-        strategy_run_1["run_id"]: strategy_run_1,
-        strategy_run_2["run_id"]: strategy_run_2,
-    }
-
-    bot_details = {
-        bot_1_id: {
-            **bots[0],
-            "latest_heartbeat": bot_1_heartbeat,
-            "latest_strategy_run": strategy_run_1,
-            "recent_alerts": [alerts[1]],
-        },
-        bot_2_id: {
-            **bots[1],
-            "latest_heartbeat": bot_2_heartbeat,
-            "latest_strategy_run": strategy_run_2,
-            "recent_alerts": [alerts[0]],
-        },
-    }
-
-    heartbeats = {
-        bot_1_id: [
-            bot_1_heartbeat,
-            {
-                "created_at": _sample_time(2),
-                "is_process_alive": True,
-                "is_market_data_alive": True,
-                "is_ordering_alive": True,
-                "lag_ms": 210,
-                "payload": {
-                    "orderbook_stale_count": 0,
-                    "balance_refresh_age_ms": 1600,
-                },
-            },
-        ],
-        bot_2_id: [
-            bot_2_heartbeat,
-            {
-                "created_at": _sample_time(5),
-                "is_process_alive": True,
-                "is_market_data_alive": True,
-                "is_ordering_alive": True,
-                "lag_ms": 320,
-                "payload": {
-                    "orderbook_stale_count": 1,
-                    "balance_refresh_age_ms": 2200,
-                },
-            },
-        ],
-    }
-
+    state = build_sample_state(_sample_time)
     return MemoryReadStore(
-        bots=bots,
-        bot_details=bot_details,
-        strategy_runs=strategy_runs,
-        heartbeats=heartbeats,
-        alerts=alerts,
-        config_versions=config_versions,
+        bots=state["bots"],
+        bot_details=state["bot_details"],
+        strategy_runs=state["strategy_runs"],
+        order_intents=state["order_intents"],
+        heartbeats=state["heartbeats"],
+        alerts=state["alerts"],
+        config_versions=state["config_versions"],
     )

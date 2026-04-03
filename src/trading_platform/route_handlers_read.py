@@ -66,6 +66,18 @@ class ControlPlaneReadRouteMixin:
         )
         return self._response(data={"items": runs, "count": len(runs)})
 
+    def _order_intents_response(self, query: str) -> dict[str, object]:
+        params = parse_qs(query)
+        intents = self.server.read_store.list_order_intents(
+            bot_id=single_query_value(params, "bot_id"),
+            strategy_run_id=single_query_value(params, "strategy_run_id"),
+            status=single_query_value(params, "status"),
+            market=single_query_value(params, "market"),
+            created_from=single_query_value(params, "created_from"),
+            created_to=single_query_value(params, "created_to"),
+        )
+        return self._response(data={"items": intents, "count": len(intents)})
+
     def _match_latest_config(
         self, path: str
     ) -> tuple[HTTPStatus, dict[str, object]] | None:
@@ -159,3 +171,27 @@ class ControlPlaneReadRouteMixin:
                 ),
             )
         return HTTPStatus.OK, self._response(data={"items": heartbeats, "count": len(heartbeats)})
+
+    def _match_order_intent_detail(
+        self, path: str
+    ) -> tuple[HTTPStatus, dict[str, object]] | None:
+        prefix = "/api/v1/order-intents/"
+        if not path.startswith(prefix):
+            return None
+
+        intent_id = path[len(prefix) :]
+        if not intent_id or "/" in intent_id:
+            return None
+
+        intent = self.server.read_store.get_order_intent(intent_id)
+        if intent is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "ORDER_INTENT_NOT_FOUND",
+                        "message": "intent_id not found",
+                    }
+                ),
+            )
+        return HTTPStatus.OK, self._response(data=intent)
