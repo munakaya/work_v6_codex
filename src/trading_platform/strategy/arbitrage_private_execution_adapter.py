@@ -1,0 +1,406 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+import json
+from urllib import error, request
+
+from ..storage.store_protocol import ControlPlaneStoreProtocol
+from .arbitrage_execution import ArbitrageSubmitResult
+from .arbitrage_models import ArbitrageDecision
+from .arbitrage_state_machine import classify_submit_failure_transition
+
+
+ALLOWED_ORDER_STATUSES = {
+    "new",
+    "submitted",
+    "partially_filled",
+    "filled",
+    "cancelled",
+    "rejected",
+    "expired",
+    "failed",
+}
+
+
+def _iso_now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _failure_result(
+    *,
+    auto_unwind_on_failure: bool,
+    reason: str,
+    details: dict[str, object] | None = None,
+    created_orders: tuple[dict[str, object], ...] = (),
+    created_fills: tuple[dict[str, object], ...] = (),
+) -> ArbitrageSubmitResult:
+    transition = classify_submit_failure_transition(
+        decision_accepted=True,
+        reservation_passed=True,
+        submit_failed=True,
+        auto_unwind_allowed=auto_unwind_on_failure,
+    )
+    payload = {"mode": "private_http", "reason": reason}
+    if isinstance(details, dict):
+        payload.update(details)
+    return ArbitrageSubmitResult(
+        outcome="submit_failed",
+        lifecycle_preview=str(transition["next_state"]),
+        recovery_required=bool(transition["recovery_required"]),
+        unwind_in_progress=bool(transition["unwind_in_progress"]),
+        created_orders=created_orders,
+        created_fills=created_fills,
+        details=payload,
+    )
+
+
+def _json_text(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _response_details(payload: dict[str, object]) -> dict[str, object]:
+    details = payload.get("details")
+    if isinstance(details, dict):
+        return dict(details)
+    return {}
+
+
+def _build_request_payload(
+    *,
+    decision: ArbitrageDecision,
+    intent: dict[str, object],
+    auto_unwind_on_failure: bool,
+) -> dict[str, object]:
+    return {
+        "intent_id": intent.get("intent_id"),
+        "bot_id": intent.get("bot_id"),
+        "strategy_run_id": intent.get("strategy_run_id"),
+        "market": intent.get("market"),
+        "buy_exchange": intent.get("buy_exchange"),
+        "sell_exchange": intent.get("sell_exchange"),
+        "side_pair": intent.get("side_pair"),
+        "target_qty": intent.get("target_qty"),
+        "expected_profit": intent.get("expected_profit"),
+        "expected_profit_ratio": intent.get("expected_profit_ratio"),
+        "decision": {
+            "accepted": decision.accepted,
+            "reason_code": decision.reason_code,
+            "decision_context": decision.decision_context,
+            "reservation_passed": (
+                decision.reservation_plan.reservation_passed
+                if decision.reservation_plan is not None
+                else None
+            ),
+            "executable_profit_quote": (
+                str(decision.executable_edge.executable_profit_quote)
+                if decision.executable_edge is not None
+                else None
+            ),
+            "executable_profit_bps": (
+                str(decision.executable_edge.executable_profit_bps)
+                if decision.executable_edge is not None
+                else None
+            ),
+        },
+        "auto_unwind_on_failure": auto_unwind_on_failure,
+    }
+
+
+def _post_json(
+    *,
+    url: str,
+    token: str | None,
+    timeout_ms: int,
+    payload: dict[str, object],
+) -> tuple[dict[str, object] | None, str | None]:
+    body = json.dumps(payload).encode("utf-8")
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = request.Request(url=url, data=body, headers=headers, method="POST")
+    try:
+        with request.urlopen(req, timeout=max(timeout_ms, 250) / 1000.0) as response:
+            raw = response.read().decode("utf-8")
+    except error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8").strip()
+        except Exception:
+            detail = ""
+        reason = f"private execution http {exc.code}"
+        if detail:
+            reason = f"{reason}: {detail[:200]}"
+        return None, reason
+    except error.URLError as exc:
+        return None, f"private execution transport failed: {exc.reason}"
+    except TimeoutError:
+        return None, "private execution request timed out"
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None, "private execution response was not valid JSON"
+    if not isinstance(parsed, dict):
+        return None, "private execution response must be a JSON object"
+    return parsed, None
+
+
+def _create_orders_from_response(
+    *,
+    store: ControlPlaneStoreProtocol,
+    intent: dict[str, object],
+    orders_payload: object,
+) -> tuple[tuple[dict[str, object], ...], dict[tuple[str, str], dict[str, object]], str | None]:
+    if not isinstance(orders_payload, list) or not orders_payload:
+        return (), {}, "private execution response missing orders"
+
+    created_orders: list[dict[str, object]] = []
+    order_index: dict[tuple[str, str], dict[str, object]] = {}
+    for index, item in enumerate(orders_payload, start=1):
+        if not isinstance(item, dict):
+            return tuple(created_orders), order_index, "private execution order item must be an object"
+        exchange_name = _json_text(item.get("exchange_name"))
+        side = (_json_text(item.get("side")) or "").lower()
+        market = _json_text(item.get("market")) or str(intent.get("market") or "")
+        requested_qty = _json_text(item.get("requested_qty")) or str(
+            intent.get("target_qty") or ""
+        )
+        requested_price = _json_text(item.get("requested_price"))
+        exchange_order_id = _json_text(item.get("exchange_order_id"))
+        status = (_json_text(item.get("status")) or "submitted").lower()
+        if not exchange_name or side not in {"buy", "sell"} or not requested_qty:
+            return (
+                tuple(created_orders),
+                order_index,
+                "private execution order item missing exchange_name, side, or requested_qty",
+            )
+        if status not in ALLOWED_ORDER_STATUSES:
+            return (
+                tuple(created_orders),
+                order_index,
+                f"private execution order status not allowed: {status}",
+            )
+        raw_payload = item.get("raw_payload")
+        if not isinstance(raw_payload, dict):
+            raw_payload = {}
+        raw_payload = {
+            **raw_payload,
+            "submission_mode": "private_http",
+            "adapter_response_order_index": index,
+        }
+        outcome, order = store.create_order(
+            order_intent_id=str(intent["intent_id"]),
+            exchange_name=exchange_name,
+            exchange_order_id=exchange_order_id,
+            market=market,
+            side=side,
+            requested_price=requested_price,
+            requested_qty=requested_qty,
+            status=status,
+            raw_payload=raw_payload,
+        )
+        if outcome != "created" or order is None:
+            return (
+                tuple(created_orders),
+                order_index,
+                f"private execution order create failed: {outcome}",
+            )
+        created_orders.append(order)
+        order_index[(side, exchange_name)] = order
+    return tuple(created_orders), order_index, None
+
+
+def _match_order_for_fill(
+    *,
+    order_index: dict[tuple[str, str], dict[str, object]],
+    side: str,
+    exchange_name: str | None,
+) -> dict[str, object] | None:
+    if exchange_name:
+        return order_index.get((side, exchange_name))
+    matches = [order for (order_side, _), order in order_index.items() if order_side == side]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+def _create_fills_from_response(
+    *,
+    store: ControlPlaneStoreProtocol,
+    order_index: dict[tuple[str, str], dict[str, object]],
+    fills_payload: object,
+) -> tuple[tuple[dict[str, object], ...], str | None]:
+    if fills_payload is None:
+        return (), None
+    if not isinstance(fills_payload, list):
+        return (), "private execution fills must be a list"
+
+    created_fills: list[dict[str, object]] = []
+    for item in fills_payload:
+        if not isinstance(item, dict):
+            return tuple(created_fills), "private execution fill item must be an object"
+        side = (_json_text(item.get("side")) or "").lower()
+        exchange_name = _json_text(item.get("exchange_name"))
+        order = _match_order_for_fill(
+            order_index=order_index,
+            side=side,
+            exchange_name=exchange_name,
+        )
+        if order is None:
+            return tuple(created_fills), "private execution fill could not be matched to order"
+        fill_price = _json_text(item.get("fill_price"))
+        fill_qty = _json_text(item.get("fill_qty"))
+        if not fill_price or not fill_qty:
+            return tuple(created_fills), "private execution fill missing fill_price or fill_qty"
+        outcome, fill = store.create_fill(
+            order_id=str(order["order_id"]),
+            exchange_trade_id=_json_text(item.get("exchange_trade_id")),
+            fill_price=fill_price,
+            fill_qty=fill_qty,
+            fee_asset=_json_text(item.get("fee_asset")),
+            fee_amount=_json_text(item.get("fee_amount")) or "0",
+            filled_at=_json_text(item.get("filled_at")) or _iso_now(),
+        )
+        if outcome != "created" or fill is None:
+            return tuple(created_fills), f"private execution fill create failed: {outcome}"
+        created_fills.append(fill)
+    return tuple(created_fills), None
+
+
+@dataclass(frozen=True)
+class PrivateHttpArbitrageExecutionAdapter:
+    url: str | None
+    timeout_ms: int = 3000
+    token: str | None = None
+
+    @property
+    def name(self) -> str:
+        return "private_http"
+
+    def submit(
+        self,
+        *,
+        store: ControlPlaneStoreProtocol,
+        decision: ArbitrageDecision,
+        intent: dict[str, object],
+        auto_unwind_on_failure: bool,
+    ) -> ArbitrageSubmitResult:
+        if not self.url:
+            return _failure_result(
+                auto_unwind_on_failure=auto_unwind_on_failure,
+                reason="private execution url not configured",
+            )
+        response_payload, error_message = _post_json(
+            url=self.url,
+            token=self.token,
+            timeout_ms=self.timeout_ms,
+            payload=_build_request_payload(
+                decision=decision,
+                intent=intent,
+                auto_unwind_on_failure=auto_unwind_on_failure,
+            ),
+        )
+        if response_payload is None:
+            return _failure_result(
+                auto_unwind_on_failure=auto_unwind_on_failure,
+                reason=error_message or "private execution request failed",
+            )
+
+        outcome = (_json_text(response_payload.get("outcome")) or "submitted").lower()
+        if outcome not in {"submitted", "filled", "submit_failed"}:
+            return _failure_result(
+                auto_unwind_on_failure=auto_unwind_on_failure,
+                reason=f"private execution returned unsupported outcome: {outcome}",
+                details=_response_details(response_payload),
+            )
+
+        if outcome == "submit_failed":
+            orders_payload = response_payload.get("orders")
+            if isinstance(orders_payload, list) and orders_payload:
+                created_orders, order_index, order_error = _create_orders_from_response(
+                    store=store,
+                    intent=intent,
+                    orders_payload=orders_payload,
+                )
+                if order_error is not None:
+                    return _failure_result(
+                        auto_unwind_on_failure=auto_unwind_on_failure,
+                        reason=order_error,
+                        details=_response_details(response_payload),
+                        created_orders=created_orders,
+                    )
+                created_fills, fill_error = _create_fills_from_response(
+                    store=store,
+                    order_index=order_index,
+                    fills_payload=response_payload.get("fills"),
+                )
+                if fill_error is not None:
+                    return _failure_result(
+                        auto_unwind_on_failure=auto_unwind_on_failure,
+                        reason=fill_error,
+                        details=_response_details(response_payload),
+                        created_orders=created_orders,
+                        created_fills=created_fills,
+                    )
+            else:
+                created_orders = ()
+                created_fills = ()
+            return _failure_result(
+                auto_unwind_on_failure=auto_unwind_on_failure,
+                reason=(
+                    _json_text(_response_details(response_payload).get("reason"))
+                    or "private execution submit failed"
+                ),
+                details=_response_details(response_payload),
+                created_orders=created_orders,
+                created_fills=created_fills,
+            )
+        created_orders, order_index, order_error = _create_orders_from_response(
+            store=store,
+            intent=intent,
+            orders_payload=response_payload.get("orders"),
+        )
+        if order_error is not None:
+            return _failure_result(
+                auto_unwind_on_failure=auto_unwind_on_failure,
+                reason=order_error,
+                details=_response_details(response_payload),
+                created_orders=created_orders,
+            )
+        created_fills, fill_error = _create_fills_from_response(
+            store=store,
+            order_index=order_index,
+            fills_payload=response_payload.get("fills"),
+        )
+        if fill_error is not None:
+            return _failure_result(
+                auto_unwind_on_failure=auto_unwind_on_failure,
+                reason=fill_error,
+                details=_response_details(response_payload),
+                created_orders=created_orders,
+                created_fills=created_fills,
+            )
+        if outcome == "filled" and not created_fills:
+            return _failure_result(
+                auto_unwind_on_failure=auto_unwind_on_failure,
+                reason="private execution filled outcome missing fills",
+                details=_response_details(response_payload),
+                created_orders=created_orders,
+            )
+        lifecycle_preview = _json_text(response_payload.get("lifecycle_preview"))
+        if not lifecycle_preview:
+            lifecycle_preview = "hedge_balanced" if outcome == "filled" else "entry_submitting"
+        details = {"mode": "private_http", **_response_details(response_payload)}
+        return ArbitrageSubmitResult(
+            outcome=outcome,
+            lifecycle_preview=lifecycle_preview,
+            recovery_required=False,
+            unwind_in_progress=False,
+            created_orders=created_orders,
+            created_fills=created_fills,
+            details=details,
+        )

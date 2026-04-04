@@ -1,6 +1,7 @@
 from .arbitrage_input_loader import load_strategy_inputs
 from .arbitrage_execution_adapter import (
     ArbitrageExecutionAdapterProtocol,
+    PrivateHttpArbitrageExecutionAdapter,
     PrivateStubArbitrageExecutionAdapter,
     SimulatedArbitrageExecutionAdapter,
     build_arbitrage_execution_adapter,
@@ -16,6 +17,7 @@ from .arbitrage_state_machine import (
 
 __all__ = [
     "ArbitrageExecutionAdapterProtocol",
+    "PrivateHttpArbitrageExecutionAdapter",
     "PrivateStubArbitrageExecutionAdapter",
     "SimulatedArbitrageExecutionAdapter",
     "build_arbitrage_evaluation_payload",

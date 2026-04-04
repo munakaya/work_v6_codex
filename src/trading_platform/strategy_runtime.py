@@ -25,6 +25,7 @@ SUPPORTED_EXECUTION_MODES = {
     "simulate_success",
     "simulate_failure",
     "simulate_fill",
+    "private_http",
     "private_stub",
 }
 
@@ -100,6 +101,9 @@ class StrategyRuntime:
         read_store: ControlPlaneStoreProtocol,
         connector: PublicMarketDataConnector,
         redis_runtime: RedisRuntime,
+        private_execution_url: str | None = None,
+        private_execution_timeout_ms: int = 3000,
+        private_execution_token: str | None = None,
         execution_adapter=None,
     ) -> None:
         self.enabled = enabled
@@ -117,7 +121,10 @@ class StrategyRuntime:
         self.connector = connector
         self.redis_runtime = redis_runtime
         self.execution_adapter = execution_adapter or build_arbitrage_execution_adapter(
-            self.execution_mode
+            self.execution_mode,
+            private_execution_url=private_execution_url,
+            private_execution_timeout_ms=private_execution_timeout_ms,
+            private_execution_token=private_execution_token,
         )
         self._lock = threading.Lock()
         self._stop_event = threading.Event()

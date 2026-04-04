@@ -53,6 +53,9 @@ class AppConfig:
     strategy_runtime_persist_intent: bool
     strategy_runtime_execution_enabled: bool
     strategy_runtime_execution_mode: str
+    strategy_private_execution_url: str | None
+    strategy_private_execution_token: str | None
+    strategy_private_execution_timeout_ms: int
     strategy_runtime_auto_unwind_on_failure: bool
     recovery_runtime_enabled: bool
     recovery_runtime_interval_ms: int
@@ -103,6 +106,11 @@ def load_config() -> AppConfig:
             "TP_STRATEGY_RUNTIME_EXECUTION_MODE", "simulate_success"
         ).strip()
         or "simulate_success",
+        strategy_private_execution_url=os.getenv("TP_STRATEGY_PRIVATE_EXECUTION_URL"),
+        strategy_private_execution_token=os.getenv("TP_STRATEGY_PRIVATE_EXECUTION_TOKEN"),
+        strategy_private_execution_timeout_ms=_env_int(
+            "TP_STRATEGY_PRIVATE_EXECUTION_TIMEOUT_MS", 3000
+        ),
         strategy_runtime_auto_unwind_on_failure=_env_bool(
             "TP_STRATEGY_RUNTIME_AUTO_UNWIND_ON_FAILURE", False
         ),
