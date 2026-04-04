@@ -604,12 +604,26 @@ class RecoveryRuntime:
             return None
         relevant_exchanges = self._trace_relevant_exchanges(trace)
         if not relevant_exchanges:
-            return None
+            return (
+                "reconciliation_context_missing",
+                "reconciliation matched result is missing intent exchange context",
+            )
         relevant_assets = self._trace_relevant_assets(trace)
         observed_balances = _observed_balances(
             trace.get("reconciliation_observed_balances")
         )
         if not observed_balances:
+            if relevant_assets:
+                missing_balance_keys = sorted(
+                    (exchange, asset)
+                    for exchange in relevant_exchanges
+                    for asset in relevant_assets
+                )
+                return (
+                    "reconciliation_balance_evidence_incomplete",
+                    "reconciliation matched result is missing observed balances for exchange/assets: "
+                    + ", ".join(f"{exchange}:{asset}" for exchange, asset in missing_balance_keys),
+                )
             return None
         relevant_balance_rows = [
             balance

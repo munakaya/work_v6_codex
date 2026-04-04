@@ -1070,6 +1070,32 @@ def main() -> None:
             "reconciliation_residual_exposure_quote": "0",
             "reconciliation_observed_at": _iso(datetime.now(UTC)),
             "reconciliation_observed_fill_ids": ["fill-recon-1"],
+            "reconciliation_observed_balances": [
+                {
+                    "exchange_name": "sample",
+                    "asset": "BTC",
+                    "free": "0.5",
+                    "locked": "0",
+                },
+                {
+                    "exchange_name": "sample",
+                    "asset": "KRW",
+                    "free": "1000000",
+                    "locked": "0",
+                },
+                {
+                    "exchange_name": "upbit",
+                    "asset": "BTC",
+                    "free": "0.7",
+                    "locked": "0",
+                },
+                {
+                    "exchange_name": "upbit",
+                    "asset": "KRW",
+                    "free": "900000",
+                    "locked": "0",
+                },
+            ],
             "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
             "updated_at": _iso(datetime.now(UTC)),
         },
@@ -1104,6 +1130,42 @@ def main() -> None:
         "reconciliation resolution reason mismatch",
     )
 
+    fill_only_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=fill_only_trace_id,
+        payload={
+            "recovery_trace_id": fill_only_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_fill_ids": ["fill-only-1"],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+        trace_id=None,
+    )
+    runtime.run_once()
+    fill_only_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=fill_only_trace_id
+    )
+    _assert(fill_only_trace is not None, "fill-only trace missing")
+    _assert(
+        fill_only_trace.get("status") == "handoff_required",
+        "matched reconciliation with only fill ids should hand off",
+    )
+    _assert(
+        fill_only_trace.get("handoff_reason")
+        == "reconciliation_context_missing",
+        "fill-only handoff reason mismatch",
+    )
+
     order_ids_only_trace_id = f"rt_{uuid4().hex}"
     redis_runtime.sync_recovery_trace(
         recovery_trace_id=order_ids_only_trace_id,
@@ -1111,7 +1173,7 @@ def main() -> None:
             "recovery_trace_id": order_ids_only_trace_id,
             "run_id": run_id,
             "bot_id": bot_id,
-            "intent_id": "",
+            "intent_id": str(reconciliation_intent["intent_id"]),
             "status": "active",
             "lifecycle_state": "recovery_required",
             "residual_exposure_quote": "0",
@@ -1135,8 +1197,45 @@ def main() -> None:
         "matched reconciliation with only order ids should hand off",
     )
     _assert(
-        order_ids_only_trace.get("handoff_reason") == "reconciliation_evidence_missing",
+        order_ids_only_trace.get("handoff_reason")
+        == "reconciliation_evidence_missing",
         "order-ids-only handoff reason mismatch",
+    )
+
+    fill_ids_with_intent_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=fill_ids_with_intent_trace_id,
+        payload={
+            "recovery_trace_id": fill_ids_with_intent_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": str(reconciliation_intent["intent_id"]),
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_fill_ids": ["fill-intent-1"],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+        trace_id=None,
+    )
+    runtime.run_once()
+    fill_ids_with_intent_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=fill_ids_with_intent_trace_id
+    )
+    _assert(fill_ids_with_intent_trace is not None, "fill-ids-with-intent trace missing")
+    _assert(
+        fill_ids_with_intent_trace.get("status") == "handoff_required",
+        "matched reconciliation with fill ids but no balances should hand off",
+    )
+    _assert(
+        fill_ids_with_intent_trace.get("handoff_reason")
+        == "reconciliation_balance_evidence_incomplete",
+        "fill-ids-with-intent handoff reason mismatch",
     )
     _assert(
         str(reconciliation_trace.get("residual_exposure_quote") or "") == "0",
