@@ -9,6 +9,7 @@
 - `05_arbitrage_reason_code_precedence.md`: reject code 우선순위 규칙
 - `05_arbitrage_lifecycle_state_machine.md`: accept 이후 실행/복구 상태 전이
 - `05_arbitrage_runtime_invariants.md`: 런타임 불변조건과 fail-closed 점검
+- `05_arbitrage_invariant_code_catalog.md`: invariant code 이름 카탈로그
 - `05_arbitrage_shadow_live_gate.md`: shadow -> live 전환 승인 기준
 - `05_arbitrage_observability_spec.md`: 재정거래 전용 메트릭/알림/대시보드 기준
 - `05_arbitrage_incident_taxonomy.md`: incident code와 운영 대응 분류
@@ -25,9 +26,10 @@
 5. reject code 충돌 규칙이 필요하면 `05_arbitrage_reason_code_precedence.md`
 6. accept 이후 상태 전이가 필요하면 `05_arbitrage_lifecycle_state_machine.md`
 7. 런타임 불변조건이 필요하면 `05_arbitrage_runtime_invariants.md`
-8. shadow -> live 승인 기준이 필요하면 `05_arbitrage_shadow_live_gate.md`
-9. 재정거래 전용 메트릭/알림 기준이 필요하면 `05_arbitrage_observability_spec.md`
-10. incident code와 운영 대응 분류가 필요하면 `05_arbitrage_incident_taxonomy.md`
-11. 무엇을 어떤 테스트 레벨로 검증할지 정리하려면 `05_arbitrage_test_matrix.md`
-12. 실주문 이후 정합성과 복구 로직이 필요하면 `05_trade_recovery.md`
-13. live 승인 기준과 설정 안전장치가 필요하면 `05_risk_and_config.md`
+8. invariant code 이름을 고정하려면 `05_arbitrage_invariant_code_catalog.md`
+9. shadow -> live 승인 기준이 필요하면 `05_arbitrage_shadow_live_gate.md`
+10. 재정거래 전용 메트릭/알림 기준이 필요하면 `05_arbitrage_observability_spec.md`
+11. incident code와 운영 대응 분류가 필요하면 `05_arbitrage_incident_taxonomy.md`
+12. 무엇을 어떤 테스트 레벨로 검증할지 정리하려면 `05_arbitrage_test_matrix.md`
+13. 실주문 이후 정합성과 복구 로직이 필요하면 `05_trade_recovery.md`
+14. live 승인 기준과 설정 안전장치가 필요하면 `05_risk_and_config.md`

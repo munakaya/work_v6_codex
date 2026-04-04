@@ -16,10 +16,16 @@
 이 문서는 재정거래 진입 판단 이후의 런타임 불변조건을 다룬다.
 즉, `decision_context`, `order_intents`, `orders`, `trade_fills`, `reservation`, `lifecycle state`가 서로 모순되지 않아야 한다.
 
+코드 이름은 `05_arbitrage_invariant_code_catalog.md`를 따른다.
+
 
 ## P0 불변조건
 
 ### I1. active entry uniqueness
+
+대표 `invariant_code`:
+
+- `ARB_INV_ACTIVE_ENTRY_UNIQUENESS`
 
 - 같은 `bot_id + canonical_symbol`에 active entry는 하나만 있어야 한다.
 - 아래 상태 중 하나라도 있으면 active로 본다.
@@ -38,15 +44,23 @@
 
 ### I2. accept without reservation 금지
 
+대표 `invariant_code`:
+
+- `ARB_INV_ACCEPT_WITHOUT_RESERVATION`
+
 - `decision.reason_code = ARBITRAGE_OPPORTUNITY_FOUND`이면 `reservation.reservation_passed = true`여야 한다.
 - reservation이 false 또는 누락이면 accept로 보면 안 된다.
 
 위반 시:
 
 - accept 집계 금지
-- 상태는 `recovery_required` 또는 TODO(verify) `manual_handoff`
+- 상태는 `recovery_required` 또는 `manual_handoff`
 
 ### I3. intent/order market consistency
+
+대표 `invariant_code`:
+
+- `ARB_INV_INTENT_ORDER_MARKET_MISMATCH`
 
 - `order.market`은 linked `order_intent.market`과 같아야 한다.
 - `order.exchange_name`은 linked intent의 `buy_exchange` 또는 `sell_exchange` 중 하나여야 한다.
@@ -60,6 +74,10 @@
 
 ### I4. fill quantity upper bound
 
+대표 `invariant_code`:
+
+- `ARB_INV_FILL_QTY_EXCEEDED`
+
 - 한 주문의 fill 합계는 `requested_qty`를 넘으면 안 된다.
 - 허용 오차가 필요하면 수치로 문서화해야 한다. 현재는 0으로 본다.
 
@@ -69,6 +87,10 @@
 - reconciliation 우선 실행
 
 ### I5. residual exposure visibility
+
+대표 `invariant_code`:
+
+- `ARB_INV_RESIDUAL_EXPOSURE_UNKNOWN`
 
 - `entry_open`, `recovery_required`, `unwind_in_progress` 중 하나면 residual exposure를 계산할 수 있어야 한다.
 - 계산 불가 상태를 정상으로 넘기면 안 된다.
@@ -83,20 +105,36 @@
 
 ### I6. lifecycle / order terminal consistency
 
+대표 `invariant_code`:
+
+- `ARB_INV_CLOSED_WITH_ACTIVE_EXECUTION`
+
 - lifecycle이 `closed`면 관련 주문은 모두 terminal이어야 한다.
 - active unwind가 남아 있으면 `closed`가 될 수 없다.
 
 ### I7. reject / side-effect consistency
+
+대표 `invariant_code`:
+
+- `ARB_INV_REJECT_WITH_SIDE_EFFECT`
 
 - 대표 decision이 reject면 신규 order intent draft가 생기면 안 된다.
 - reject 후 side-effect가 있다면 별도 recovery trace로 남겨야 한다.
 
 ### I8. hedge balance claim consistency
 
+대표 `invariant_code`:
+
+- `ARB_INV_HEDGE_BALANCE_CLAIM_FALSE`
+
 - lifecycle이 `hedge_balanced`면 순노출이 허용 범위 이내여야 한다.
 - 양 leg 체결 수량 차이가 허용 오차를 넘으면 `hedge_balanced`로 두면 안 된다.
 
 ### I9. reason code / lifecycle consistency
+
+대표 `invariant_code`:
+
+- `ARB_INV_REASON_LIFECYCLE_CONFLICT`
 
 - `decision_rejected`와 `decision_accepted`는 동시에 성립하면 안 된다.
 - `recovery_required` 상태에서는 decision accept 여부보다 recovery signal이 더 강하다.
@@ -106,10 +144,18 @@
 
 ### I10. config immutability during active entry
 
+대표 `invariant_code`:
+
+- `ARB_INV_CONFIG_CHANGED_DURING_ACTIVE_ENTRY`
+
 - active entry 동안 linked config version은 바뀌지 않는 편이 안전하다.
 - 바뀌어야 한다면 기존 entry와 새 entry를 명확히 분리해야 한다.
 
 ### I11. metric/accounting consistency
+
+대표 `invariant_code`:
+
+- `ARB_INV_METRIC_ACCOUNTING_CONFLICT`
 
 - accept count, submit count, filled count, unwind count는 같은 run/window에서 역전되면 안 된다.
 - 예:

@@ -103,7 +103,7 @@
 - 의미:
   - active entry uniqueness 위반
 - 대표 연결:
-  - `invariant_code=ACTIVE_ENTRY_UNIQUENESS_BROKEN` TODO(verify)
+  - `invariant_code=ARB_INV_ACTIVE_ENTRY_UNIQUENESS`
 - 기본 등급:
   - `sev-1`
 
@@ -112,7 +112,7 @@
 - 의미:
   - accept인데 reservation 근거가 없음
 - 대표 연결:
-  - `invariant_code=ACCEPT_WITHOUT_RESERVATION` TODO(verify)
+  - `invariant_code=ARB_INV_ACCEPT_WITHOUT_RESERVATION`
 - 기본 등급:
   - `sev-1`
 
@@ -121,7 +121,7 @@
 - 의미:
   - 노출을 계산할 수 없어 복구 판단이 불명확
 - 대표 연결:
-  - `invariant_code=RESIDUAL_EXPOSURE_UNKNOWN` TODO(verify)
+  - `invariant_code=ARB_INV_RESIDUAL_EXPOSURE_UNKNOWN`
 - 기본 등급:
   - `sev-1`
 
@@ -164,7 +164,7 @@
 
 - `reason_code=ARBITRAGE_OPPORTUNITY_FOUND`
 - `lifecycle_state=decision_accepted`
-- `invariant_code=ACCEPT_WITHOUT_RESERVATION` TODO(verify)
+- `invariant_code=ARB_INV_ACCEPT_WITHOUT_RESERVATION`
 - `incident_code=ARB-402 ACCEPT_WITHOUT_RESERVATION`
 
 원칙:
