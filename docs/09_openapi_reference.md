@@ -724,6 +724,8 @@ paths:
           description: Invalid request
         '404':
           description: Strategy run not found
+        '409':
+          description: Strategy execution disabled
         '422':
           description: Strategy not supported
         '501':
@@ -1388,6 +1390,8 @@ components:
         - runtime_state
       properties:
         persist_intent:
+          type: boolean
+        execute:
           type: boolean
         canonical_symbol:
           type: string

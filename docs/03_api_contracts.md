@@ -243,6 +243,7 @@
 
 - arbitrage strategy run에 대해 실행 가능 수익, gate, reservation을 평가
 - `persist_intent=true`일 때만 accept 결과를 `order_intent`로 저장
+- `execute=true`면 저장된 intent를 현재 execution adapter로 바로 실행
 - background strategy runtime이 켜져 있으면 같은 평가 결과가 Redis latest evaluation cache에도 주기적으로 반영될 수 있음
 
 요청 핵심 필드:
@@ -258,6 +259,7 @@
 - `risk_config`
 - `runtime_state`
 - `persist_intent` optional boolean
+- `execute` optional boolean
 
 응답 핵심 필드:
 
@@ -277,6 +279,8 @@
 
 - `persist_intent=false`면 read-only backend에서도 평가만 가능
 - `persist_intent=true`인데 backend가 read-only면 `STORE_MUTATION_UNAVAILABLE`
+- `execute=true`면 `persist_intent=true`가 필수
+- `execute=true`인데 strategy runtime execution이 꺼져 있으면 `STRATEGY_EXECUTION_DISABLED`
 - 성공 시 `strategy.arbitrage_evaluated` event를 남긴다
 - `persist_intent=true`로 저장되면 `strategy.arbitrage_intent_persisted` event를 추가로 남긴다
 
