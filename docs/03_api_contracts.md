@@ -70,7 +70,7 @@
 - PostgreSQL, Redis 연결과 market data / strategy runtime 상태 포함 준비 상태 확인
 - `strategy_runtime`에는 evaluation/persist/submit 카운터와 execution 모드(`simulate_success`, `simulate_failure`, `simulate_fill`, `private_stub`, `private_http`)도 포함
 - `strategy_runtime`에는 현재 연결된 execution adapter 이름도 포함
-- `recovery_runtime`에는 active trace 처리, submit-timeout watchdog, auto resolve, manual handoff 승격 카운터가 포함
+- `recovery_runtime`에는 active trace 처리, submit-timeout watchdog, terminal evaluation close sync, auto resolve, manual handoff 승격 카운터가 포함
 
 ### 18.3 Bot API
 

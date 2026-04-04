@@ -248,9 +248,74 @@ def main() -> None:
         "submit timeout latest evaluation lifecycle mismatch",
     )
 
+    closed_eval_run_id = "run_terminal_eval_case"
+    closed_eval_bot_id = bot_id
+    store.strategy_runs[closed_eval_run_id] = {
+        "run_id": closed_eval_run_id,
+        "bot_id": closed_eval_bot_id,
+        "strategy_name": "arbitrage",
+        "mode": "shadow",
+        "status": "running",
+        "created_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "started_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "stopped_at": None,
+        "decision_count": 1,
+    }
+    closed_outcome, closed_intent = store.create_order_intent(
+        strategy_run_id=closed_eval_run_id,
+        market="KRW-BTC",
+        buy_exchange="sample",
+        sell_exchange="upbit",
+        side_pair="buy_then_sell",
+        target_qty="0.25",
+        expected_profit="500",
+        expected_profit_ratio="0.01",
+        status="simulated",
+        decision_context={"source": "terminal_eval_case"},
+    )
+    _assert(
+        closed_outcome == "created" and closed_intent is not None,
+        "terminal eval intent create failed",
+    )
+    closed_order_outcome, closed_order = store.create_order(
+        order_intent_id=str(closed_intent["intent_id"]),
+        exchange_name="sample",
+        exchange_order_id="terminal-eval-buy-1",
+        market="KRW-BTC",
+        side="buy",
+        requested_price="100000",
+        requested_qty="0.25",
+        status="filled",
+        raw_payload={"source": "terminal_eval_case"},
+    )
+    _assert(
+        closed_order_outcome == "created" and closed_order is not None,
+        "terminal eval order create failed",
+    )
+    redis_runtime.sync_arbitrage_evaluation(
+        run_id=closed_eval_run_id,
+        payload={
+            "bot_id": closed_eval_bot_id,
+            "strategy_run_id": closed_eval_run_id,
+            "accepted": True,
+            "reason_code": "ARBITRAGE_OPPORTUNITY_FOUND",
+            "lifecycle_preview": "hedge_balanced",
+            "persisted_intent": {"intent_id": str(closed_intent["intent_id"])},
+        },
+        publish_event=False,
+    )
+    runtime.run_once()
+    closed_eval = redis_runtime.get_arbitrage_evaluation(run_id=closed_eval_run_id)
+    _assert(closed_eval is not None, "terminal eval latest evaluation missing")
+    _assert(
+        closed_eval.get("lifecycle_preview") == "closed",
+        "terminal eval latest evaluation should be closed",
+    )
+
     print("PASS recovery runtime resolves zero-exposure traces")
     print("PASS recovery runtime resolves terminal intents without active orders")
     print("PASS recovery runtime opens submit-timeout recovery traces")
+    print("PASS recovery runtime closes terminal latest evaluations")
     print("PASS recovery runtime escalates aged traces to manual handoff")
 
 

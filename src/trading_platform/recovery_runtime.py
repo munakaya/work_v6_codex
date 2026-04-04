@@ -14,6 +14,12 @@ from .storage.store_protocol import ControlPlaneStoreProtocol
 LOGGER = logging.getLogger(__name__)
 TERMINAL_ORDER_STATUSES = {"filled", "cancelled", "rejected", "expired", "failed"}
 TERMINAL_INTENT_STATUSES = {"filled", "closed", "simulated", "cancelled", "expired", "rejected"}
+TERMINAL_SYNC_CANDIDATE_STATES = {
+    "entry_submitting",
+    "entry_open",
+    "hedge_balanced",
+    "unwind_in_progress",
+}
 
 
 def _iso_now() -> str:
@@ -186,6 +192,7 @@ class RecoveryRuntime:
             self._record_skip("REDIS_RUNTIME_UNAVAILABLE")
             return
         try:
+            self._sync_terminal_latest_evaluations()
             self._open_submit_timeout_traces()
             traces = self.redis_runtime.list_recovery_traces(limit=100, status="active")
             if traces is None:
@@ -206,6 +213,60 @@ class RecoveryRuntime:
                 "recovery runtime tick failed: error=%s",
                 exc,
                 extra={"event_name": "recovery_runtime_failed"},
+            )
+
+    def _sync_terminal_latest_evaluations(self) -> None:
+        evaluations = self.redis_runtime.list_arbitrage_evaluations(limit=100)
+        if evaluations is None:
+            raise RuntimeError("failed to list arbitrage evaluations")
+        for item in evaluations:
+            lifecycle = str(item.get("lifecycle_preview") or "").strip().lower()
+            if lifecycle not in TERMINAL_SYNC_CANDIDATE_STATES:
+                continue
+            run_id = str(item.get("strategy_run_id") or "").strip()
+            bot_id = str(item.get("bot_id") or "").strip()
+            persisted_intent = item.get("persisted_intent")
+            if not isinstance(persisted_intent, dict):
+                continue
+            intent_id = str(persisted_intent.get("intent_id") or "").strip()
+            if not run_id or not bot_id or not intent_id:
+                continue
+            blocking_trace = self.redis_runtime.get_blocking_recovery_trace(
+                bot_id=bot_id or None,
+                run_id=run_id or None,
+            )
+            if blocking_trace is not None:
+                continue
+            if not self._intent_is_terminal(intent_id=intent_id):
+                continue
+            related_orders = self._related_orders(
+                bot_id=bot_id,
+                run_id=run_id,
+                intent_id=intent_id,
+            )
+            if not related_orders:
+                continue
+            if any(
+                str(order.get("status") or "").strip().lower() not in TERMINAL_ORDER_STATUSES
+                for order in related_orders
+            ):
+                continue
+            self.redis_runtime.sync_arbitrage_evaluation(
+                run_id=run_id,
+                payload={**item, "lifecycle_preview": "closed"},
+                trace_id=None,
+                publish_event=True,
+            )
+            self.redis_runtime.append_event(
+                "strategy_events",
+                event_type="strategy.arbitrage_cycle_closed",
+                payload={
+                    "run_id": run_id,
+                    "bot_id": bot_id,
+                    "intent_id": intent_id,
+                    "order_count": len(related_orders),
+                    "source": "recovery_runtime",
+                },
             )
 
     def _open_submit_timeout_traces(self) -> None:
