@@ -642,8 +642,6 @@ class RecoveryRuntime:
                     "reconciliation_result_invalid",
                     "reconciliation result is missing while reconciliation fields are present",
                 )
-            if not reconciliation_result:
-                return None
             return (
                 "reconciliation_result_invalid",
                 "reconciliation result contains invalid result value",
