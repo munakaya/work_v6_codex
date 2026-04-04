@@ -163,7 +163,7 @@
 - reject code 분포
 - P0 invariant violation 건수
 - recovery_required / unwind_in_progress 사례 수
-- stale alert / connector degraded / reconciliation mismatch 건수와 상위 원인
+- stale alert / connector degraded / reconciliation mismatch 건수와 `top_reason`
 - stop command 반영 시간
 - `accept_mismatch`, `reason_code_mismatch` 건수
 
