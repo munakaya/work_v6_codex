@@ -115,7 +115,13 @@
   - `pass_fail`
   - `evidence_ref`
 - invariant 위반 건수
+  - `invariant_code`
+  - `severity`
+  - `count`
 - stale/skew/reject 분포
+  - `reason_code`
+  - `count`
+  - `ratio`
 - stale alert / connector degraded / reconciliation mismatch 건수와 `top_reason`
 - shadow diff 지표 요약
   - `reservation_mismatch`, `target_qty_bucket_mismatch`가 있으면 `time_window`, `top_reason`, `affected_bot_ids`, `suggested_action` 포함

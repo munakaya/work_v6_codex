@@ -163,6 +163,9 @@
   - `time_window`, `decision_count`, `accept_count`, `reject_count`
 - reject code 분포
 - P0 invariant violation 건수
+  - `invariant_code`, `severity`, `count`
+- stale/skew/reject 분포
+  - `reason_code`, `count`, `ratio`
 - recovery_required / unwind_in_progress 사례 수
 - 최근 recovery/unwind 사례
   - `strategy_run_id`, `lifecycle_state`, `residual_exposure_quote`, `action_taken`, `result`
