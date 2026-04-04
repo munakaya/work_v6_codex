@@ -368,6 +368,32 @@ def _build_response(path: str, body: dict[str, object]) -> dict[str, object]:
                 "reason": "remote private submit rejected",
             },
         }
+    if path == "/submit-failed-partial-order-no-fill":
+        return {
+            "outcome": "submit_failed",
+            "orders": [
+                {
+                    "exchange_name": buy_exchange,
+                    "exchange_order_id": "failed-partial-order-no-fill-buy-001",
+                    "market": market,
+                    "side": "buy",
+                    "requested_qty": target_qty,
+                    "status": "partially_filled",
+                },
+                {
+                    "exchange_name": sell_exchange,
+                    "exchange_order_id": "failed-partial-order-no-fill-sell-001",
+                    "market": market,
+                    "side": "sell",
+                    "requested_qty": target_qty,
+                    "status": "submitted",
+                },
+            ],
+            "details": {
+                "remote_mode": "submit-failed-partial-order-no-fill",
+                "reason": "remote private submit rejected",
+            },
+        }
     return {
         "outcome": "submitted",
         "orders": [
@@ -591,6 +617,34 @@ def main() -> None:
             "submit-failed-filled-order-no-fill should not persist fills",
         )
 
+        store, _bot_id, run_id = _fresh_store("private-http-adapter-submit-failed-partial-order-no-fill")
+        decision, intent = _load_decision_and_intent(store, run_id)
+        adapter = build_arbitrage_execution_adapter(
+            mode="private_http",
+            private_execution_url=f"{base_url}/submit-failed-partial-order-no-fill",
+            private_execution_timeout_ms=3000,
+        )
+        submit_result = adapter.submit(
+            store=store,
+            decision=decision,
+            intent=intent,
+            auto_unwind_on_failure=False,
+        )
+        _assert(submit_result.outcome == "submit_failed", "submit-failed-partial-order-no-fill should fail")
+        _assert(
+            str(submit_result.details.get("reason"))
+            == "private execution submit_failed outcome missing fills for filled orders",
+            "submit-failed-partial-order-no-fill reason mismatch",
+        )
+        _assert(
+            len(store.list_orders(strategy_run_id=run_id)) == 0,
+            "submit-failed-partial-order-no-fill should not persist orders",
+        )
+        _assert(
+            len(store.list_fills(strategy_run_id=run_id)) == 0,
+            "submit-failed-partial-order-no-fill should not persist fills",
+        )
+
         store, _bot_id, run_id = _fresh_store("private-http-adapter-filled-bad-preview")
         decision, intent = _load_decision_and_intent(store, run_id)
         adapter = build_arbitrage_execution_adapter(
@@ -680,6 +734,7 @@ def main() -> None:
         print("PASS private_http adapter case submit_failed_bad_second_fill_no_persist")
         print("PASS private_http adapter case submit_failed_extra_fill_leg_no_persist")
         print("PASS private_http adapter case submit_failed_filled_order_no_fill_no_persist")
+        print("PASS private_http adapter case submit_failed_partial_order_no_fill_no_persist")
         print("PASS private_http adapter case filled_bad_preview_no_persist")
         print("PASS private_http adapter case filled_partial_no_persist")
         print("PASS private_http adapter case filled_extra_fill_leg_no_persist")

@@ -5,6 +5,6 @@
 - strategy_runtime_guard_cases.py: active recovery/manual handoff trace가 있을 때 strategy runtime이 새 평가를 skip하는지 검증한다
 - private_execution_readiness_cases.py: private_http execution이 health probe 기준으로 reachable, missing, not_required 상태를 올바르게 판정하는지 검증한다
 - private_executor_stub.py: private_http execution 검증용 로컬 stub 서버를 띄워 health와 filled/submitted/failed 응답을 재현한다
-- private_http_adapter_cases.py: private_http adapter를 runtime guard 없이 직접 호출해 existing order id 충돌, submitted-with-fill, submit_failed bad fill/extra fill leg/filled-no-fill, filled bad preview, filled partial, extra fill leg 무저장 fail-closed를 검증한다
+- private_http_adapter_cases.py: private_http adapter를 runtime guard 없이 직접 호출해 existing order id 충돌, submitted-with-fill, submit_failed bad fill/extra fill leg/filled-no-fill/partial-no-fill, filled bad preview, filled partial, extra fill leg 무저장 fail-closed를 검증한다
 - private_http_server_cases.py: private_http executor를 실제 서버 흐름에서 filled/submitted/failed 세 경로로 검증한다
 - private_http_followup_cases.py: private_http가 submitted를 반환한 뒤 later fill로 closed 되거나 timeout으로 recovery trace가 열리는지 서버 전체 흐름에서 검증한다
