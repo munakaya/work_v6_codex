@@ -19,6 +19,13 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_csv(name: str) -> tuple[str, ...]:
+    raw = os.getenv(name, "")
+    if not raw.strip():
+        return ()
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
 @dataclass(frozen=True)
 class AppConfig:
     project_root: Path
@@ -37,6 +44,10 @@ class AppConfig:
     market_data_timeout_ms: int
     market_data_stale_threshold_ms: int
     upbit_quotation_base_url: str
+    market_data_poll_enabled: bool
+    market_data_poll_exchange: str
+    market_data_poll_markets: tuple[str, ...]
+    market_data_poll_interval_ms: int
     use_sample_read_model: bool
     enable_postgres_mutation: bool
 
@@ -67,6 +78,10 @@ def load_config() -> AppConfig:
         upbit_quotation_base_url=os.getenv(
             "TP_UPBIT_QUOTATION_BASE_URL", "https://api.upbit.com"
         ),
+        market_data_poll_enabled=_env_bool("TP_MARKET_DATA_POLL_ENABLED", False),
+        market_data_poll_exchange=os.getenv("TP_MARKET_DATA_POLL_EXCHANGE", "upbit"),
+        market_data_poll_markets=_env_csv("TP_MARKET_DATA_POLL_MARKETS"),
+        market_data_poll_interval_ms=_env_int("TP_MARKET_DATA_POLL_INTERVAL_MS", 1000),
         use_sample_read_model=_env_bool("TP_USE_SAMPLE_READ_MODEL", True),
         enable_postgres_mutation=_env_bool("TP_ENABLE_POSTGRES_MUTATION", False),
     )

@@ -1266,6 +1266,41 @@ components:
                   type: string
                 state:
                   type: string
+            market_data_runtime:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                exchange:
+                  type: string
+                markets:
+                  type: array
+                  items:
+                    type: string
+                interval_ms:
+                  type: integer
+                running:
+                  type: boolean
+                state:
+                  type: string
+                last_success_at:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                      format: date-time
+                last_error_at:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                      format: date-time
+                last_error_message:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                success_count:
+                  type: integer
+                failure_count:
+                  type: integer
             read_store:
               type: object
               properties:

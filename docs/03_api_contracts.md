@@ -67,7 +67,7 @@
 
 목적:
 
-- PostgreSQL, Redis 연결 포함 준비 상태 확인
+- PostgreSQL, Redis 연결과 market data runtime 상태 포함 준비 상태 확인
 
 ### 18.3 Bot API
 

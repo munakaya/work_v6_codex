@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 from .config import AppConfig
 from .market_data_connector import PublicMarketDataConnector
+from .market_data_runtime import MarketDataRuntime
 from .observability import AlertHookNotifier, MetricsRegistry
 from .redis_runtime import RedisRuntime
 from .route_handlers import ControlPlaneRouteMixin
@@ -33,6 +34,7 @@ class ControlPlaneServer(ThreadingHTTPServer):
         alert_hook: AlertHookNotifier,
         redis_runtime: RedisRuntime,
         market_data_connector: PublicMarketDataConnector,
+        market_data_runtime: MarketDataRuntime,
     ):
         super().__init__(server_address, ControlPlaneRequestHandler)
         self.config = config
@@ -42,6 +44,7 @@ class ControlPlaneServer(ThreadingHTTPServer):
         self.alert_hook = alert_hook
         self.redis_runtime = redis_runtime
         self.market_data_connector = market_data_connector
+        self.market_data_runtime = market_data_runtime
 
 
 class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler):
@@ -179,17 +182,32 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
 def build_server(config: AppConfig) -> ControlPlaneServer:
     LOGGER.debug("building control plane server with config: %s", asdict(config))
     bootstrap = build_read_store_bundle(config)
+    metrics = MetricsRegistry()
+    redis_runtime = RedisRuntime(
+        config.redis_url, config.redis_key_prefix, config.service_name
+    )
+    market_data_connector = PublicMarketDataConnector(
+        timeout_ms=config.market_data_timeout_ms,
+        stale_threshold_ms=config.market_data_stale_threshold_ms,
+        upbit_base_url=config.upbit_quotation_base_url,
+    )
+    market_data_runtime = MarketDataRuntime(
+        enabled=config.market_data_poll_enabled,
+        exchange=config.market_data_poll_exchange,
+        markets=config.market_data_poll_markets,
+        interval_ms=config.market_data_poll_interval_ms,
+        connector=market_data_connector,
+        metrics=metrics,
+        redis_runtime=redis_runtime,
+    )
     return ControlPlaneServer(
         (config.host, config.port),
         config,
         bootstrap.store,
         bootstrap.info,
-        MetricsRegistry(),
+        metrics,
         AlertHookNotifier(config.alert_hook_path, config.service_name),
-        RedisRuntime(config.redis_url, config.redis_key_prefix, config.service_name),
-        PublicMarketDataConnector(
-            timeout_ms=config.market_data_timeout_ms,
-            stale_threshold_ms=config.market_data_stale_threshold_ms,
-            upbit_base_url=config.upbit_quotation_base_url,
-        ),
+        redis_runtime,
+        market_data_connector,
+        market_data_runtime,
     )
