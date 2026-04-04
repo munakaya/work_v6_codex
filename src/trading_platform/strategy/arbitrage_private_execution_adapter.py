@@ -453,10 +453,10 @@ def _create_fills_from_response(
     if not isinstance(fills_payload, list):
         return (), "private execution fills must be a list"
 
-    created_fills: list[dict[str, object]] = []
+    validated_items: list[dict[str, object]] = []
     for item in fills_payload:
         if not isinstance(item, dict):
-            return tuple(created_fills), "private execution fill item must be an object"
+            return (), "private execution fill item must be an object"
         side = (_json_text(item.get("side")) or "").lower()
         exchange_name = _json_text(item.get("exchange_name"))
         order = _match_order_for_fill(
@@ -465,27 +465,41 @@ def _create_fills_from_response(
             exchange_name=exchange_name,
         )
         if order is None:
-            return tuple(created_fills), "private execution fill could not be matched to order"
+            return (), "private execution fill could not be matched to order"
         fill_price = json_number_text(item.get("fill_price"))
         fill_qty = json_number_text(item.get("fill_qty"))
         if not fill_price or not fill_qty:
-            return tuple(created_fills), "private execution fill missing fill_price or fill_qty"
+            return (), "private execution fill missing fill_price or fill_qty"
         if not is_positive_number_text(fill_price):
-            return tuple(created_fills), "private execution fill_price must be a positive number"
+            return (), "private execution fill_price must be a positive number"
         if not is_positive_number_text(fill_qty):
-            return tuple(created_fills), "private execution fill_qty must be a positive number"
+            return (), "private execution fill_qty must be a positive number"
         fee_amount = json_number_text(item.get("fee_amount")) or "0"
         if not is_nonnegative_number_text(fee_amount):
-            return tuple(created_fills), "private execution fee_amount must be nonnegative"
+            return (), "private execution fee_amount must be nonnegative"
         filled_at = json_datetime_text(item.get("filled_at")) or _iso_now()
+        validated_items.append(
+            {
+                "order_id": str(order["order_id"]),
+                "exchange_trade_id": _json_text(item.get("exchange_trade_id")),
+                "fill_price": fill_price,
+                "fill_qty": fill_qty,
+                "fee_asset": _json_text(item.get("fee_asset")),
+                "fee_amount": fee_amount,
+                "filled_at": filled_at,
+            }
+        )
+
+    created_fills: list[dict[str, object]] = []
+    for item in validated_items:
         outcome, fill = store.create_fill(
-            order_id=str(order["order_id"]),
+            order_id=str(item["order_id"]),
             exchange_trade_id=_json_text(item.get("exchange_trade_id")),
-            fill_price=fill_price,
-            fill_qty=fill_qty,
+            fill_price=str(item["fill_price"]),
+            fill_qty=str(item["fill_qty"]),
             fee_asset=_json_text(item.get("fee_asset")),
-            fee_amount=fee_amount,
-            filled_at=filled_at,
+            fee_amount=str(item["fee_amount"]),
+            filled_at=str(item["filled_at"]),
         )
         if outcome != "created" or fill is None:
             return tuple(created_fills), f"private execution fill create failed: {outcome}"
