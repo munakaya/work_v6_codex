@@ -593,6 +593,7 @@
 쿼리:
 
 - `stream_name`: 선택. `market_events`, `bot_events`, `strategy_events`, `order_events`, `alert_events` 중 하나
+- `limit`: 선택. `1`~`5`, 정렬/필터 후 상위 N개만 반환
 - `include_empty`: 선택. 기본 `true`, `false`면 길이가 0인 stream은 제외
 - `stale_only`: 선택. 기본 `false`, `true`면 stale stream만 반환
 - `sort_by`: 선택. `stream_name`, `length`, `newest_age_seconds` 중 하나, 기본 `stream_name`
@@ -602,11 +603,14 @@
 응답 핵심 필드:
 
 - `count`
+- `matched_count`
 - `non_empty_count`
 - `total_length`
 - `stale_after_seconds`
 - `stale_count`
 - `stale_only`
+- `limit`
+- `has_more`
 - `sort_by`
 - `order`
 - `stream_name`

@@ -255,6 +255,12 @@ paths:
           schema:
             type: string
         - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+        - in: query
           name: include_empty
           schema:
             type: boolean
@@ -2151,6 +2157,8 @@ components:
                       - type: string
             count:
               type: integer
+            matched_count:
+              type: integer
             non_empty_count:
               type: integer
             total_length:
@@ -2160,6 +2168,12 @@ components:
             stale_count:
               type: integer
             stale_only:
+              type: boolean
+            limit:
+              oneOf:
+                - type: 'null'
+                - type: integer
+            has_more:
               type: boolean
             sort_by:
               type: string

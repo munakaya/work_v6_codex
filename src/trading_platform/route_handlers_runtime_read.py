@@ -94,6 +94,17 @@ class ControlPlaneRuntimeReadRouteMixin:
                     }
                 ),
             )
+        limit = self._limit_value(params)
+        if limit is None and single_query_value(params, "limit") is not None:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "limit must be an integer between 1 and 5",
+                    }
+                ),
+            )
         items: list[dict[str, object]] = []
         for stream_name in stream_names:
             summary = self.server.redis_runtime.get_stream_summary(stream_name=stream_name)
@@ -125,6 +136,9 @@ class ControlPlaneRuntimeReadRouteMixin:
             items.sort(
                 key=lambda item: self._newest_age_sort_key(item, reverse=reverse),
             )
+        matched_count = len(items)
+        if limit is not None:
+            items = items[:limit]
         total_length = sum(int(item.get("length") or 0) for item in items)
         non_empty_count = sum(1 for item in items if int(item.get("length") or 0) > 0)
         stale_count = sum(1 for item in items if item.get("is_stale") is True)
@@ -132,15 +146,30 @@ class ControlPlaneRuntimeReadRouteMixin:
             data={
                 "items": items,
                 "count": len(items),
+                "matched_count": matched_count,
                 "non_empty_count": non_empty_count,
                 "total_length": total_length,
                 "stale_after_seconds": stale_after_seconds,
                 "stale_count": stale_count,
                 "stale_only": stale_only is True,
+                "limit": limit,
+                "has_more": matched_count > len(items),
                 "sort_by": sort_by,
                 "order": order,
             }
         )
+
+    def _limit_value(self, params: dict[str, list[str]]) -> int | None:
+        raw = (single_query_value(params, "limit") or "").strip()
+        if not raw:
+            return None
+        try:
+            value = int(raw)
+        except ValueError:
+            return None
+        if value < 1 or value > len(self.STREAM_NAMES):
+            return None
+        return value
 
     def _stale_after_seconds(self, params: dict[str, list[str]]) -> int | None:
         raw = (single_query_value(params, "stale_after_seconds") or "").strip()
