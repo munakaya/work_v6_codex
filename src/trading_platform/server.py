@@ -144,6 +144,10 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
             status, payload = self._cached_market_orderbook_top_response(query)
             return status, payload, False
 
+        if path == "/api/v1/market-data/runtime":
+            status, payload = self._market_runtime_response()
+            return status, payload, False
+
         if path == "/api/v1/market-data/events":
             status, payload = self._market_events_response(query)
             return status, payload, False

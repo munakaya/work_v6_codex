@@ -338,6 +338,7 @@
 
 - `GET /api/v1/market-data/orderbook-top`
 - `GET /api/v1/market-data/orderbook-top/cached`
+- `GET /api/v1/market-data/runtime`
 - `GET /api/v1/market-data/events`
 
 #### Bots
@@ -491,6 +492,23 @@
   "error": null
 }
 ```
+
+#### `GET /api/v1/market-data/runtime`
+
+목적:
+
+- poller runtime 상태와 Redis에 남아 있는 최신 snapshot 확인
+
+응답 핵심 필드:
+
+- `runtime.enabled`
+- `runtime.state`
+- `runtime.exchange`
+- `runtime.markets`
+- `runtime.last_success_at`
+- `runtime.last_error_message`
+- `snapshots`
+- `snapshot_count`
 
 #### `GET /api/v1/market-data/events`
 

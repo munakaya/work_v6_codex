@@ -4,6 +4,7 @@ from http import HTTPStatus
 from uuid import uuid4
 
 from .request_utils import read_json_body, response_payload, write_json, write_text
+from .route_handlers_market_read import ControlPlaneMarketReadRouteMixin
 from .route_handlers_order_write import ControlPlaneOrderWriteRouteMixin
 from .route_handlers_redis import ControlPlaneRedisRouteMixin
 from .route_handlers_read import ControlPlaneReadRouteMixin
@@ -13,6 +14,7 @@ from .route_handlers_write import ControlPlaneWriteRouteMixin
 
 class ControlPlaneRouteMixin(
     ControlPlaneRedisRouteMixin,
+    ControlPlaneMarketReadRouteMixin,
     ControlPlaneStreamReadRouteMixin,
     ControlPlaneReadRouteMixin,
     ControlPlaneWriteRouteMixin,

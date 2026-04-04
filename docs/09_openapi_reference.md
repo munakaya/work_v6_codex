@@ -126,6 +126,19 @@ paths:
         '503':
           description: Redis runtime unavailable
 
+  /api/v1/market-data/runtime:
+    get:
+      tags: [MarketData]
+      summary: Get market data runtime status
+      operationId: getMarketDataRuntime
+      responses:
+        '200':
+          description: Runtime state and cached snapshots
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketDataRuntimeResponse'
+
   /api/v1/market-data/events:
     get:
       tags: [MarketData]
@@ -1614,6 +1627,98 @@ components:
               type: boolean
             source_type:
               type: string
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    MarketDataRuntimeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            runtime:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                exchange:
+                  type: string
+                markets:
+                  type: array
+                  items:
+                    type: string
+                interval_ms:
+                  type: integer
+                running:
+                  type: boolean
+                state:
+                  type: string
+                last_success_at:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                      format: date-time
+                last_error_at:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                      format: date-time
+                last_error_message:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                success_count:
+                  type: integer
+                failure_count:
+                  type: integer
+            redis_runtime:
+              type: object
+              properties:
+                configured:
+                  type: boolean
+                cli_available:
+                  type: boolean
+                enabled:
+                  type: boolean
+                key_prefix:
+                  type: string
+                state:
+                  type: string
+            snapshots:
+              type: array
+              items:
+                type: object
+                properties:
+                  exchange:
+                    type: string
+                  market:
+                    type: string
+                  best_bid:
+                    type: string
+                  best_ask:
+                    type: string
+                  bid_volume:
+                    type: string
+                  ask_volume:
+                    type: string
+                  exchange_timestamp:
+                    type: string
+                    format: date-time
+                  received_at:
+                    type: string
+                    format: date-time
+                  exchange_age_ms:
+                    type: integer
+                  stale:
+                    type: boolean
+                  source_type:
+                    type: string
+            snapshot_count:
+              type: integer
         error:
           oneOf:
             - type: 'null'
