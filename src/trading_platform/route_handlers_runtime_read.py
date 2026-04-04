@@ -44,6 +44,32 @@ class ControlPlaneRuntimeReadRouteMixin:
         include_empty = optional_bool(single_query_value(params, "include_empty"))
         if include_empty is None:
             include_empty = True
+        sort_by = (single_query_value(params, "sort_by") or "").strip()
+        if not sort_by:
+            sort_by = "stream_name"
+        if sort_by not in {"stream_name", "length"}:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "sort_by must be stream_name or length",
+                    }
+                ),
+            )
+        order = (single_query_value(params, "order") or "").strip().lower()
+        if not order:
+            order = "asc"
+        if order not in {"asc", "desc"}:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "order must be asc or desc",
+                    }
+                ),
+            )
         items: list[dict[str, object]] = []
         for stream_name in stream_names:
             summary = self.server.redis_runtime.get_stream_summary(stream_name=stream_name)
@@ -60,6 +86,14 @@ class ControlPlaneRuntimeReadRouteMixin:
             if not include_empty and int(summary.get("length") or 0) == 0:
                 continue
             items.append(summary)
+        reverse = order == "desc"
+        if sort_by == "length":
+            items.sort(
+                key=lambda item: (int(item.get("length") or 0), str(item.get("stream_name") or "")),
+                reverse=reverse,
+            )
+        else:
+            items.sort(key=lambda item: str(item.get("stream_name") or ""), reverse=reverse)
         total_length = sum(int(item.get("length") or 0) for item in items)
         non_empty_count = sum(1 for item in items if int(item.get("length") or 0) > 0)
         return HTTPStatus.OK, self._response(
@@ -68,5 +102,7 @@ class ControlPlaneRuntimeReadRouteMixin:
                 "count": len(items),
                 "non_empty_count": non_empty_count,
                 "total_length": total_length,
+                "sort_by": sort_by,
+                "order": order,
             }
         )

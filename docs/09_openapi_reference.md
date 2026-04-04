@@ -258,6 +258,14 @@ paths:
           name: include_empty
           schema:
             type: boolean
+        - in: query
+          name: sort_by
+          schema:
+            type: string
+        - in: query
+          name: order
+          schema:
+            type: string
       responses:
         '200':
           description: Runtime stream summaries
@@ -2130,6 +2138,10 @@ components:
               type: integer
             total_length:
               type: integer
+            sort_by:
+              type: string
+            order:
+              type: string
         error:
           oneOf:
             - type: 'null'
