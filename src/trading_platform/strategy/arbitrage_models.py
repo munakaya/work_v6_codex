@@ -56,6 +56,7 @@ class RiskConfig:
     max_spread_bps: Decimal
     slippage_buffer_bps: Decimal = Decimal("0")
     unwind_buffer_quote: Decimal = Decimal("0")
+    rebalance_buffer_quote: Decimal = Decimal("0")
     taker_fee_bps_buy: Decimal = Decimal("0")
     taker_fee_bps_sell: Decimal = Decimal("0")
     reentry_cooldown_seconds: int = 0
@@ -113,11 +114,19 @@ class CandidateSizeResult:
 class ExecutableEdgeResult:
     executable_buy_cost_quote: Decimal
     executable_sell_proceeds_quote: Decimal
+    gross_profit_quote: Decimal
     executable_profit_quote: Decimal
     executable_profit_bps: Decimal
     buy_vwap: Decimal
     sell_vwap: Decimal
+    fee_buy_quote: Decimal
+    fee_sell_quote: Decimal
+    buy_slippage_buffer_quote: Decimal
+    sell_slippage_buffer_quote: Decimal
+    unwind_buffer_quote: Decimal
+    rebalance_buffer_quote: Decimal
     total_fee_quote: Decimal
+    total_cost_adjustment_quote: Decimal
     passed: bool
 
 

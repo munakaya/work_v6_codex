@@ -1698,9 +1698,27 @@ components:
           type: string
         executable_sell_proceeds_quote:
           type: string
+        gross_profit_quote:
+          type: string
         executable_profit_quote:
           type: string
         executable_profit_bps:
+          type: string
+        fee_buy_quote:
+          type: string
+        fee_sell_quote:
+          type: string
+        buy_slippage_buffer_quote:
+          type: string
+        sell_slippage_buffer_quote:
+          type: string
+        unwind_buffer_quote:
+          type: string
+        rebalance_buffer_quote:
+          type: string
+        total_fee_quote:
+          type: string
+        total_cost_adjustment_quote:
           type: string
 
     EvaluateArbitrageReservationPlan:
@@ -2012,10 +2030,54 @@ components:
               oneOf:
                 - type: 'null'
                 - type: string
+            executable_buy_cost_quote:
+              oneOf:
+                - type: 'null'
+                - type: string
+            executable_sell_proceeds_quote:
+              oneOf:
+                - type: 'null'
+                - type: string
+            gross_profit_quote:
+              oneOf:
+                - type: 'null'
+                - type: string
             executable_profit_quote:
-              type: string
+              oneOf:
+                - type: 'null'
+                - type: string
             executable_profit_bps:
-              type: string
+              oneOf:
+                - type: 'null'
+                - type: string
+            fee_buy_quote:
+              oneOf:
+                - type: 'null'
+                - type: string
+            fee_sell_quote:
+              oneOf:
+                - type: 'null'
+                - type: string
+            buy_slippage_buffer_quote:
+              oneOf:
+                - type: 'null'
+                - type: string
+            sell_slippage_buffer_quote:
+              oneOf:
+                - type: 'null'
+                - type: string
+            unwind_buffer_quote:
+              oneOf:
+                - type: 'null'
+                - type: string
+            rebalance_buffer_quote:
+              oneOf:
+                - type: 'null'
+                - type: string
+            total_cost_adjustment_quote:
+              oneOf:
+                - type: 'null'
+                - type: string
         reservation:
           type: object
           properties:

@@ -74,17 +74,26 @@ def simulate_executable_edge(
     if gross_buy_cost <= 0:
         return None
     gross_sell_proceeds = sell_vwap * qty
+    gross_profit_quote = gross_sell_proceeds - gross_buy_cost
     fee_buy = gross_buy_cost * inputs.risk_config.taker_fee_bps_buy / Decimal("10000")
     fee_sell = gross_sell_proceeds * inputs.risk_config.taker_fee_bps_sell / Decimal("10000")
     spread_bps = ((sell_vwap - buy_vwap) / buy_vwap) * Decimal("10000")
-    slippage_buffer = gross_buy_cost * inputs.risk_config.slippage_buffer_bps / Decimal("10000")
+    buy_slippage_buffer = (
+        gross_buy_cost * inputs.risk_config.slippage_buffer_bps / Decimal("10000")
+    )
+    sell_slippage_buffer = (
+        gross_sell_proceeds * inputs.risk_config.slippage_buffer_bps / Decimal("10000")
+    )
+    total_cost_adjustment_quote = (
+        fee_buy
+        + fee_sell
+        + buy_slippage_buffer
+        + sell_slippage_buffer
+        + inputs.risk_config.unwind_buffer_quote
+        + inputs.risk_config.rebalance_buffer_quote
+    )
     executable_profit_quote = (
-        gross_sell_proceeds
-        - gross_buy_cost
-        - fee_buy
-        - fee_sell
-        - slippage_buffer
-        - inputs.risk_config.unwind_buffer_quote
+        gross_profit_quote - total_cost_adjustment_quote
     )
     executable_profit_bps = (executable_profit_quote / gross_buy_cost) * Decimal("10000")
     passed = (
@@ -95,10 +104,18 @@ def simulate_executable_edge(
     return ExecutableEdgeResult(
         executable_buy_cost_quote=gross_buy_cost,
         executable_sell_proceeds_quote=gross_sell_proceeds,
+        gross_profit_quote=gross_profit_quote,
         executable_profit_quote=executable_profit_quote,
         executable_profit_bps=executable_profit_bps,
         buy_vwap=buy_vwap,
         sell_vwap=sell_vwap,
+        fee_buy_quote=fee_buy,
+        fee_sell_quote=fee_sell,
+        buy_slippage_buffer_quote=buy_slippage_buffer,
+        sell_slippage_buffer_quote=sell_slippage_buffer,
+        unwind_buffer_quote=inputs.risk_config.unwind_buffer_quote,
+        rebalance_buffer_quote=inputs.risk_config.rebalance_buffer_quote,
         total_fee_quote=fee_buy + fee_sell,
+        total_cost_adjustment_quote=total_cost_adjustment_quote,
         passed=passed,
     )

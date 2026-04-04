@@ -41,6 +41,19 @@ def build_decision_context(
     )
     computed = {
         "target_qty": str(candidate_size.target_qty) if candidate_size is not None else None,
+        "executable_buy_cost_quote": (
+            str(executable_edge.executable_buy_cost_quote)
+            if executable_edge is not None
+            else None
+        ),
+        "executable_sell_proceeds_quote": (
+            str(executable_edge.executable_sell_proceeds_quote)
+            if executable_edge is not None
+            else None
+        ),
+        "gross_profit_quote": (
+            str(executable_edge.gross_profit_quote) if executable_edge is not None else None
+        ),
         "executable_profit_quote": (
             str(executable_edge.executable_profit_quote)
             if executable_edge is not None
@@ -48,6 +61,37 @@ def build_decision_context(
         ),
         "executable_profit_bps": (
             str(executable_edge.executable_profit_bps)
+            if executable_edge is not None
+            else None
+        ),
+        "fee_buy_quote": (
+            str(executable_edge.fee_buy_quote) if executable_edge is not None else None
+        ),
+        "fee_sell_quote": (
+            str(executable_edge.fee_sell_quote) if executable_edge is not None else None
+        ),
+        "buy_slippage_buffer_quote": (
+            str(executable_edge.buy_slippage_buffer_quote)
+            if executable_edge is not None
+            else None
+        ),
+        "sell_slippage_buffer_quote": (
+            str(executable_edge.sell_slippage_buffer_quote)
+            if executable_edge is not None
+            else None
+        ),
+        "unwind_buffer_quote": (
+            str(executable_edge.unwind_buffer_quote)
+            if executable_edge is not None
+            else None
+        ),
+        "rebalance_buffer_quote": (
+            str(executable_edge.rebalance_buffer_quote)
+            if executable_edge is not None
+            else None
+        ),
+        "total_cost_adjustment_quote": (
+            str(executable_edge.total_cost_adjustment_quote)
             if executable_edge is not None
             else None
         ),

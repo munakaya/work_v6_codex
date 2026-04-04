@@ -103,6 +103,9 @@ def load_strategy_inputs(payload: dict[str, object]) -> ArbitrageInputs:
             max_spread_bps=_parse_decimal(risk_payload["max_spread_bps"]),
             slippage_buffer_bps=_parse_decimal(risk_payload.get("slippage_buffer_bps", "0")),
             unwind_buffer_quote=_parse_decimal(risk_payload.get("unwind_buffer_quote", "0")),
+            rebalance_buffer_quote=_parse_decimal(
+                risk_payload.get("rebalance_buffer_quote", "0")
+            ),
             taker_fee_bps_buy=_parse_decimal(risk_payload.get("taker_fee_bps_buy", "0")),
             taker_fee_bps_sell=_parse_decimal(risk_payload.get("taker_fee_bps_sell", "0")),
             reentry_cooldown_seconds=int(risk_payload.get("reentry_cooldown_seconds", 0)),

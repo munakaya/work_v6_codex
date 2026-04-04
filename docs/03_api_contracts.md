@@ -370,6 +370,11 @@
 - `base_balance`
 - `hedge_balance`
 - `risk_config`
+  - `slippage_buffer_bps` optional
+  - `unwind_buffer_quote` optional
+  - `rebalance_buffer_quote` optional
+  - `taker_fee_bps_buy` optional
+  - `taker_fee_bps_sell` optional
 - `runtime_state`
 - `persist_intent` optional boolean
 - `execute` optional boolean
@@ -384,6 +389,14 @@
 - `decision_context`
 - `candidate_size`
 - `executable_edge`
+  - `gross_profit_quote`
+  - `fee_buy_quote`
+  - `fee_sell_quote`
+  - `buy_slippage_buffer_quote`
+  - `sell_slippage_buffer_quote`
+  - `unwind_buffer_quote`
+  - `rebalance_buffer_quote`
+  - `total_cost_adjustment_quote`
 - `reservation_plan`
 - `submit_failure_preview`
 - `persisted_intent` optional
@@ -490,12 +503,19 @@
 `decision_context` 최소 계약:
 
 - `decision_id`
-- `observed_at`
-- `inputs.quote_pair_id`
+- `quote_pair_id`
 - `computed.executable_profit_quote`
 - `computed.executable_profit_bps`
+- `computed.gross_profit_quote`
+- `computed.fee_buy_quote`
+- `computed.fee_sell_quote`
+- `computed.buy_slippage_buffer_quote`
+- `computed.sell_slippage_buffer_quote`
+- `computed.unwind_buffer_quote`
+- `computed.rebalance_buffer_quote`
+- `computed.total_cost_adjustment_quote`
 - `reservation.reservation_passed`
-- `decision.reason_code`
+- `reason_code`
 
 필터 예시:
 

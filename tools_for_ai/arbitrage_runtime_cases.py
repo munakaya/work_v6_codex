@@ -222,6 +222,22 @@ def _case_submit_failure_recovery() -> tuple[bool, str]:
     return transition["recovery_required"] is True, str(transition["next_state"])
 
 
+def _case_rebalance_buffer_reject() -> tuple[bool, str, str]:
+    payload = _base_payload()
+    payload["risk_config"] = {
+        **dict(payload["risk_config"]),
+        "slippage_buffer_bps": "10",
+        "rebalance_buffer_quote": "8",
+    }
+    decision = evaluate_arbitrage(load_strategy_inputs(payload))
+    computed = dict(decision.decision_context.get("computed") or {})
+    return (
+        decision.accepted is False,
+        str(decision.reason_code),
+        str(computed.get("rebalance_buffer_quote")),
+    )
+
+
 CASES = [
     ("C1", _case_accept, True, "ARBITRAGE_OPPORTUNITY_FOUND"),
     ("C2", _case_depth_negative, False, "EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH"),
@@ -258,6 +274,20 @@ def main() -> int:
     )
     if not c12_pass:
         failed += 1
+
+    c13_rejected, c13_reason, c13_rebalance = _case_rebalance_buffer_reject()
+    c13_pass = (
+        c13_rejected
+        and c13_reason == "EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH"
+        and c13_rebalance == "8"
+    )
+    print(
+        f"C13 {'PASS' if c13_pass else 'FAIL'} "
+        f"rejected={c13_rejected} reason={c13_reason} rebalance_buffer_quote={c13_rebalance}"
+    )
+    if not c13_pass:
+        failed += 1
+
     return failed
 
 

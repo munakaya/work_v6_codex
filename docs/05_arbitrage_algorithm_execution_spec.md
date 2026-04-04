@@ -93,7 +93,9 @@
 - buy VWAP
 - sell VWAP
 - total fee
-- total slippage budget
+- buy leg slippage budget
+- sell leg slippage budget
+- rebalance buffer
 - unwind buffer
 
 를 계산한다.
@@ -102,6 +104,7 @@
 
 - `executable_buy_cost_quote`
 - `executable_sell_proceeds_quote`
+- `gross_profit_quote`
 - `executable_profit_quote`
 - `executable_profit_bps`
 

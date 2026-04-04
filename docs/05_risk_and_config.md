@@ -68,6 +68,7 @@
 - `max_spread_bps`
 - `min_available_depth_quote`
 - `max_slippage_bps`
+- `rebalance_buffer_quote`
 - `max_entry_frequency_per_minute`
 
 권장 해석:
@@ -75,6 +76,7 @@
 - `min_expected_profit_bps`: 수수료와 예상 슬리피지 반영 후 최소 기대 수익률
 - `min_expected_profit_quote`: 절대 금액 기준 최소 기대 수익
 - `max_spread_bps`: 비정상 스프레드 환경 차단용 상한
+- `rebalance_buffer_quote`: 체결 후 재균형 또는 재배치 비용을 보수적으로 미리 차감하는 절대 금액 버퍼
 
 추가 원칙:
 
@@ -85,6 +87,7 @@
 
 - `min_expected_profit_bps`는 음수 금지
 - `max_slippage_bps`는 전략 허용 범위 내의 작은 값으로 제한
+- `rebalance_buffer_quote`는 음수 금지
 - `max_entry_frequency_per_minute`는 1 이상
 
 ### 49.5 주문 생성 파라미터

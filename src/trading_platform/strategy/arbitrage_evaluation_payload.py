@@ -26,8 +26,23 @@ def _executable_edge_payload(decision: ArbitrageDecision) -> dict[str, object] |
         "executable_sell_proceeds_quote": str(
             decision.executable_edge.executable_sell_proceeds_quote
         ),
+        "gross_profit_quote": str(decision.executable_edge.gross_profit_quote),
         "executable_profit_quote": str(decision.executable_edge.executable_profit_quote),
         "executable_profit_bps": str(decision.executable_edge.executable_profit_bps),
+        "fee_buy_quote": str(decision.executable_edge.fee_buy_quote),
+        "fee_sell_quote": str(decision.executable_edge.fee_sell_quote),
+        "buy_slippage_buffer_quote": str(
+            decision.executable_edge.buy_slippage_buffer_quote
+        ),
+        "sell_slippage_buffer_quote": str(
+            decision.executable_edge.sell_slippage_buffer_quote
+        ),
+        "unwind_buffer_quote": str(decision.executable_edge.unwind_buffer_quote),
+        "rebalance_buffer_quote": str(decision.executable_edge.rebalance_buffer_quote),
+        "total_fee_quote": str(decision.executable_edge.total_fee_quote),
+        "total_cost_adjustment_quote": str(
+            decision.executable_edge.total_cost_adjustment_quote
+        ),
     }
 
 
