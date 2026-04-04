@@ -2362,6 +2362,8 @@ components:
                   type: integer
                 handoff_after_seconds:
                   type: integer
+                submit_timeout_seconds:
+                  type: integer
                 running:
                   type: boolean
                 state:

@@ -275,6 +275,7 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         enabled=config.recovery_runtime_enabled,
         interval_ms=config.recovery_runtime_interval_ms,
         handoff_after_seconds=config.recovery_runtime_handoff_after_seconds,
+        submit_timeout_seconds=config.recovery_runtime_submit_timeout_seconds,
         read_store=bootstrap.store,
         redis_runtime=redis_runtime,
     )

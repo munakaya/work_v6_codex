@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 import logging
 import threading
+from uuid import uuid4
 
 from .redis_runtime import RedisRuntime
 from .storage.store_protocol import ControlPlaneStoreProtocol
@@ -45,6 +46,7 @@ class RecoveryRuntimeInfo:
     enabled: bool
     interval_ms: int
     handoff_after_seconds: int
+    submit_timeout_seconds: int
     running: bool
     state: str
     last_success_at: str | None
@@ -63,6 +65,7 @@ class RecoveryRuntimeInfo:
             "enabled": self.enabled,
             "interval_ms": self.interval_ms,
             "handoff_after_seconds": self.handoff_after_seconds,
+            "submit_timeout_seconds": self.submit_timeout_seconds,
             "running": self.running,
             "state": self.state,
             "last_success_at": self.last_success_at,
@@ -85,12 +88,14 @@ class RecoveryRuntime:
         enabled: bool,
         interval_ms: int,
         handoff_after_seconds: int,
+        submit_timeout_seconds: int = 15,
         read_store: ControlPlaneStoreProtocol,
         redis_runtime: RedisRuntime,
     ) -> None:
         self.enabled = enabled
         self.interval_ms = max(interval_ms, 250)
         self.handoff_after_seconds = max(handoff_after_seconds, 0)
+        self.submit_timeout_seconds = max(submit_timeout_seconds, 1)
         self.read_store = read_store
         self.redis_runtime = redis_runtime
         self._lock = threading.Lock()
@@ -115,6 +120,7 @@ class RecoveryRuntime:
                 enabled=self.enabled,
                 interval_ms=self.interval_ms,
                 handoff_after_seconds=self.handoff_after_seconds,
+                submit_timeout_seconds=self.submit_timeout_seconds,
                 running=self._running,
                 state=self._state_name(),
                 last_success_at=self._last_success_at,
@@ -180,6 +186,7 @@ class RecoveryRuntime:
             self._record_skip("REDIS_RUNTIME_UNAVAILABLE")
             return
         try:
+            self._open_submit_timeout_traces()
             traces = self.redis_runtime.list_recovery_traces(limit=100, status="active")
             if traces is None:
                 raise RuntimeError("failed to list active recovery traces")
@@ -199,6 +206,37 @@ class RecoveryRuntime:
                 "recovery runtime tick failed: error=%s",
                 exc,
                 extra={"event_name": "recovery_runtime_failed"},
+            )
+
+    def _open_submit_timeout_traces(self) -> None:
+        evaluations = self.redis_runtime.list_arbitrage_evaluations(limit=100)
+        if evaluations is None:
+            raise RuntimeError("failed to list arbitrage evaluations")
+        for item in evaluations:
+            lifecycle = str(item.get("lifecycle_preview") or "").strip().lower()
+            if lifecycle != "entry_submitting":
+                continue
+            run_id = str(item.get("strategy_run_id") or "").strip()
+            bot_id = str(item.get("bot_id") or "").strip()
+            if not run_id or not bot_id:
+                continue
+            existing = self.redis_runtime.get_blocking_recovery_trace(
+                bot_id=bot_id or None,
+                run_id=run_id or None,
+            )
+            if existing is not None:
+                continue
+            oldest_submitted_at = self._oldest_open_order_timestamp(bot_id=bot_id, run_id=run_id)
+            if oldest_submitted_at is None:
+                continue
+            age_seconds = max(0, int((datetime.now(UTC) - oldest_submitted_at).total_seconds()))
+            if age_seconds < self.submit_timeout_seconds:
+                continue
+            self._create_submit_timeout_trace(
+                bot_id=bot_id,
+                run_id=run_id,
+                oldest_submitted_at=oldest_submitted_at,
+                age_seconds=age_seconds,
             )
 
     def _process_trace(self, trace: dict[str, object]) -> None:
@@ -250,6 +288,83 @@ class RecoveryRuntime:
             return False
         status = str(intent.get("status") or "").strip().lower()
         return status in TERMINAL_INTENT_STATUSES
+
+    def _oldest_open_order_timestamp(self, *, bot_id: str, run_id: str) -> datetime | None:
+        orders = self.read_store.list_orders(bot_id=bot_id or None, strategy_run_id=run_id or None)
+        open_orders = [
+            item
+            for item in orders
+            if str(item.get("status") or "").strip().lower() not in TERMINAL_ORDER_STATUSES
+        ]
+        timestamps = [
+            _parse_iso_datetime(item.get("submitted_at"))
+            or _parse_iso_datetime(item.get("created_at"))
+            or _parse_iso_datetime(item.get("updated_at"))
+            for item in open_orders
+        ]
+        timestamps = [item for item in timestamps if item is not None]
+        if not timestamps:
+            return None
+        return min(timestamps)
+
+    def _create_submit_timeout_trace(
+        self,
+        *,
+        bot_id: str,
+        run_id: str,
+        oldest_submitted_at: datetime,
+        age_seconds: int,
+    ) -> None:
+        recovery_trace_id = f"rt_{uuid4().hex}"
+        now_iso = _iso_now()
+        payload = {
+            "recovery_trace_id": recovery_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": None,
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "incident_code": "ARB-201 HEDGE_TIMEOUT",
+            "reason_code": "ORDER_SUBMIT_FAILED",
+            "manual_handoff_required": False,
+            "auto_unwind_allowed": False,
+            "opened_at": now_iso,
+            "created_at": now_iso,
+            "oldest_submitted_at": oldest_submitted_at.isoformat().replace("+00:00", "Z"),
+            "submit_timeout_seconds": self.submit_timeout_seconds,
+            "submit_timeout_age_seconds": age_seconds,
+            "summary": "entry_submitting exceeded submit timeout window",
+        }
+        self.redis_runtime.sync_recovery_trace(
+            recovery_trace_id=recovery_trace_id,
+            payload=payload,
+            trace_id=None,
+        )
+        latest_trace = self.redis_runtime.get_recovery_trace(recovery_trace_id=recovery_trace_id)
+        if latest_trace is not None:
+            self.redis_runtime.sync_arbitrage_evaluation_recovery_state(
+                run_id=run_id,
+                recovery_trace=latest_trace,
+                trace_id=None,
+            )
+        self.redis_runtime.append_event(
+            "strategy_events",
+            event_type="strategy.recovery_trace.submit_timeout_opened",
+            payload={
+                "recovery_trace_id": recovery_trace_id,
+                "run_id": run_id,
+                "bot_id": bot_id,
+                "incident_code": "ARB-201 HEDGE_TIMEOUT",
+                "submit_timeout_age_seconds": age_seconds,
+            },
+        )
+        if self.read_store.supports_mutation:
+            self.read_store.emit_alert(
+                bot_id=bot_id,
+                level="error",
+                code="ARBITRAGE_SUBMIT_TIMEOUT",
+                message="entry_submitting exceeded submit timeout window",
+            )
 
     def _trace_age_seconds(self, trace: dict[str, object]) -> int | None:
         now = datetime.now(UTC)

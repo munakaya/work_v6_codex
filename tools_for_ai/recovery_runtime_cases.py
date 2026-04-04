@@ -33,6 +33,7 @@ def main() -> None:
         enabled=True,
         interval_ms=1000,
         handoff_after_seconds=1,
+        submit_timeout_seconds=1,
         read_store=store,
         redis_runtime=redis_runtime,
     )
@@ -172,8 +173,84 @@ def main() -> None:
         "terminal intent resolution reason mismatch",
     )
 
+    stale_eval_run_id = "run_submit_timeout_case"
+    stale_eval_bot_id = bot_id
+    store.strategy_runs[stale_eval_run_id] = {
+        "run_id": stale_eval_run_id,
+        "bot_id": stale_eval_bot_id,
+        "strategy_name": "arbitrage",
+        "mode": "shadow",
+        "status": "running",
+        "created_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "started_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "stopped_at": None,
+        "decision_count": 1,
+    }
+    stale_outcome, stale_intent = store.create_order_intent(
+        strategy_run_id=stale_eval_run_id,
+        market="KRW-BTC",
+        buy_exchange="sample",
+        sell_exchange="upbit",
+        side_pair="buy_then_sell",
+        target_qty="0.25",
+        expected_profit="500",
+        expected_profit_ratio="0.01",
+        status="submitted",
+        decision_context={"source": "submit_timeout_case"},
+    )
+    _assert(stale_outcome == "created" and stale_intent is not None, "stale intent create failed")
+    order_outcome, stale_order = store.create_order(
+        order_intent_id=str(stale_intent["intent_id"]),
+        exchange_name="sample",
+        exchange_order_id="submit-timeout-buy-1",
+        market="KRW-BTC",
+        side="buy",
+        requested_price="100000",
+        requested_qty="0.25",
+        status="submitted",
+        raw_payload={"source": "submit_timeout_case"},
+    )
+    _assert(order_outcome == "created" and stale_order is not None, "stale order create failed")
+    stale_order["submitted_at"] = _iso(datetime.now(UTC) - timedelta(seconds=5))
+    stale_order["created_at"] = stale_order["submitted_at"]
+    stale_order["updated_at"] = stale_order["submitted_at"]
+    redis_runtime.sync_arbitrage_evaluation(
+        run_id=stale_eval_run_id,
+        payload={
+            "bot_id": stale_eval_bot_id,
+            "strategy_run_id": stale_eval_run_id,
+            "accepted": True,
+            "reason_code": "ARBITRAGE_OPPORTUNITY_FOUND",
+            "lifecycle_preview": "entry_submitting",
+        },
+        publish_event=False,
+    )
+    runtime.run_once()
+    timeout_traces = redis_runtime.list_recovery_traces(
+        limit=10,
+        run_id=stale_eval_run_id,
+        status="active",
+    )
+    _assert(timeout_traces is not None and timeout_traces, "submit timeout trace missing")
+    timeout_trace = timeout_traces[0]
+    _assert(
+        timeout_trace.get("incident_code") == "ARB-201 HEDGE_TIMEOUT",
+        "submit timeout incident mismatch",
+    )
+    _assert(
+        timeout_trace.get("submit_timeout_seconds") == 1,
+        "submit timeout threshold mismatch",
+    )
+    latest_eval = redis_runtime.get_arbitrage_evaluation(run_id=stale_eval_run_id)
+    _assert(latest_eval is not None, "submit timeout latest evaluation missing")
+    _assert(
+        latest_eval.get("lifecycle_preview") == "recovery_required",
+        "submit timeout latest evaluation lifecycle mismatch",
+    )
+
     print("PASS recovery runtime resolves zero-exposure traces")
     print("PASS recovery runtime resolves terminal intents without active orders")
+    print("PASS recovery runtime opens submit-timeout recovery traces")
     print("PASS recovery runtime escalates aged traces to manual handoff")
 
 
