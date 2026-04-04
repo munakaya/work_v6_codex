@@ -254,6 +254,7 @@ def _refresh_orders(
 
 def _validate_required_arbitrage_legs(
     *,
+    created_orders: tuple[dict[str, object], ...],
     order_index: dict[tuple[str, str], dict[str, object]],
     intent: dict[str, object],
 ) -> str | None:
@@ -273,6 +274,18 @@ def _validate_required_arbitrage_legs(
             "private execution response missing required arbitrage order legs: "
             + ", ".join(missing_legs)
         )
+    unexpected_legs = [
+        f"{side}:{exchange_name}"
+        for side, exchange_name in sorted(order_index)
+        if (side, exchange_name) not in expected_legs
+    ]
+    if unexpected_legs:
+        return (
+            "private execution response returned unexpected arbitrage order legs: "
+            + ", ".join(unexpected_legs)
+        )
+    if len(created_orders) != len(expected_legs):
+        return "private execution response returned unexpected arbitrage order count"
     return None
 
 
@@ -464,6 +477,7 @@ class PrivateHttpArbitrageExecutionAdapter:
                 created_orders=created_orders,
             )
         leg_error = _validate_required_arbitrage_legs(
+            created_orders=created_orders,
             order_index=order_index,
             intent=intent,
         )
