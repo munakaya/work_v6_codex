@@ -43,9 +43,12 @@ def _parse_decimal(value: object) -> Decimal | None:
     if value is None:
         return None
     try:
-        return Decimal(str(value))
+        parsed = Decimal(str(value))
     except (InvalidOperation, ValueError):
         return None
+    if not parsed.is_finite():
+        return None
+    return parsed
 
 
 def _parse_int(value: object) -> int | None:

@@ -322,6 +322,39 @@ def main() -> None:
         "invalid numeric fields handoff reason mismatch",
     )
 
+    invalid_nan_fields_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=invalid_nan_fields_trace_id,
+        payload={
+            "recovery_trace_id": invalid_nan_fields_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "NaN",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+        },
+    )
+    runtime.run_once()
+    invalid_nan_fields_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=invalid_nan_fields_trace_id
+    )
+    _assert(invalid_nan_fields_trace is not None, "invalid NaN fields trace missing")
+    _assert(
+        invalid_nan_fields_trace.get("status") == "handoff_required",
+        "NaN reconciliation residual should trigger manual handoff",
+    )
+    _assert(
+        invalid_nan_fields_trace.get("handoff_reason") == "reconciliation_result_invalid",
+        "NaN reconciliation residual handoff reason mismatch",
+    )
+
     stale_reconciliation_trace_id = f"rt_{uuid4().hex}"
     redis_runtime.sync_recovery_trace(
         recovery_trace_id=stale_reconciliation_trace_id,
@@ -749,6 +782,52 @@ def main() -> None:
         duplicate_balance_trace.get("handoff_reason")
         == "reconciliation_evidence_invalid",
         "duplicate balance handoff reason mismatch",
+    )
+
+    invalid_balance_numeric_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=invalid_balance_numeric_trace_id,
+        payload={
+            "recovery_trace_id": invalid_balance_numeric_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": str(intent_balance["intent_id"]),
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_fill_ids": ["fill-balance-nan-1"],
+            "reconciliation_observed_balances": [
+                {
+                    "exchange_name": "upbit",
+                    "asset": "KRW",
+                    "free": "1000000",
+                    "locked": "Infinity",
+                }
+            ],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+        },
+    )
+    runtime.run_once()
+    invalid_balance_numeric_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=invalid_balance_numeric_trace_id
+    )
+    _assert(
+        invalid_balance_numeric_trace is not None,
+        "invalid balance numeric trace missing",
+    )
+    _assert(
+        invalid_balance_numeric_trace.get("status") == "handoff_required",
+        "non-finite balance evidence should trigger manual handoff",
+    )
+    _assert(
+        invalid_balance_numeric_trace.get("handoff_reason")
+        == "reconciliation_evidence_invalid",
+        "non-finite balance evidence handoff reason mismatch",
     )
 
     malformed_market_outcome, malformed_market_intent = store.create_order_intent(
