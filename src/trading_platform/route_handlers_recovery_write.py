@@ -6,6 +6,7 @@ from http import HTTPStatus
 from .request_utils import (
     is_nonnegative_number_text,
     is_positive_number_text,
+    json_datetime_text,
     json_number_text,
     optional_object,
     optional_bool,
@@ -34,6 +35,7 @@ class ControlPlaneRecoveryWriteRouteMixin:
             "/handoff": self._handoff_recovery_trace_response,
             "/start-unwind": self._start_unwind_recovery_trace_response,
             "/submit-unwind-order": self._submit_unwind_order_response,
+            "/record-unwind-fill": self._record_unwind_fill_response,
         }
         for suffix, handler in suffixes.items():
             if not path.endswith(suffix):
@@ -615,4 +617,208 @@ class ControlPlaneRecoveryWriteRouteMixin:
         )
         data = dict(trace)
         data["created_unwind_order"] = order
+        return HTTPStatus.CREATED, self._response(data=data)
+
+    def _record_unwind_fill_response(
+        self, recovery_trace_id: str
+    ) -> tuple[HTTPStatus, dict[str, object]]:
+        unsupported = self._ensure_mutation_supported()
+        if unsupported is not None:
+            return unsupported
+        if not self.server.redis_runtime.info.enabled:
+            return (
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                self._response(
+                    error={
+                        "code": "REDIS_RUNTIME_UNAVAILABLE",
+                        "message": "redis runtime is not enabled",
+                    }
+                ),
+            )
+        body, error = self._read_json_body()
+        if error is not None:
+            return error
+        current = self.server.redis_runtime.get_recovery_trace(
+            recovery_trace_id=recovery_trace_id
+        )
+        if current is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_NOT_FOUND",
+                        "message": "recovery_trace_id not found",
+                    }
+                ),
+            )
+        current_status = str(current.get("status") or "").strip().lower()
+        if current_status in {"resolved", "cancelled"}:
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_TERMINAL",
+                        "message": "recovery trace is already terminal",
+                    }
+                ),
+            )
+        linked_order_id = optional_string(current.get("linked_unwind_order_id"))
+        if not linked_order_id:
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_UNWIND_ORDER_MISSING",
+                        "message": "recovery trace does not have a linked unwind order",
+                    }
+                ),
+            )
+
+        required_fields = {
+            "exchange_trade_id": json_string(body.get("exchange_trade_id")),
+            "fill_price": json_number_text(body.get("fill_price")),
+            "fill_qty": json_number_text(body.get("fill_qty")),
+            "filled_at": json_datetime_text(body.get("filled_at")),
+        }
+        invalid_fields = [
+            key for key, value in required_fields.items() if key in body and value is None
+        ]
+        fee_asset = json_string(body.get("fee_asset"))
+        if "fee_asset" in body and fee_asset is None:
+            invalid_fields.append("fee_asset")
+        fee_amount = json_number_text(body.get("fee_amount"))
+        if "fee_amount" in body and fee_amount is None:
+            invalid_fields.append("fee_amount")
+        if invalid_fields:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "invalid fields: " + ", ".join(sorted(set(invalid_fields))),
+                    }
+                ),
+            )
+        missing = [key for key, value in required_fields.items() if not value]
+        if missing:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": f"missing required fields: {', '.join(missing)}",
+                    }
+                ),
+            )
+        if not is_positive_number_text(required_fields["fill_price"]):
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "fill_price must be a positive number",
+                    }
+                ),
+            )
+        if not is_positive_number_text(required_fields["fill_qty"]):
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "fill_qty must be a positive number",
+                    }
+                ),
+            )
+        if fee_amount is not None and not is_nonnegative_number_text(fee_amount):
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "fee_amount must be a non-negative number",
+                    }
+                ),
+            )
+
+        outcome, fill = self.server.read_store.create_fill(
+            order_id=linked_order_id,
+            exchange_trade_id=required_fields["exchange_trade_id"],
+            fill_price=required_fields["fill_price"],
+            fill_qty=required_fields["fill_qty"],
+            fee_asset=fee_asset,
+            fee_amount=fee_amount,
+            filled_at=required_fields["filled_at"],
+        )
+        if outcome == "not_found":
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "ORDER_NOT_FOUND",
+                        "message": "linked unwind order not found",
+                    }
+                ),
+            )
+        if outcome == "conflict":
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "FILL_CONFLICT",
+                        "message": "exchange_trade_id already exists for order",
+                    }
+                ),
+            )
+        if outcome == "invalid":
+            return (
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                self._response(
+                    error={
+                        "code": "FILL_VALIDATION_FAILED",
+                        "message": (
+                            "fill exceeds requested quantity or order is already terminal"
+                        ),
+                    }
+                ),
+            )
+
+        self._publish_order_event(
+            "fill.created",
+            {
+                "fill_id": fill.get("fill_id"),
+                "order_id": fill.get("order_id"),
+                "order_intent_id": fill.get("order_intent_id"),
+                "bot_id": fill.get("bot_id"),
+                "exchange_name": fill.get("exchange_name"),
+                "order_status": fill.get("order_status"),
+            },
+        )
+        self.server.redis_runtime.transition_recovery_trace(
+            recovery_trace_id=recovery_trace_id,
+            status="active",
+            lifecycle_state="unwind_in_progress",
+            trace_id=self.headers.get("X-Trace-Id"),
+            patch={
+                "manual_handoff_required": False,
+                "last_unwind_fill_id": fill.get("fill_id"),
+                "last_unwind_fill_at": fill.get("filled_at"),
+            },
+            event_type="strategy.recovery_trace.unwind_fill_recorded",
+        )
+        if self.server.recovery_runtime.enabled:
+            self.server.recovery_runtime.run_once()
+        latest_trace = self.server.redis_runtime.get_recovery_trace(
+            recovery_trace_id=recovery_trace_id
+        )
+        run_id = optional_string(current.get("run_id"))
+        evaluation_payload = None
+        if run_id:
+            evaluation_payload = self.server.redis_runtime.get_arbitrage_evaluation(
+                run_id=run_id
+            )
+        data = dict(latest_trace) if latest_trace is not None else dict(current)
+        data["created_unwind_fill"] = fill
+        if evaluation_payload is not None:
+            data["latest_evaluation"] = evaluation_payload
         return HTTPStatus.CREATED, self._response(data=data)

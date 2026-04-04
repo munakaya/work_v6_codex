@@ -166,6 +166,29 @@
 - `linked_unwind_order_id`
 - `created_unwind_order`
 
+#### `POST /api/v1/recovery-traces/{recovery_trace_id}/record-unwind-fill`
+
+목적:
+
+- operator가 linked unwind order에 실제 unwind fill을 기록
+- recovery runtime이 즉시 돌면 `resolved / closed`까지 바로 반영될 수 있음
+
+요청 핵심 필드:
+
+- `exchange_trade_id`
+- `fill_price`
+- `fill_qty`
+- `filled_at`
+- `fee_asset` (선택)
+- `fee_amount` (선택, 주면 0 이상 숫자여야 함)
+
+응답 핵심 필드:
+
+- `created_unwind_fill`
+- `status`
+- `lifecycle_state`
+- `latest_evaluation`
+
 #### `POST /api/v1/bots/register`
 
 목적:

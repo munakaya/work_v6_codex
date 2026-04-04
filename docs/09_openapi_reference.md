@@ -274,6 +274,46 @@ paths:
         '503':
           description: Redis runtime unavailable
 
+  /api/v1/recovery-traces/{recovery_trace_id}/record-unwind-fill:
+    post:
+      tags: [Recovery]
+      summary: Record unwind fill for linked recovery unwind order
+      operationId: recordRecoveryTraceUnwindFill
+      parameters:
+        - in: path
+          name: recovery_trace_id
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: X-Trace-Id
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryTraceUnwindFillRequest'
+      responses:
+        '201':
+          description: Unwind fill created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryTraceResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Recovery trace or linked unwind order not found
+        '409':
+          description: Recovery trace already terminal or duplicate fill
+        '422':
+          description: Linked unwind order fill validation failed
+        '503':
+          description: Redis runtime unavailable
+
   /api/v1/market-data/orderbook-top:
     get:
       tags: [MarketData]
@@ -2609,6 +2649,15 @@ components:
               oneOf:
                 - type: 'null'
                 - $ref: '#/components/schemas/OrderDetail'
+            created_unwind_fill:
+              oneOf:
+                - type: 'null'
+                - $ref: '#/components/schemas/FillSummary'
+            latest_evaluation:
+              oneOf:
+                - type: 'null'
+                - type: object
+                  additionalProperties: true
         error:
           oneOf:
             - type: 'null'
@@ -2680,6 +2729,23 @@ components:
           type: string
         raw_payload:
           type: object
+
+    RecoveryTraceUnwindFillRequest:
+      type: object
+      properties:
+        exchange_trade_id:
+          type: string
+        fill_price:
+          type: string
+        fill_qty:
+          type: string
+        fee_asset:
+          type: string
+        fee_amount:
+          type: string
+        filled_at:
+          type: string
+          format: date-time
 
     MarketOrderbookTopResponse:
       type: object
