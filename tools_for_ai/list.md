@@ -1,2 +1,3 @@
 - db_inspect.py: PostgreSQL/Redis 설정과 코드 기준 스키마를 읽기 전용으로 요약해 `.tmp/db_report/`에 저장
 - db_bootstrap_local.py: 로컬 PostgreSQL 개발 DB를 생성하고 migrations와 sample seed를 적용해 `postgres_readonly` 검증용 상태를 만든다
+- arbitrage_runtime_cases.py: 재정거래 전략 런타임의 핵심 accept/reject 케이스(C1~C9)를 코드로 검증한다

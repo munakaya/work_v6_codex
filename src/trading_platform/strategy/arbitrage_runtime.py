@@ -12,6 +12,18 @@ from .arbitrage_reservation import reserve_capacity
 from ..storage.store_protocol import ControlPlaneStoreProtocol
 
 
+def _is_risk_cap_blocked(inputs: ArbitrageInputs, notional: object) -> bool:
+    cost = notional
+    if cost > inputs.risk_config.max_notional_per_order:
+        return True
+    if cost > inputs.risk_config.max_total_notional_per_bot:
+        return True
+    remaining_bot_notional = inputs.runtime_state.remaining_bot_notional
+    if remaining_bot_notional is not None and cost > remaining_bot_notional:
+        return True
+    return False
+
+
 def evaluate_arbitrage(inputs: ArbitrageInputs) -> ArbitrageDecision:
     gate_checks, gate_reason = validate_gate_conditions(inputs)
     gate_tuple = tuple(gate_checks)
@@ -60,6 +72,16 @@ def evaluate_arbitrage(inputs: ArbitrageInputs) -> ArbitrageDecision:
         return build_reject_decision(
             inputs=inputs,
             reason_code="EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH",
+            gate_checks=gate_tuple,
+            candidate_size=candidate_size,
+            executable_edge=executable_edge,
+            reservation_plan=None,
+        )
+
+    if _is_risk_cap_blocked(inputs, executable_edge.executable_buy_cost_quote):
+        return build_reject_decision(
+            inputs=inputs,
+            reason_code="RISK_LIMIT_BLOCKED",
             gate_checks=gate_tuple,
             candidate_size=candidate_size,
             executable_edge=executable_edge,

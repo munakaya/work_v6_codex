@@ -27,7 +27,6 @@ def _vwap(levels: tuple[object, ...], target_qty: Decimal) -> Decimal | None:
 
 
 def compute_candidate_size(inputs: ArbitrageInputs) -> CandidateSizeResult:
-    config = inputs.risk_config
     if not inputs.base_orderbook.asks or not inputs.hedge_orderbook.bids:
         return CandidateSizeResult(
             target_qty=Decimal("0"),
@@ -39,31 +38,19 @@ def compute_candidate_size(inputs: ArbitrageInputs) -> CandidateSizeResult:
             target_qty=Decimal("0"),
             components={"error": "non_positive_best_ask"},
         )
-    buy_quote_limit_qty = inputs.base_balance.available_quote / best_buy_ask
-    sell_base_limit_qty = inputs.hedge_balance.available_base
     buy_depth_qty = _sum_depth_qty(inputs.base_orderbook.asks)
     sell_depth_qty = _sum_depth_qty(inputs.hedge_orderbook.bids)
-    order_notional_qty = config.max_notional_per_order / best_buy_ask
 
     components = {
-        "buy_quote_limit_qty": str(buy_quote_limit_qty),
-        "sell_base_limit_qty": str(sell_base_limit_qty),
         "buy_depth_qty": str(buy_depth_qty),
         "sell_depth_qty": str(sell_depth_qty),
-        "max_notional_qty": str(order_notional_qty),
+        "buy_quote_available": str(inputs.base_balance.available_quote),
+        "sell_base_available": str(inputs.hedge_balance.available_base),
     }
     qty_candidates = [
-        buy_quote_limit_qty,
-        sell_base_limit_qty,
         buy_depth_qty,
         sell_depth_qty,
-        order_notional_qty,
     ]
-    if inputs.runtime_state.remaining_bot_notional is not None:
-        remaining_bot_qty = inputs.runtime_state.remaining_bot_notional / best_buy_ask
-        components["remaining_bot_notional_qty"] = str(remaining_bot_qty)
-        qty_candidates.append(remaining_bot_qty)
-
     target_qty = min(qty_candidates)
     return CandidateSizeResult(target_qty=target_qty, components=components)
 

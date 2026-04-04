@@ -24,13 +24,6 @@ def reserve_capacity(
         failures.append("buy_quote_insufficient")
     if base_required > inputs.hedge_balance.available_base:
         failures.append("sell_base_insufficient")
-    if reserved_notional > inputs.risk_config.max_notional_per_order:
-        failures.append("max_notional_per_order_exceeded")
-    remaining_bot_notional = inputs.runtime_state.remaining_bot_notional
-    if remaining_bot_notional is not None and reserved_notional > remaining_bot_notional:
-        failures.append("remaining_bot_notional_exceeded")
-    if reserved_notional > inputs.risk_config.max_total_notional_per_bot:
-        failures.append("max_total_notional_per_bot_exceeded")
 
     return ReservationPlan(
         reservation_passed=not failures,
