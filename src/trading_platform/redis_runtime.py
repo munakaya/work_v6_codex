@@ -210,8 +210,59 @@ class RedisRuntime:
     ) -> dict[str, Any] | None:
         return self.get_json(["market", "orderbook_top", exchange, market])
 
+    def list_stream_events(
+        self, *, stream_name: str, limit: int = 20
+    ) -> list[dict[str, Any]] | None:
+        raw = self._run_command_output(
+            [
+                "--json",
+                "XREVRANGE",
+                self._key("stream", stream_name),
+                "+",
+                "-",
+                "COUNT",
+                str(limit),
+            ]
+        )
+        if raw is None:
+            return None
+        stripped = raw.strip()
+        if not stripped:
+            return []
+        try:
+            entries = json.loads(stripped)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(entries, list):
+            return None
+        events: list[dict[str, Any]] = []
+        for entry in entries:
+            parsed = self._parse_stream_entry(entry)
+            if parsed is not None:
+                events.append(parsed)
+        return events
+
     def _key(self, *parts: str) -> str:
         return ":".join([self.key_prefix, *parts])
+
+    def _parse_stream_entry(self, entry: object) -> dict[str, Any] | None:
+        if not isinstance(entry, list) or len(entry) != 2:
+            return None
+        stream_id, values = entry
+        if not isinstance(stream_id, str):
+            return None
+        if not isinstance(values, list) or len(values) < 2:
+            return None
+        payload_text = values[1]
+        if not isinstance(payload_text, str):
+            return None
+        try:
+            payload = json.loads(payload_text)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        return {"stream_id": stream_id, **payload}
 
     def _run_command(self, command: list[str]) -> bool:
         return self._run_command_output(command) is not None

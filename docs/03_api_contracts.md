@@ -338,6 +338,7 @@
 
 - `GET /api/v1/market-data/orderbook-top`
 - `GET /api/v1/market-data/orderbook-top/cached`
+- `GET /api/v1/market-data/events`
 
 #### Bots
 
@@ -482,6 +483,44 @@
     "exchange_age_ms": 0,
     "stale": false,
     "source_type": "sample"
+  },
+  "error": null
+}
+```
+
+#### `GET /api/v1/market-data/events`
+
+쿼리:
+
+- `limit`: 기본 20, 최대 100
+- `exchange`: 선택
+- `market`: 선택
+
+응답:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "stream_id": "1775266477835-0",
+        "event_id": "evt_xxx",
+        "event_type": "market.orderbook_top.updated",
+        "event_version": 1,
+        "occurred_at": "2026-04-04T01:34:37.833672Z",
+        "producer": "control-plane",
+        "trace_id": null,
+        "payload": {
+          "exchange": "sample",
+          "market": "KRW-BTC",
+          "stale": false,
+          "source_type": "sample",
+          "exchange_age_ms": 0
+        }
+      }
+    ],
+    "count": 1
   },
   "error": null
 }

@@ -126,6 +126,36 @@ paths:
         '503':
           description: Redis runtime unavailable
 
+  /api/v1/market-data/events:
+    get:
+      tags: [MarketData]
+      summary: List cached market events
+      operationId: listMarketEvents
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: exchange
+          schema:
+            type: string
+        - in: query
+          name: market
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recent market events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketEventListResponse'
+        '502':
+          description: Redis stream read failed
+        '503':
+          description: Redis runtime unavailable
+
   /api/v1/bots/register:
     post:
       tags: [Bots]
@@ -1424,6 +1454,56 @@ components:
               type: boolean
             source_type:
               type: string
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    MarketEventListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  stream_id:
+                    type: string
+                  event_id:
+                    type: string
+                  event_type:
+                    type: string
+                  event_version:
+                    type: integer
+                  occurred_at:
+                    type: string
+                    format: date-time
+                  producer:
+                    type: string
+                  trace_id:
+                    oneOf:
+                      - type: 'null'
+                      - type: string
+                  payload:
+                    type: object
+                    properties:
+                      exchange:
+                        type: string
+                      market:
+                        type: string
+                      stale:
+                        type: boolean
+                      source_type:
+                        type: string
+                      exchange_age_ms:
+                        type: integer
+            count:
+              type: integer
         error:
           oneOf:
             - type: 'null'
