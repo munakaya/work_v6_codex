@@ -84,6 +84,22 @@ def _observed_order_statuses(value: object) -> list[dict[str, str]] | None:
     return statuses
 
 
+def _observed_string_ids(value: object) -> list[str] | None:
+    if value is None or not isinstance(value, list):
+        return None
+    items: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            return None
+        normalized = item.strip()
+        if not normalized or normalized in seen:
+            return None
+        seen.add(normalized)
+        items.append(normalized)
+    return items
+
+
 def _observed_balances(value: object) -> list[dict[str, object]] | None:
     if value is None or not isinstance(value, list):
         return None
@@ -787,9 +803,7 @@ class RecoveryRuntime:
             or reconciliation_residual != Decimal("0")
         ):
             return None
-        has_fill_ids = isinstance(trace.get("reconciliation_observed_fill_ids"), list) and bool(
-            trace.get("reconciliation_observed_fill_ids")
-        )
+        has_fill_ids = bool(_observed_string_ids(trace.get("reconciliation_observed_fill_ids")))
         has_order_statuses = bool(
             _observed_order_statuses(trace.get("reconciliation_observed_order_statuses"))
         )

@@ -1202,6 +1202,42 @@ def main() -> None:
         "order-ids-only handoff reason mismatch",
     )
 
+    duplicate_fill_ids_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=duplicate_fill_ids_trace_id,
+        payload={
+            "recovery_trace_id": duplicate_fill_ids_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": str(reconciliation_intent["intent_id"]),
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_fill_ids": ["fill-dup-1", "fill-dup-1"],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+        trace_id=None,
+    )
+    runtime.run_once()
+    duplicate_fill_ids_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=duplicate_fill_ids_trace_id
+    )
+    _assert(duplicate_fill_ids_trace is not None, "duplicate fill ids trace missing")
+    _assert(
+        duplicate_fill_ids_trace.get("status") == "handoff_required",
+        "duplicate fill ids should not count as reconciliation evidence",
+    )
+    _assert(
+        duplicate_fill_ids_trace.get("handoff_reason")
+        == "reconciliation_evidence_missing",
+        "duplicate fill ids handoff reason mismatch",
+    )
+
     fill_ids_with_intent_trace_id = f"rt_{uuid4().hex}"
     redis_runtime.sync_recovery_trace(
         recovery_trace_id=fill_ids_with_intent_trace_id,
