@@ -213,6 +213,10 @@ paths:
           schema:
             type: integer
         - in: query
+          name: before_stream_id
+          schema:
+            type: string
+        - in: query
           name: exchange
           schema:
             type: string
@@ -250,6 +254,10 @@ paths:
           name: limit
           schema:
             type: integer
+        - in: query
+          name: before_stream_id
+          schema:
+            type: string
         - in: query
           name: event_type
           schema:
@@ -522,6 +530,10 @@ paths:
           schema:
             type: integer
         - in: query
+          name: before_stream_id
+          schema:
+            type: string
+        - in: query
           name: event_type
           schema:
             type: string
@@ -669,6 +681,10 @@ paths:
           schema:
             type: integer
         - in: query
+          name: before_stream_id
+          schema:
+            type: string
+        - in: query
           name: event_type
           schema:
             type: string
@@ -802,6 +818,10 @@ paths:
           name: limit
           schema:
             type: integer
+        - in: query
+          name: before_stream_id
+          schema:
+            type: string
         - in: query
           name: event_type
           schema:

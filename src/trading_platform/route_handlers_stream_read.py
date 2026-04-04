@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from http import HTTPStatus
+import re
 from urllib.parse import parse_qs
 
 from .request_utils import query_limit, single_query_value
@@ -9,6 +10,7 @@ from .request_utils import query_limit, single_query_value
 
 EventValueExtractor = Callable[[dict[str, object]], object]
 EventValueNormalizer = Callable[[str], str]
+STREAM_ID_PATTERN = re.compile(r"^\d+-\d+$")
 
 
 class ControlPlaneStreamReadRouteMixin:
@@ -139,9 +141,21 @@ class ControlPlaneStreamReadRouteMixin:
                     }
                 ),
             )
+        before_stream_id = (single_query_value(params, "before_stream_id") or "").strip()
+        if before_stream_id and not STREAM_ID_PATTERN.fullmatch(before_stream_id):
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "before_stream_id must be a Redis stream id",
+                    }
+                ),
+            )
         events = self.server.redis_runtime.list_stream_events(
             stream_name=stream_name,
             limit=query_limit(params),
+            before_stream_id=before_stream_id or None,
         )
         if events is None:
             return (

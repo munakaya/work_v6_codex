@@ -544,6 +544,7 @@
 쿼리:
 
 - `limit`: 기본 20, 최대 100
+- `before_stream_id`: 선택. 주면 그 stream id보다 오래된 이벤트부터 조회
 - `event_type`: 선택
 - `trace_id`: 선택
 - `exchange`: 선택
@@ -584,6 +585,7 @@
 쿼리:
 
 - `limit`: 기본 20, 최대 100
+- `before_stream_id`: 선택
 - `event_type`: 선택
 - `trace_id`: 선택
 - `bot_id`: 선택
@@ -594,6 +596,7 @@
 쿼리:
 
 - `limit`: 기본 20, 최대 100
+- `before_stream_id`: 선택
 - `event_type`: 선택
 - `trace_id`: 선택
 - `bot_id`: 선택
@@ -605,6 +608,7 @@
 쿼리:
 
 - `limit`: 기본 20, 최대 100
+- `before_stream_id`: 선택
 - `event_type`: 선택
 - `trace_id`: 선택
 - `bot_id`: 선택
@@ -617,6 +621,7 @@
 쿼리:
 
 - `limit`: 기본 20, 최대 100
+- `before_stream_id`: 선택
 - `event_type`: 선택
 - `trace_id`: 선택
 - `bot_id`: 선택

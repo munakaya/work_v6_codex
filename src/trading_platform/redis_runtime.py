@@ -243,14 +243,21 @@ class RedisRuntime:
         return snapshots[: max(1, min(limit, 100))]
 
     def list_stream_events(
-        self, *, stream_name: str, limit: int = 20
+        self,
+        *,
+        stream_name: str,
+        limit: int = 20,
+        before_stream_id: str | None = None,
     ) -> list[dict[str, Any]] | None:
+        upper_bound = "+"
+        if before_stream_id:
+            upper_bound = f"({before_stream_id.strip()}"
         raw = self._run_command_output(
             [
                 "--json",
                 "XREVRANGE",
                 self._key("stream", stream_name),
-                "+",
+                upper_bound,
                 "-",
                 "COUNT",
                 str(limit),
