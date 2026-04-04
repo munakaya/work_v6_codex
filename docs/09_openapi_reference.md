@@ -1160,8 +1160,7 @@ components:
         status:
           $ref: '#/components/schemas/OrderIntentStatus'
         decision_context:
-          type: object
-          additionalProperties: true
+          $ref: '#/components/schemas/StrategyDecisionContext'
 
     CreateOrderRequest:
       type: object
@@ -1317,8 +1316,51 @@ components:
           type: string
           format: date-time
         decision_context:
+          $ref: '#/components/schemas/StrategyDecisionContext'
+
+    StrategyDecisionContext:
+      type: object
+      properties:
+        decision_id:
+          type: string
+          format: uuid
+        observed_at:
+          type: string
+          format: date-time
+        inputs:
           type: object
-          additionalProperties: true
+          properties:
+            quote_pair_id:
+              type: string
+            orderbook_age_ms:
+              type: object
+              additionalProperties:
+                type: integer
+            clock_skew_ms:
+              type: integer
+        gate_checks:
+          type: object
+          additionalProperties:
+            type: boolean
+        computed:
+          type: object
+          properties:
+            executable_profit_quote:
+              type: string
+            executable_profit_bps:
+              type: string
+            unwind_buffer_quote:
+              type: string
+        reservation:
+          type: object
+          properties:
+            reservation_passed:
+              type: boolean
+        decision:
+          type: object
+          properties:
+            reason_code:
+              type: string
 
     OrderIntentListResponse:
       type: object

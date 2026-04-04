@@ -148,6 +148,20 @@ create table order_intents (
     created_at timestamptz not null default now()
 );
 
+`order_intents.decision_context` 권장 최소 구조:
+
+- `decision_id`
+- `observed_at`
+- `inputs.quote_pair_id`
+- `inputs.orderbook_age_ms`
+- `inputs.clock_skew_ms`
+- `gate_checks.*`
+- `computed.executable_profit_quote`
+- `computed.executable_profit_bps`
+- `computed.unwind_buffer_quote`
+- `reservation.reservation_passed`
+- `decision.reason_code`
+
 create table orders (
     id uuid primary key,
     order_intent_id uuid references order_intents(id),

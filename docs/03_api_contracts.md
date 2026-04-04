@@ -202,6 +202,16 @@
 
 - dry-run, shadow, live 전반의 의사결정 기록 조회
 
+`decision_context` 최소 계약:
+
+- `decision_id`
+- `observed_at`
+- `inputs.quote_pair_id`
+- `computed.executable_profit_quote`
+- `computed.executable_profit_bps`
+- `reservation.reservation_passed`
+- `decision.reason_code`
+
 필터 예시:
 
 - `bot_id`
@@ -308,6 +318,17 @@
   "sell_exchange": "bithumb",
   "target_qty": "120.5",
   "expected_profit": "14320.11",
+  "decision_context": {
+    "decision_id": "uuid",
+    "observed_at": "2026-04-03T14:13:00Z",
+    "computed": {
+      "executable_profit_quote": "1432.01",
+      "executable_profit_bps": "11.67"
+    },
+    "decision": {
+      "reason_code": "ARBITRAGE_OPPORTUNITY_FOUND"
+    }
+  },
   "status": "created",
   "created_at": "2026-04-03T14:13:00Z"
 }

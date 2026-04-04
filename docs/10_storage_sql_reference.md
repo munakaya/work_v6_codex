@@ -154,6 +154,29 @@ create table order_intents (
     created_at timestamptz not null default now()
 );
 
+-- decision_context jsonb minimum contract (documented convention)
+-- {
+--   "decision_id": "uuid",
+--   "observed_at": "timestamptz",
+--   "inputs": {
+--     "quote_pair_id": "string",
+--     "orderbook_age_ms": {"exchange": 120},
+--     "clock_skew_ms": 60
+--   },
+--   "gate_checks": {...},
+--   "computed": {
+--     "executable_profit_quote": "123.45",
+--     "executable_profit_bps": "8.12",
+--     "unwind_buffer_quote": "10.00"
+--   },
+--   "reservation": {
+--     "reservation_passed": true
+--   },
+--   "decision": {
+--     "reason_code": "ARBITRAGE_OPPORTUNITY_FOUND"
+--   }
+-- }
+
 create index idx_order_intents_strategy_run_created_at
     on order_intents (strategy_run_id, created_at desc);
 
