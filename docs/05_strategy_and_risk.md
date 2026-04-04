@@ -9,6 +9,7 @@
 - `05_arbitrage_reason_code_precedence.md`: reject code 우선순위 규칙
 - `05_arbitrage_lifecycle_state_machine.md`: accept 이후 실행/복구 상태 전이
 - `05_arbitrage_runtime_invariants.md`: 런타임 불변조건과 fail-closed 점검
+- `05_arbitrage_shadow_live_gate.md`: shadow -> live 전환 승인 기준
 - `05_trade_recovery.md`: reconciliation, unwind, hedge 실패 대응
 - `05_risk_and_config.md`: parameter catalog, risk limit, config validation
 
@@ -21,5 +22,6 @@
 5. reject code 충돌 규칙이 필요하면 `05_arbitrage_reason_code_precedence.md`
 6. accept 이후 상태 전이가 필요하면 `05_arbitrage_lifecycle_state_machine.md`
 7. 런타임 불변조건이 필요하면 `05_arbitrage_runtime_invariants.md`
-8. 실주문 이후 정합성과 복구 로직이 필요하면 `05_trade_recovery.md`
-9. live 승인 기준과 설정 안전장치가 필요하면 `05_risk_and_config.md`
+8. shadow -> live 승인 기준이 필요하면 `05_arbitrage_shadow_live_gate.md`
+9. 실주문 이후 정합성과 복구 로직이 필요하면 `05_trade_recovery.md`
+10. live 승인 기준과 설정 안전장치가 필요하면 `05_risk_and_config.md`
