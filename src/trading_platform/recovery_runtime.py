@@ -631,7 +631,12 @@ class RecoveryRuntime:
     ) -> tuple[str, str] | None:
         reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
         if reconciliation_result not in {"matched", "mismatch"}:
-            return None
+            if "reconciliation_result" not in trace and not reconciliation_result:
+                return None
+            return (
+                "reconciliation_result_invalid",
+                "reconciliation result contains invalid result value",
+            )
         invalid_fields: list[str] = []
         open_order_count_raw = trace.get("reconciliation_open_order_count")
         reconciliation_open_order_count = _parse_int(open_order_count_raw)
