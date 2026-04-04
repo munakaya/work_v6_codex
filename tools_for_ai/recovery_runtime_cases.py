@@ -88,6 +88,43 @@ def main() -> None:
         "handoff incident mismatch",
     )
 
+    failed_open_order_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=failed_open_order_trace_id,
+        payload={
+            "recovery_trace_id": failed_open_order_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "50",
+            "reconciliation_result": "mismatch",
+            "reconciliation_open_order_count": 1,
+            "reconciliation_residual_exposure_quote": "50",
+            "reconciliation_mismatch_streak": 1,
+            "reconciliation_observed_order_statuses": [
+                {"order_id": "ord-failed-1", "status": "failed"}
+            ],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+        },
+    )
+    runtime.run_once()
+    failed_open_order_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=failed_open_order_trace_id
+    )
+    _assert(failed_open_order_trace is not None, "failed open order trace missing")
+    _assert(
+        failed_open_order_trace.get("status") == "handoff_required",
+        "terminal failed open-order reconciliation should hand off",
+    )
+    _assert(
+        failed_open_order_trace.get("handoff_reason")
+        == "reconciliation_open_orders_terminal_failure",
+        "terminal failed open-order handoff reason mismatch",
+    )
+
     outcome, intent = store.create_order_intent(
         strategy_run_id=run_id,
         market="KRW-BTC",

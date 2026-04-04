@@ -2680,6 +2680,17 @@ components:
             - type: array
               items:
                 type: string
+        reconciliation_observed_order_statuses:
+          oneOf:
+            - type: 'null'
+            - type: array
+              items:
+                type: object
+                properties:
+                  order_id:
+                    type: string
+                  status:
+                    type: string
         reconciliation_attempt_count:
           oneOf:
             - type: 'null'
@@ -2859,6 +2870,15 @@ components:
           type: array
           items:
             type: string
+        observed_order_statuses:
+          type: array
+          items:
+            type: object
+            properties:
+              order_id:
+                type: string
+              status:
+                type: string
         reconciliation_reason:
           type: string
         summary:

@@ -197,6 +197,7 @@
 - `matched + open_order_count=0 + residual_exposure_quote=0`이면 recovery runtime이 즉시 `resolved / closed`까지 반영할 수 있음
 - `mismatch + open_order_count=0 + residual_exposure_quote>0`이면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `mismatch`가 같은 trace에서 반복되면 threshold 이후 `manual_handoff`로 승격될 수 있음
+- `mismatch + open_order_count>0`이어도 `observed_order_statuses`가 전부 실패 terminal이면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 
 요청 핵심 필드:
 
@@ -206,6 +207,7 @@
 - `reconciliation_reason` (선택)
 - `observed_order_ids` (선택, non-empty string 배열)
 - `observed_fill_ids` (선택, non-empty string 배열)
+- `observed_order_statuses` (선택, `{order_id, status}` 배열)
 - `summary` (선택)
 - `source` (선택)
 - `verified_by` (선택)
@@ -218,6 +220,7 @@
 - `reconciliation_residual_exposure_quote`
 - `reconciliation_observed_order_ids`
 - `reconciliation_observed_fill_ids`
+- `reconciliation_observed_order_statuses`
 - `reconciliation_attempt_count`
 - `reconciliation_mismatch_count`
 - `reconciliation_mismatch_streak`

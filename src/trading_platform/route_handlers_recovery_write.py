@@ -17,6 +17,30 @@ from .request_utils import (
 
 
 class ControlPlaneRecoveryWriteRouteMixin:
+    def _observed_order_statuses(
+        self, value: object
+    ) -> list[dict[str, str]] | None:
+        if value is None or not isinstance(value, list):
+            return None
+        result: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for item in value:
+            if not isinstance(item, dict):
+                return None
+            order_id = json_string(item.get("order_id"))
+            status = json_string(item.get("status"))
+            if order_id is None or status is None:
+                return None
+            order_id = order_id.strip()
+            status = status.strip().lower()
+            if not order_id or not status:
+                return None
+            if order_id in seen:
+                continue
+            seen.add(order_id)
+            result.append({"order_id": order_id, "status": status})
+        return result
+
     def _is_zero_number_text(self, value: str | None) -> bool:
         if value is None:
             return False
@@ -906,6 +930,21 @@ class ControlPlaneRecoveryWriteRouteMixin:
                         }
                     ),
                 )
+        observed_order_statuses = None
+        if "observed_order_statuses" in body:
+            observed_order_statuses = self._observed_order_statuses(
+                body.get("observed_order_statuses")
+            )
+            if observed_order_statuses is None:
+                return (
+                    HTTPStatus.BAD_REQUEST,
+                    self._response(
+                        error={
+                            "code": "INVALID_REQUEST",
+                            "message": "observed_order_statuses must be an array of {order_id, status} objects",
+                        }
+                    ),
+                )
         current = self.server.redis_runtime.get_recovery_trace(
             recovery_trace_id=recovery_trace_id
         )
@@ -974,6 +1013,7 @@ class ControlPlaneRecoveryWriteRouteMixin:
             "reconciliation_operator_context": optional_object(body.get("operator_context")),
             "reconciliation_observed_order_ids": observed_order_ids,
             "reconciliation_observed_fill_ids": observed_fill_ids,
+            "reconciliation_observed_order_statuses": observed_order_statuses,
             "reconciliation_verified_by": optional_string(body.get("verified_by")),
             "reconciliation_updated_at": self.server.redis_runtime.now_iso(),
         }
@@ -1013,6 +1053,7 @@ class ControlPlaneRecoveryWriteRouteMixin:
                 "open_order_count": open_order_count,
                 "observed_order_count": len(observed_order_ids or []),
                 "observed_fill_count": len(observed_fill_ids or []),
+                "observed_order_status_count": len(observed_order_statuses or []),
             },
             trace_id=self.headers.get("X-Trace-Id"),
         )

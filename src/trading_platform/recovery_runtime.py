@@ -61,6 +61,23 @@ def _parse_int(value: object) -> int | None:
         return None
 
 
+def _observed_order_statuses(value: object) -> list[str] | None:
+    if value is None or not isinstance(value, list):
+        return None
+    statuses: list[str] = []
+    for item in value:
+        if not isinstance(item, dict):
+            return None
+        status = item.get("status")
+        if not isinstance(status, str):
+            return None
+        normalized = status.strip().lower()
+        if not normalized:
+            return None
+        statuses.append(normalized)
+    return statuses
+
+
 @dataclass(frozen=True)
 class RecoveryRuntimeInfo:
     enabled: bool
@@ -502,6 +519,23 @@ class RecoveryRuntime:
             return (
                 "reconciliation_mismatch_repeated",
                 "reconciliation mismatch repeated beyond automatic recovery threshold",
+            )
+        observed_order_statuses = _observed_order_statuses(
+            trace.get("reconciliation_observed_order_statuses")
+        )
+        if (
+            reconciliation_open_order_count is not None
+            and reconciliation_open_order_count > 0
+            and observed_order_statuses
+            and len(observed_order_statuses) >= reconciliation_open_order_count
+            and all(
+                status in TERMINAL_FAILURE_ORDER_STATUSES
+                for status in observed_order_statuses
+            )
+        ):
+            return (
+                "reconciliation_open_orders_terminal_failure",
+                "reconciliation reports open orders but observed order statuses are all terminal failures",
             )
         if reconciliation_open_order_count is None or reconciliation_open_order_count < 0:
             return None
