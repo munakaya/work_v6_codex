@@ -584,11 +584,19 @@ class RecoveryRuntime:
 
     def _resolve_trace(self, trace: dict[str, object], *, resolution_reason: str) -> None:
         recovery_trace_id = str(trace.get("recovery_trace_id") or "")
+        resolved_residual_exposure = trace.get("residual_exposure_quote")
+        if resolution_reason == "reconciliation_matched_zero_residual":
+            resolved_residual_exposure = (
+                str(trace.get("reconciliation_residual_exposure_quote"))
+                if trace.get("reconciliation_residual_exposure_quote") is not None
+                else "0"
+            )
         payload = {
             **trace,
             "status": "resolved",
             "lifecycle_state": "closed",
             "manual_handoff_required": False,
+            "residual_exposure_quote": resolved_residual_exposure,
             "closed_at": _iso_now(),
             "resolution_reason": resolution_reason,
         }

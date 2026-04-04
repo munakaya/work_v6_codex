@@ -699,6 +699,10 @@ def main() -> None:
         reconciliation_trace.get("resolution_reason") == "reconciliation_matched_zero_residual",
         "reconciliation resolution reason mismatch",
     )
+    _assert(
+        str(reconciliation_trace.get("residual_exposure_quote") or "") == "0",
+        "reconciliation resolution should zero residual exposure",
+    )
     reconciliation_eval = redis_runtime.get_arbitrage_evaluation(run_id=reconciliation_run_id)
     _assert(reconciliation_eval is not None, "reconciliation latest evaluation missing")
     _assert(
