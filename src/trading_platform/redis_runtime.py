@@ -37,6 +37,7 @@ class RedisRuntimeInfo:
 
 class RedisRuntime:
     BOT_STATE_TTL_SECONDS = 120
+    MARKET_ORDERBOOK_TTL_SECONDS = 15
     EVENT_VERSION = 1
 
     def __init__(self, redis_url: str | None, key_prefix: str, service_name: str) -> None:
@@ -160,6 +161,34 @@ class RedisRuntime:
         self, *, event_type: str, payload: dict[str, Any], trace_id: str | None = None
     ) -> None:
         self.append_event("alert_events", event_type=event_type, payload=payload, trace_id=trace_id)
+
+    def sync_market_orderbook_top(
+        self,
+        *,
+        exchange: str,
+        market: str,
+        payload: dict[str, Any],
+        trace_id: str | None = None,
+        ttl_seconds: int | None = None,
+    ) -> None:
+        if not self.set_json(
+            ["market", "orderbook_top", exchange, market],
+            payload,
+            ttl_seconds=ttl_seconds or self.MARKET_ORDERBOOK_TTL_SECONDS,
+        ):
+            return
+        self.append_event(
+            "market_events",
+            event_type="market.orderbook_top.updated",
+            payload={
+                "exchange": exchange,
+                "market": market,
+                "stale": payload.get("stale"),
+                "source_type": payload.get("source_type"),
+                "exchange_age_ms": payload.get("exchange_age_ms"),
+            },
+            trace_id=trace_id,
+        )
 
     def _key(self, *parts: str) -> str:
         return ":".join([self.key_prefix, *parts])

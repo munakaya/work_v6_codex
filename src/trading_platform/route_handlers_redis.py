@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from math import ceil
+
 
 class ControlPlaneRedisRouteMixin:
     def _redis_trace_id(self) -> str | None:
@@ -53,4 +55,25 @@ class ControlPlaneRedisRouteMixin:
             event_type=event_type,
             payload=payload,
             trace_id=self._redis_trace_id(),
+        )
+
+    def _sync_market_orderbook_top(self, snapshot: dict[str, object] | None) -> None:
+        if snapshot is None:
+            return
+        exchange = snapshot.get("exchange")
+        market = snapshot.get("market")
+        if not isinstance(exchange, str) or not exchange:
+            return
+        if not isinstance(market, str) or not market:
+            return
+        ttl_seconds = max(
+            self.server.redis_runtime.MARKET_ORDERBOOK_TTL_SECONDS,
+            ceil(self.server.config.market_data_stale_threshold_ms / 1000) * 2,
+        )
+        self.server.redis_runtime.sync_market_orderbook_top(
+            exchange=exchange,
+            market=market,
+            payload=snapshot,
+            trace_id=self._redis_trace_id(),
+            ttl_seconds=ttl_seconds,
         )

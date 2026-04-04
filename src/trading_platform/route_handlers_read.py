@@ -136,6 +136,7 @@ class ControlPlaneReadRouteMixin:
             age_ms=int(snapshot["exchange_age_ms"]),
             stale=bool(snapshot["stale"]),
         )
+        self._sync_market_orderbook_top(snapshot)
         return HTTPStatus.OK, self._response(data=snapshot)
 
     def _match_latest_config(
