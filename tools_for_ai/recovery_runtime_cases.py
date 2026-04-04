@@ -475,6 +475,58 @@ def main() -> None:
         "duplicate balance handoff reason mismatch",
     )
 
+    malformed_market_outcome, malformed_market_intent = store.create_order_intent(
+        strategy_run_id=run_id,
+        market="KRWBTC",
+        buy_exchange="upbit",
+        sell_exchange="bithumb",
+        side_pair="buy_then_sell",
+        target_qty="0.1",
+        expected_profit="900",
+        expected_profit_ratio="0.009",
+        status="submitted",
+        decision_context={"source": "recovery_balance_market_context_case"},
+    )
+    _assert(
+        malformed_market_outcome == "created" and malformed_market_intent is not None,
+        "malformed market intent create failed",
+    )
+    malformed_market_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=malformed_market_trace_id,
+        payload={
+            "recovery_trace_id": malformed_market_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": str(malformed_market_intent["intent_id"]),
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_fill_ids": ["fill-market-context-1"],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+        },
+        trace_id=None,
+    )
+    runtime.run_once()
+    malformed_market_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=malformed_market_trace_id
+    )
+    _assert(malformed_market_trace is not None, "malformed market trace missing")
+    _assert(
+        malformed_market_trace.get("status") == "handoff_required",
+        "matched reconciliation with malformed market context should hand off",
+    )
+    _assert(
+        malformed_market_trace.get("handoff_reason")
+        == "reconciliation_market_context_missing",
+        "malformed market handoff reason mismatch",
+    )
+
     balance_irrelevant_locked_trace_id = f"rt_{uuid4().hex}"
     redis_runtime.sync_recovery_trace(
         recovery_trace_id=balance_irrelevant_locked_trace_id,

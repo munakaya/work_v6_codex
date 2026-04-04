@@ -630,47 +630,42 @@ class RecoveryRuntime:
                 "reconciliation matched result is missing intent exchange context",
             )
         relevant_assets = self._trace_relevant_assets(trace)
+        if not relevant_assets:
+            return (
+                "reconciliation_market_context_missing",
+                "reconciliation matched result is missing intent market asset context",
+            )
         observed_balances = _observed_balances(
             trace.get("reconciliation_observed_balances")
         )
         if not observed_balances:
-            if relevant_assets:
-                missing_balance_keys = sorted(
-                    (exchange, asset)
-                    for exchange in relevant_exchanges
-                    for asset in relevant_assets
-                )
-                return (
-                    "reconciliation_balance_evidence_incomplete",
-                    "reconciliation matched result is missing observed balances for exchange/assets: "
-                    + ", ".join(f"{exchange}:{asset}" for exchange, asset in missing_balance_keys),
-                )
-            return None
+            missing_balance_keys = sorted(
+                (exchange, asset)
+                for exchange in relevant_exchanges
+                for asset in relevant_assets
+            )
+            return (
+                "reconciliation_balance_evidence_incomplete",
+                "reconciliation matched result is missing observed balances for exchange/assets: "
+                + ", ".join(f"{exchange}:{asset}" for exchange, asset in missing_balance_keys),
+            )
         relevant_balance_rows = [
             balance
             for balance in observed_balances
             if str(balance["exchange_name"]).strip() in relevant_exchanges
             and (
-                not relevant_assets
-                or str(balance["asset"]).strip().upper() in relevant_assets
+                str(balance["asset"]).strip().upper() in relevant_assets
             )
         ]
         required_balance_keys = {
             (exchange, asset)
             for exchange in relevant_exchanges
-            for asset in (relevant_assets or set())
+            for asset in relevant_assets
         }
-        if not required_balance_keys:
-            required_balance_keys = {
-                (exchange, "")
-                for exchange in relevant_exchanges
-            }
         observed_balance_keys = {
             (
                 str(balance["exchange_name"]).strip(),
-                str(balance["asset"]).strip().upper()
-                if relevant_assets
-                else "",
+                str(balance["asset"]).strip().upper(),
             )
             for balance in relevant_balance_rows
         }

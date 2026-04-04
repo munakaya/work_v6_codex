@@ -204,6 +204,7 @@
 - `matched + open_order_count=0 + residual_exposure_quote=0`인데 `observed_fill_ids`, `observed_order_statuses`, `observed_balances`가 전부 비어 있으면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `observed_order_ids`만 있는 경우는 자동 종료 근거로 보지 않음
 - `matched + open_order_count=0 + residual_exposure_quote=0`인데 trace에 `intent` 문맥이 없어 관련 거래소를 식별할 수 없으면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
+- `matched + open_order_count=0 + residual_exposure_quote=0`인데 trace에 `market` 자산 문맥이 없어 관련 자산을 식별할 수 없으면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `matched + open_order_count=0 + residual_exposure_quote=0`인데 `observed_order_statuses`에 `submitted/new/partially_filled` 같은 non-terminal 상태가 있으면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `matched + open_order_count=0 + residual_exposure_quote=0`인데 `observed_balances`가 관련 거래소의 관련 자산을 전부 덮지 못하면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `matched + open_order_count=0 + residual_exposure_quote=0`인데 관련 거래소/자산이 있는 trace에서 `observed_balances` 자체가 없으면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
