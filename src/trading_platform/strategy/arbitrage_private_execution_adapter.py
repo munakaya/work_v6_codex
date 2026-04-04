@@ -534,6 +534,7 @@ class PrivateHttpArbitrageExecutionAdapter:
 
         if outcome == "submit_failed":
             orders_payload = response_payload.get("orders")
+            fills_payload = response_payload.get("fills")
             if isinstance(orders_payload, list) and orders_payload:
                 created_orders, order_index, order_error = _create_orders_from_response(
                     store=store,
@@ -563,7 +564,7 @@ class PrivateHttpArbitrageExecutionAdapter:
                 created_fills, fill_error = _create_fills_from_response(
                     store=store,
                     order_index=order_index,
-                    fills_payload=response_payload.get("fills"),
+                    fills_payload=fills_payload,
                 )
                 refreshed_orders = _refresh_orders(
                     store=store,
@@ -578,6 +579,15 @@ class PrivateHttpArbitrageExecutionAdapter:
                         created_fills=created_fills,
                     )
             else:
+                if fills_payload is not None:
+                    return _failure_result(
+                        auto_unwind_on_failure=auto_unwind_on_failure,
+                        reason=(
+                            "private execution submit_failed outcome must not include "
+                            "fills without orders"
+                        ),
+                        details=_response_details(response_payload),
+                    )
                 created_orders = ()
                 created_fills = ()
                 refreshed_orders = ()
