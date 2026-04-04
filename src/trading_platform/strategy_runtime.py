@@ -209,6 +209,31 @@ class StrategyRuntime:
         run_id = str(run.get("run_id") or "")
         bot_id = str(run.get("bot_id") or "")
         trace_id = f"strategy-runtime-{uuid4()}"
+        if self.redis_runtime.info.enabled:
+            try:
+                blocking_trace = self.redis_runtime.get_blocking_recovery_trace(
+                    bot_id=bot_id,
+                )
+            except RuntimeError:
+                self._record_skip(
+                    "RECOVERY_TRACE_READ_FAILED",
+                    "failed to read blocking recovery trace",
+                )
+                return
+            if blocking_trace:
+                blocking_status = str(blocking_trace.get("status") or "").strip().lower()
+                recovery_trace_id = str(blocking_trace.get("recovery_trace_id") or "")
+                if blocking_status == "handoff_required":
+                    self._record_skip(
+                        "MANUAL_HANDOFF_ACTIVE",
+                        f"recovery_trace_id={recovery_trace_id}",
+                    )
+                else:
+                    self._record_skip(
+                        "RECOVERY_TRACE_ACTIVE",
+                        f"recovery_trace_id={recovery_trace_id}",
+                    )
+                return
         load_result = load_arbitrage_runtime_payload(
             store=self.read_store,
             connector=self.connector,

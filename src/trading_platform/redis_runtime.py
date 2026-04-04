@@ -332,6 +332,33 @@ class RedisRuntime:
         )
         return items[: max(1, min(limit, 100))]
 
+    def get_blocking_recovery_trace(
+        self,
+        *,
+        bot_id: str | None = None,
+        run_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        candidates: list[dict[str, Any]] = []
+        for status in ("handoff_required", "active"):
+            items = self.list_recovery_traces(
+                limit=10,
+                bot_id=bot_id,
+                run_id=run_id,
+                status=status,
+            )
+            if items is None:
+                raise RuntimeError("failed to read blocking recovery traces")
+            candidates.extend(items)
+        if not candidates:
+            return None
+        candidates.sort(
+            key=lambda item: _parse_iso_datetime(item.get("updated_at"))
+            or _parse_iso_datetime(item.get("created_at"))
+            or datetime.fromtimestamp(0, UTC),
+            reverse=True,
+        )
+        return candidates[0]
+
     def sync_market_orderbook_top(
         self,
         *,
