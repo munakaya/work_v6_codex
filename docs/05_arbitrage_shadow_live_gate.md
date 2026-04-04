@@ -59,6 +59,13 @@
 - shadow 비교 지표에서 `accept_mismatch`, `reason_code_mismatch`는 0이어야 한다.
 - `reservation_mismatch`, `target_qty_bucket_mismatch`가 있으면 원인 분석이 승인 산출물에 남아야 한다.
 
+원인 분석 최소 필드:
+
+- `time_window`
+- `top_reason`
+- `affected_bot_ids`
+- `suggested_action`
+
 ### 7. 운영자 대응 가능성
 
 - operator가 `bot stop`, `config rollback`, `alert ack`, `manual handoff`를 수행할 수 있어야 한다.
@@ -90,6 +97,7 @@
 - stale/skew/reject 분포
 - stale alert / connector degraded / reconciliation mismatch 건수와 상위 원인
 - shadow diff 지표 요약
+  - `reservation_mismatch`, `target_qty_bucket_mismatch`가 있으면 `time_window`, `top_reason`, `affected_bot_ids`, `suggested_action` 포함
 - recovery/unwind 사례 요약
 - stop command 확인 결과
 - 승인자와 승인 시각

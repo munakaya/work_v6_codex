@@ -75,6 +75,7 @@
 - 두 모드 모두 decision record가 있을 때만 diff를 센다.
 - 초기 live 승인 기준에서는 `accept_mismatch`, `reason_code_mismatch`가 0이어야 한다.
 - `reservation_mismatch`, `target_qty_bucket_mismatch`가 있으면 원인 분석을 같이 남긴다.
+- 원인 분석 최소 필드는 `time_window`, `top_reason`, `affected_bot_ids`, `suggested_action`이다.
 - `replay restored`는 판단 품질 지표가 아니라 accounting 보정 지표로 읽는다.
 
 
