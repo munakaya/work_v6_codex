@@ -151,6 +151,7 @@ class ControlPlaneRuntimeReadRouteMixin:
             )
         matched_count = len(items)
         status_counts = self._status_counts(items)
+        overall_status = self._overall_status(status_counts)
         if limit is not None:
             items = items[:limit]
         total_length = sum(int(item.get("length") or 0) for item in items)
@@ -168,6 +169,7 @@ class ControlPlaneRuntimeReadRouteMixin:
                 "stale_only": stale_only is True,
                 "status": status or None,
                 "status_counts": status_counts,
+                "overall_status": overall_status,
                 "limit": limit,
                 "has_more": matched_count > len(items),
                 "sort_by": sort_by,
@@ -198,6 +200,13 @@ class ControlPlaneRuntimeReadRouteMixin:
             if isinstance(status, str) and status in counts:
                 counts[status] += 1
         return counts
+
+    def _overall_status(self, status_counts: dict[str, int]) -> str:
+        if int(status_counts.get("stale") or 0) > 0:
+            return "stale"
+        if int(status_counts.get("fresh") or 0) > 0:
+            return "fresh"
+        return "empty"
 
     def _stale_after_seconds(self, params: dict[str, list[str]]) -> int | None:
         raw = (single_query_value(params, "stale_after_seconds") or "").strip()

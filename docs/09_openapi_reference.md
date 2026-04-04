@@ -2190,6 +2190,9 @@ components:
                   type: integer
                 stale:
                   type: integer
+            overall_status:
+              type: string
+              enum: [empty, fresh, stale]
             limit:
               oneOf:
                 - type: 'null'

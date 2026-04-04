@@ -612,6 +612,7 @@
 - `stale_only`
 - `status`
 - `status_counts`
+- `overall_status`
 - `limit`
 - `has_more`
 - `sort_by`
