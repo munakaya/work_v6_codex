@@ -96,6 +96,36 @@ paths:
         '503':
           description: Upstream rate limited
 
+  /api/v1/market-data/orderbook-top/cached:
+    get:
+      tags: [MarketData]
+      summary: Get cached public orderbook top
+      operationId: getCachedOrderbookTop
+      parameters:
+        - in: query
+          name: exchange
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: market
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cached orderbook top snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketOrderbookTopResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Cached snapshot not found
+        '503':
+          description: Redis runtime unavailable
+
   /api/v1/bots/register:
     post:
       tags: [Bots]

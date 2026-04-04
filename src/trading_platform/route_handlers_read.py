@@ -140,6 +140,52 @@ class ControlPlaneReadRouteMixin:
         self._sync_market_orderbook_top(snapshot)
         return HTTPStatus.OK, self._response(data=snapshot)
 
+    def _cached_market_orderbook_top_response(
+        self, query: str
+    ) -> tuple[HTTPStatus, dict[str, object]]:
+        params = parse_qs(query)
+        exchange = (single_query_value(params, "exchange") or "").strip().lower()
+        market = (single_query_value(params, "market") or "").strip().upper()
+        if not exchange:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={"code": "INVALID_REQUEST", "message": "exchange is required"}
+                ),
+            )
+        if not market:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={"code": "INVALID_REQUEST", "message": "market is required"}
+                ),
+            )
+        if not self.server.redis_runtime.info.enabled:
+            return (
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                self._response(
+                    error={
+                        "code": "REDIS_RUNTIME_UNAVAILABLE",
+                        "message": "redis runtime is not enabled",
+                    }
+                ),
+            )
+        payload = self.server.redis_runtime.get_market_orderbook_top(
+            exchange=exchange,
+            market=market,
+        )
+        if payload is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "MARKET_SNAPSHOT_NOT_FOUND",
+                        "message": "cached market snapshot not found",
+                    }
+                ),
+            )
+        return HTTPStatus.OK, self._response(data=payload)
+
     def _match_latest_config(
         self, path: str
     ) -> tuple[HTTPStatus, dict[str, object]] | None:

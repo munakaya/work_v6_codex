@@ -124,6 +124,10 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
             status, payload = self._market_orderbook_top_response(query)
             return status, payload, False
 
+        if path == "/api/v1/market-data/orderbook-top/cached":
+            status, payload = self._cached_market_orderbook_top_response(query)
+            return status, payload, False
+
         for resolver in (
             lambda: self._match_latest_config(path),
             lambda: self._match_config_versions(path),

@@ -72,6 +72,21 @@ class RedisRuntime:
             ]
         )
 
+    def get_json(self, key_parts: list[str]) -> dict[str, Any] | None:
+        raw = self._run_command_output(["GET", self._key(*key_parts)])
+        if raw is None:
+            return None
+        stripped = raw.strip()
+        if not stripped:
+            return None
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        return payload
+
     def append_event(
         self,
         stream_name: str,
@@ -190,21 +205,29 @@ class RedisRuntime:
             trace_id=trace_id,
         )
 
+    def get_market_orderbook_top(
+        self, *, exchange: str, market: str
+    ) -> dict[str, Any] | None:
+        return self.get_json(["market", "orderbook_top", exchange, market])
+
     def _key(self, *parts: str) -> str:
         return ":".join([self.key_prefix, *parts])
 
     def _run_command(self, command: list[str]) -> bool:
+        return self._run_command_output(command) is not None
+
+    def _run_command_output(self, command: list[str]) -> str | None:
         if not self.info.enabled or not self.redis_url or not self.redis_cli_path:
-            return False
+            return None
         try:
-            subprocess.run(
+            completed = subprocess.run(
                 [self.redis_cli_path, "-u", self.redis_url, *command],
                 check=True,
                 capture_output=True,
                 text=True,
                 timeout=5,
             )
-            return True
+            return completed.stdout
         except (OSError, subprocess.SubprocessError) as exc:
             LOGGER.warning(
                 "redis runtime command failed: %s",
@@ -213,4 +236,4 @@ class RedisRuntime:
                     "event_name": "redis_runtime_failed",
                 },
             )
-            return False
+            return None

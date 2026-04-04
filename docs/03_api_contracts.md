@@ -337,6 +337,7 @@
 #### Public Market Data
 
 - `GET /api/v1/market-data/orderbook-top`
+- `GET /api/v1/market-data/orderbook-top/cached`
 
 #### Bots
 
@@ -452,6 +453,35 @@
     "exchange_age_ms": 125,
     "stale": false,
     "source_type": "rest"
+  },
+  "error": null
+}
+```
+
+#### `GET /api/v1/market-data/orderbook-top/cached`
+
+쿼리:
+
+- `exchange`: 예시 `sample`, `upbit`
+- `market`: 예시 `KRW-BTC`
+
+응답:
+
+```json
+{
+  "success": true,
+  "data": {
+    "exchange": "sample",
+    "market": "KRW-BTC",
+    "best_bid": "101574000",
+    "best_ask": "101598000",
+    "bid_volume": "0.00035401",
+    "ask_volume": "0.00623162",
+    "exchange_timestamp": "2026-04-04T01:31:15.272709Z",
+    "received_at": "2026-04-04T01:31:15.272727Z",
+    "exchange_age_ms": 0,
+    "stale": false,
+    "source_type": "sample"
   },
   "error": null
 }
