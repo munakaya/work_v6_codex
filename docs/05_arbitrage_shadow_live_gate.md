@@ -102,7 +102,18 @@
 ## 권장 승인 산출물
 
 - 최근 shadow 운영 요약
+  - `time_window`
+  - `mode`
+  - `bot_ids`
+  - `decision_count`
+  - `accept_count`
+  - `reject_count`
 - validation case 결과표
+  - `case_id`
+  - `expected_result`
+  - `observed_result`
+  - `pass_fail`
+  - `evidence_ref`
 - invariant 위반 건수
 - stale/skew/reject 분포
 - stale alert / connector degraded / reconciliation mismatch 건수와 `top_reason`

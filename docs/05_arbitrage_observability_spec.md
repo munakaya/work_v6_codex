@@ -160,6 +160,7 @@
 `05_arbitrage_shadow_live_gate.md`를 실제로 확인할 때는 최소한 아래 요약이 있어야 한다.
 
 - 최근 7일 accept/reject 추이
+  - `time_window`, `decision_count`, `accept_count`, `reject_count`
 - reject code 분포
 - P0 invariant violation 건수
 - recovery_required / unwind_in_progress 사례 수
