@@ -155,7 +155,7 @@ class ControlPlaneStreamReadRouteMixin:
             )
         raw_events = self.server.redis_runtime.list_stream_events(
             stream_name=stream_name,
-            limit=limit,
+            limit=limit + 1,
             before_stream_id=before_stream_id or None,
         )
         if raw_events is None:
@@ -168,12 +168,14 @@ class ControlPlaneStreamReadRouteMixin:
                     }
                 ),
             )
+        has_more = len(raw_events) > limit
+        page_events = raw_events[:limit]
         next_before_stream_id: str | None = None
-        if len(raw_events) >= limit:
-            last_stream_id = raw_events[-1].get("stream_id")
+        if has_more and page_events:
+            last_stream_id = page_events[-1].get("stream_id")
             if isinstance(last_stream_id, str) and last_stream_id:
                 next_before_stream_id = last_stream_id
-        events = list(raw_events)
+        events = list(page_events)
 
         event_type = (single_query_value(params, "event_type") or "").strip()
         if event_type:
@@ -211,6 +213,7 @@ class ControlPlaneStreamReadRouteMixin:
             data={
                 "items": events,
                 "count": len(events),
+                "has_more": has_more,
                 "next_before_stream_id": next_before_stream_id,
             }
         )

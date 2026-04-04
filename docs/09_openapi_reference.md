@@ -1471,6 +1471,8 @@ components:
                 $ref: '#/components/schemas/FillSummary'
             count:
               type: integer
+            has_more:
+              type: boolean
             next_before_stream_id:
               oneOf:
                 - type: 'null'
@@ -1543,6 +1545,8 @@ components:
                 $ref: '#/components/schemas/ConfigVersionSummary'
             count:
               type: integer
+            has_more:
+              type: boolean
             next_before_stream_id:
               oneOf:
                 - type: 'null'
