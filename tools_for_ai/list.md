@@ -4,3 +4,4 @@
 - recovery_runtime_cases.py: recovery trace가 zero-exposure/terminal/unwind fill이면 resolved, failed or stale unwind와 오래 지속된 trace는 handoff_required로 바뀌는지 Redis 기준으로 검증한다
 - strategy_runtime_guard_cases.py: active recovery/manual handoff trace가 있을 때 strategy runtime이 새 평가를 skip하는지 검증한다
 - private_execution_readiness_cases.py: private_http execution이 health probe 기준으로 reachable, missing, not_required 상태를 올바르게 판정하는지 검증한다
+- private_http_server_cases.py: private_http executor를 실제 서버 흐름에서 filled/submitted/failed 세 경로로 검증한다
