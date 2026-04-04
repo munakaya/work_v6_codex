@@ -60,4 +60,13 @@ class ControlPlaneRuntimeReadRouteMixin:
             if not include_empty and int(summary.get("length") or 0) == 0:
                 continue
             items.append(summary)
-        return HTTPStatus.OK, self._response(data={"items": items, "count": len(items)})
+        total_length = sum(int(item.get("length") or 0) for item in items)
+        non_empty_count = sum(1 for item in items if int(item.get("length") or 0) > 0)
+        return HTTPStatus.OK, self._response(
+            data={
+                "items": items,
+                "count": len(items),
+                "non_empty_count": non_empty_count,
+                "total_length": total_length,
+            }
+        )

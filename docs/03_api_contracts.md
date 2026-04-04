@@ -597,6 +597,9 @@
 
 응답 핵심 필드:
 
+- `count`
+- `non_empty_count`
+- `total_length`
 - `stream_name`
 - `length`
 - `newest_stream_id`

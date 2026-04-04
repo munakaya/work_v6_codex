@@ -2126,6 +2126,10 @@ components:
                       - type: string
             count:
               type: integer
+            non_empty_count:
+              type: integer
+            total_length:
+              type: integer
         error:
           oneOf:
             - type: 'null'
