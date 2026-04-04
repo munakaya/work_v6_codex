@@ -577,13 +577,23 @@ class RecoveryRuntime:
         relevant_exchanges = self._trace_relevant_exchanges(trace)
         if not relevant_exchanges:
             return None
+        relevant_assets = self._trace_relevant_assets(trace)
         observed_balances = _observed_balances(
             trace.get("reconciliation_observed_balances")
         )
         if not observed_balances:
             return None
+        relevant_balance_rows = [
+            balance
+            for balance in observed_balances
+            if str(balance["exchange_name"]).strip() in relevant_exchanges
+            and (
+                not relevant_assets
+                or str(balance["asset"]).strip().upper() in relevant_assets
+            )
+        ]
         observed_exchanges = {
-            str(balance["exchange_name"]).strip() for balance in observed_balances
+            str(balance["exchange_name"]).strip() for balance in relevant_balance_rows
         }
         missing_exchanges = sorted(relevant_exchanges - observed_exchanges)
         if missing_exchanges:
@@ -594,9 +604,8 @@ class RecoveryRuntime:
             )
         locked_entries = [
             balance
-            for balance in observed_balances
-            if str(balance["exchange_name"]).strip() in relevant_exchanges
-            and balance["locked"] > Decimal("0")
+            for balance in relevant_balance_rows
+            if balance["locked"] > Decimal("0")
         ]
         if not locked_entries:
             return None
@@ -709,6 +718,22 @@ class RecoveryRuntime:
             )
             if isinstance(exchange, str) and exchange.strip()
         }
+
+    def _trace_relevant_assets(self, trace: dict[str, object]) -> set[str]:
+        intent_id = self._trace_intent_id(trace)
+        if not intent_id:
+            return set()
+        intent = self.read_store.get_order_intent(intent_id)
+        if intent is None:
+            return set()
+        market = str(intent.get("market") or "").strip().upper()
+        if not market:
+            return set()
+        for separator in ("-", "/"):
+            parts = [part.strip() for part in market.split(separator) if part.strip()]
+            if len(parts) == 2:
+                return {parts[0], parts[1]}
+        return set()
 
     def _create_submit_timeout_trace(
         self,

@@ -301,6 +301,70 @@ def main() -> None:
         "incomplete balance handoff reason mismatch",
     )
 
+    balance_irrelevant_locked_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=balance_irrelevant_locked_trace_id,
+        payload={
+            "recovery_trace_id": balance_irrelevant_locked_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": str(intent_balance["intent_id"]),
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_balances": [
+                {
+                    "exchange_name": "upbit",
+                    "asset": "KRW",
+                    "free": "1000000",
+                    "locked": "0",
+                },
+                {
+                    "exchange_name": "upbit",
+                    "asset": "BTC",
+                    "free": "0.1",
+                    "locked": "0",
+                },
+                {
+                    "exchange_name": "bithumb",
+                    "asset": "KRW",
+                    "free": "950000",
+                    "locked": "0",
+                },
+                {
+                    "exchange_name": "bithumb",
+                    "asset": "BTC",
+                    "free": "0.2",
+                    "locked": "0",
+                },
+                {
+                    "exchange_name": "upbit",
+                    "asset": "ETH",
+                    "free": "0.5",
+                    "locked": "0.1",
+                },
+            ],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+        },
+    )
+    runtime.run_once()
+    balance_irrelevant_locked_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=balance_irrelevant_locked_trace_id
+    )
+    _assert(
+        balance_irrelevant_locked_trace is not None,
+        "balance irrelevant locked trace missing",
+    )
+    _assert(
+        balance_irrelevant_locked_trace.get("status") == "resolved",
+        "irrelevant asset locked balance should not block reconciliation resolve",
+    )
+
     outcome, intent = store.create_order_intent(
         strategy_run_id=run_id,
         market="KRW-BTC",
@@ -1103,6 +1167,7 @@ def main() -> None:
     print("PASS recovery runtime escalates stale unwind orders to manual handoff")
     print("PASS recovery runtime hands off matched reconciliation with locked balances")
     print("PASS recovery runtime hands off matched reconciliation with incomplete balances")
+    print("PASS recovery runtime ignores locked balances for irrelevant assets")
     print("PASS recovery runtime resolves matched reconciliation traces")
     print("PASS recovery runtime hands off unresolved reconciliation mismatch")
     print("PASS recovery runtime hands off repeated reconciliation mismatches")
