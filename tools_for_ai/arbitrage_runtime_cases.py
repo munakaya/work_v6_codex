@@ -3,7 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 
-from trading_platform.strategy import evaluate_arbitrage, load_strategy_inputs
+from trading_platform.strategy import (
+    classify_submit_failure_transition,
+    evaluate_arbitrage,
+    load_strategy_inputs,
+)
 
 
 def _base_payload() -> dict[str, object]:
@@ -180,6 +184,44 @@ def _case_duplicate_intent() -> dict[str, object]:
     return payload
 
 
+def _case_balance_stale() -> dict[str, object]:
+    payload = _base_payload()
+    stale_at = (datetime.now(UTC) - timedelta(seconds=10)).isoformat().replace("+00:00", "Z")
+    payload["base_balance"] = {
+        **dict(payload["base_balance"]),
+        "observed_at": stale_at,
+        "is_fresh": True,
+    }
+    return payload
+
+
+def _case_high_spread_outlier() -> dict[str, object]:
+    payload = _base_payload()
+    payload["hedge_orderbook"] = {
+        **dict(payload["hedge_orderbook"]),
+        "bids": [{"price": "120", "quantity": "2.0"}],
+    }
+    payload["risk_config"] = {
+        **dict(payload["risk_config"]),
+        "max_spread_bps": "500",
+    }
+    return payload
+
+
+def _case_submit_failure_recovery() -> tuple[bool, str]:
+    payload = _base_payload()
+    decision = evaluate_arbitrage(load_strategy_inputs(payload))
+    transition = classify_submit_failure_transition(
+        decision_accepted=decision.accepted,
+        reservation_passed=bool(
+            decision.reservation_plan and decision.reservation_plan.reservation_passed
+        ),
+        submit_failed=True,
+        auto_unwind_allowed=False,
+    )
+    return transition["recovery_required"] is True, str(transition["next_state"])
+
+
 CASES = [
     ("C1", _case_accept, True, "ARBITRAGE_OPPORTUNITY_FOUND"),
     ("C2", _case_depth_negative, False, "EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH"),
@@ -190,6 +232,8 @@ CASES = [
     ("C7", _case_reentry_cooldown, False, "REENTRY_COOLDOWN_ACTIVE"),
     ("C8", _case_hedge_confidence_low, False, "HEDGE_CONFIDENCE_TOO_LOW"),
     ("C9", _case_duplicate_intent, False, "DUPLICATE_INTENT_BLOCKED"),
+    ("C10", _case_balance_stale, False, "BALANCE_STALE"),
+    ("C11", _case_high_spread_outlier, False, "RISK_LIMIT_BLOCKED"),
 ]
 
 
@@ -205,6 +249,15 @@ def main() -> int:
         )
         if not ok:
             failed += 1
+
+    c12_ok, c12_state = _case_submit_failure_recovery()
+    c12_pass = c12_ok and c12_state == "recovery_required"
+    print(
+        f"C12 {'PASS' if c12_pass else 'FAIL'} "
+        f"recovery_required={c12_ok} next_state={c12_state}"
+    )
+    if not c12_pass:
+        failed += 1
     return failed
 
 
