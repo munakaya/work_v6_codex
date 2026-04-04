@@ -12,6 +12,7 @@ from .config import AppConfig
 from .market_data_connector import PublicMarketDataConnector
 from .market_data_runtime import MarketDataRuntime
 from .observability import AlertHookNotifier, MetricsRegistry
+from .recovery_runtime import RecoveryRuntime
 from .redis_runtime import RedisRuntime
 from .route_handlers import ControlPlaneRouteMixin
 from .storage.store_factory import StoreBootstrapInfo, build_read_store_bundle
@@ -37,6 +38,7 @@ class ControlPlaneServer(ThreadingHTTPServer):
         market_data_connector: PublicMarketDataConnector,
         market_data_runtime: MarketDataRuntime,
         strategy_runtime: StrategyRuntime,
+        recovery_runtime: RecoveryRuntime,
     ):
         super().__init__(server_address, ControlPlaneRequestHandler)
         self.config = config
@@ -48,6 +50,7 @@ class ControlPlaneServer(ThreadingHTTPServer):
         self.market_data_connector = market_data_connector
         self.market_data_runtime = market_data_runtime
         self.strategy_runtime = strategy_runtime
+        self.recovery_runtime = recovery_runtime
 
 
 class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler):
@@ -264,6 +267,13 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         connector=market_data_connector,
         redis_runtime=redis_runtime,
     )
+    recovery_runtime = RecoveryRuntime(
+        enabled=config.recovery_runtime_enabled,
+        interval_ms=config.recovery_runtime_interval_ms,
+        handoff_after_seconds=config.recovery_runtime_handoff_after_seconds,
+        read_store=bootstrap.store,
+        redis_runtime=redis_runtime,
+    )
     return ControlPlaneServer(
         (config.host, config.port),
         config,
@@ -275,4 +285,5 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         market_data_connector,
         market_data_runtime,
         strategy_runtime,
+        recovery_runtime,
     )

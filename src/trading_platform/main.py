@@ -16,9 +16,10 @@ def main() -> None:
     server = build_server(config)
     server.market_data_runtime.start()
     server.strategy_runtime.start()
+    server.recovery_runtime.start()
 
     LOGGER.info(
-        "starting %s on %s:%s log=%s store=%s mode=%s redis=%s market_data=%s strategy_runtime=%s strategy_exec=%s/%s",
+        "starting %s on %s:%s log=%s store=%s mode=%s redis=%s market_data=%s strategy_runtime=%s strategy_exec=%s/%s recovery_runtime=%s",
         config.service_name,
         config.host,
         config.port,
@@ -30,6 +31,7 @@ def main() -> None:
         server.strategy_runtime.info.state,
         "enabled" if config.strategy_runtime_execution_enabled else "disabled",
         config.strategy_runtime_execution_mode,
+        server.recovery_runtime.info.state,
     )
     try:
         server.serve_forever()
@@ -38,6 +40,7 @@ def main() -> None:
     finally:
         server.market_data_runtime.stop()
         server.strategy_runtime.stop()
+        server.recovery_runtime.stop()
         server.server_close()
         LOGGER.info("server stopped")
 

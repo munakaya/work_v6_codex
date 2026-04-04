@@ -54,6 +54,9 @@ class AppConfig:
     strategy_runtime_execution_enabled: bool
     strategy_runtime_execution_mode: str
     strategy_runtime_auto_unwind_on_failure: bool
+    recovery_runtime_enabled: bool
+    recovery_runtime_interval_ms: int
+    recovery_runtime_handoff_after_seconds: int
     use_sample_read_model: bool
     enable_postgres_mutation: bool
 
@@ -102,6 +105,11 @@ def load_config() -> AppConfig:
         or "simulate_success",
         strategy_runtime_auto_unwind_on_failure=_env_bool(
             "TP_STRATEGY_RUNTIME_AUTO_UNWIND_ON_FAILURE", False
+        ),
+        recovery_runtime_enabled=_env_bool("TP_RECOVERY_RUNTIME_ENABLED", False),
+        recovery_runtime_interval_ms=_env_int("TP_RECOVERY_RUNTIME_INTERVAL_MS", 3000),
+        recovery_runtime_handoff_after_seconds=_env_int(
+            "TP_RECOVERY_RUNTIME_HANDOFF_AFTER_SECONDS", 30
         ),
         use_sample_read_model=_env_bool("TP_USE_SAMPLE_READ_MODEL", True),
         enable_postgres_mutation=_env_bool("TP_ENABLE_POSTGRES_MUTATION", False),

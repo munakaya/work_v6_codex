@@ -127,6 +127,7 @@ class ControlPlaneReadRouteMixin:
                 "redis_runtime": self.server.redis_runtime.info.as_dict(),
                 "market_data_runtime": self.server.market_data_runtime.info.as_dict(),
                 "strategy_runtime": self.server.strategy_runtime.info.as_dict(),
+                "recovery_runtime": self.server.recovery_runtime.info.as_dict(),
                 "read_store": self.server.store_bootstrap.as_dict(),
                 "dependencies": dependencies,
             }

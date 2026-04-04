@@ -2143,6 +2143,53 @@ components:
                   type: integer
                 failure_count:
                   type: integer
+            recovery_runtime:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                interval_ms:
+                  type: integer
+                handoff_after_seconds:
+                  type: integer
+                running:
+                  type: boolean
+                state:
+                  type: string
+                last_success_at:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                      format: date-time
+                last_error_at:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                      format: date-time
+                last_error_message:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                last_resolution_at:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                      format: date-time
+                last_handoff_at:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                      format: date-time
+                processed_count:
+                  type: integer
+                resolved_count:
+                  type: integer
+                handoff_count:
+                  type: integer
+                skipped_count:
+                  type: integer
+                failure_count:
+                  type: integer
             read_store:
               type: object
               properties:
