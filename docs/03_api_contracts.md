@@ -584,6 +584,21 @@
 }
 ```
 
+#### `GET /api/v1/runtime/streams`
+
+목적:
+
+- Redis runtime stream의 현재 길이와 oldest/newest 경계를 한 번에 확인
+
+응답 핵심 필드:
+
+- `stream_name`
+- `length`
+- `newest_stream_id`
+- `newest_occurred_at`
+- `oldest_stream_id`
+- `oldest_occurred_at`
+
 #### `GET /api/v1/bots/events`
 
 쿼리:

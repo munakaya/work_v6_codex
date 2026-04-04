@@ -281,6 +281,40 @@ class RedisRuntime:
                 events.append(parsed)
         return events
 
+    def get_stream_summary(self, *, stream_name: str) -> dict[str, Any] | None:
+        key = self._key("stream", stream_name)
+        length_raw = self._run_command_output(["XLEN", key])
+        if length_raw is None:
+            return None
+        try:
+            length = int(length_raw.strip() or "0")
+        except ValueError:
+            return None
+        newest = self.list_stream_events(stream_name=stream_name, limit=1)
+        oldest_raw = self._run_command_output(["--json", "XRANGE", key, "-", "+", "COUNT", "1"])
+        if oldest_raw is None:
+            return None
+        stripped = oldest_raw.strip()
+        oldest_entries: list[Any] = []
+        if stripped:
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError:
+                return None
+            if not isinstance(parsed, list):
+                return None
+            oldest_entries = parsed
+        oldest_event = self._parse_stream_entry(oldest_entries[0]) if oldest_entries else None
+        newest_event = newest[0] if newest else None
+        return {
+            "stream_name": stream_name,
+            "length": length,
+            "newest_stream_id": newest_event.get("stream_id") if newest_event else None,
+            "newest_occurred_at": newest_event.get("occurred_at") if newest_event else None,
+            "oldest_stream_id": oldest_event.get("stream_id") if oldest_event else None,
+            "oldest_occurred_at": oldest_event.get("occurred_at") if oldest_event else None,
+        }
+
     def _key(self, *parts: str) -> str:
         return ":".join([self.key_prefix, *parts])
 

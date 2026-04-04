@@ -244,6 +244,23 @@ paths:
         '503':
           description: Redis runtime unavailable
 
+  /api/v1/runtime/streams:
+    get:
+      tags: [Runtime]
+      summary: List Redis runtime stream summaries
+      operationId: listRuntimeStreams
+      responses:
+        '200':
+          description: Runtime stream summaries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeStreamSummaryListResponse'
+        '502':
+          description: Redis runtime read failed
+        '503':
+          description: Redis runtime unavailable
+
   /api/v1/bots/events:
     get:
       tags: [Bots]
@@ -2058,6 +2075,46 @@ components:
                   payload:
                     type: object
                     additionalProperties: true
+            count:
+              type: integer
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    RuntimeStreamSummaryListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  stream_name:
+                    type: string
+                  length:
+                    type: integer
+                  newest_stream_id:
+                    oneOf:
+                      - type: 'null'
+                      - type: string
+                  newest_occurred_at:
+                    oneOf:
+                      - type: 'null'
+                      - type: string
+                  oldest_stream_id:
+                    oneOf:
+                      - type: 'null'
+                      - type: string
+                  oldest_occurred_at:
+                    oneOf:
+                      - type: 'null'
+                      - type: string
             count:
               type: integer
         error:
