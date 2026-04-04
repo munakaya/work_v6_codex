@@ -36,6 +36,7 @@ def execute_persisted_arbitrage_intent(
 ) -> StrategyRuntimeExecutionOutcome:
     submit_result = submit_arbitrage_orders(
         store=store,
+        decision=decision,
         intent=intent,
         execution_mode=execution_mode,
         auto_unwind_on_failure=auto_unwind_on_failure,
@@ -49,6 +50,18 @@ def execute_persisted_arbitrage_intent(
                 "bot_id": order.get("bot_id"),
                 "exchange_name": order.get("exchange_name"),
                 "status": order.get("status"),
+            },
+            trace_id=trace_id,
+        )
+    for fill in submit_result.created_fills:
+        redis_runtime.publish_order_event(
+            event_type="fill.created",
+            payload={
+                "fill_id": fill.get("fill_id"),
+                "order_id": fill.get("order_id"),
+                "bot_id": fill.get("bot_id"),
+                "exchange_name": fill.get("exchange_name"),
+                "order_status": fill.get("order_status"),
             },
             trace_id=trace_id,
         )
@@ -68,15 +81,20 @@ def execute_persisted_arbitrage_intent(
         publish_event=True,
     )
 
-    if submit_result.outcome == "submitted":
+    if submit_result.outcome in {"submitted", "filled"}:
         redis_runtime.append_event(
             "strategy_events",
-            event_type="strategy.arbitrage_orders_submitted",
+            event_type=(
+                "strategy.arbitrage_fills_simulated"
+                if submit_result.outcome == "filled"
+                else "strategy.arbitrage_orders_submitted"
+            ),
             payload={
                 "run_id": run_id,
                 "bot_id": bot_id,
                 "intent_id": intent.get("intent_id"),
                 "order_count": len(submit_result.created_orders),
+                "fill_count": len(submit_result.created_fills),
                 "lifecycle_preview": submit_result.lifecycle_preview,
                 "source": "runtime_loop",
             },

@@ -290,4 +290,30 @@ def create_fill(
     )
     if row is None:
         raise RuntimeError("failed to create fill")
+    adapter.fetch_one(
+        """
+        with order_intent_target as (
+            select order_intent_id
+            from orders
+            where id = %s::uuid
+        ), aggregated as (
+            select
+                oi.id as order_intent_id,
+                count(o.id) filter (where o.id is not null) as order_count,
+                count(o.id) filter (where o.status::text = 'filled') as filled_count
+            from order_intents oi
+            join order_intent_target target on target.order_intent_id = oi.id
+            left join orders o on o.order_intent_id = oi.id
+            group by oi.id
+        )
+        update order_intents oi
+        set status = 'simulated'::order_intent_status
+        from aggregated
+        where oi.id = aggregated.order_intent_id
+          and aggregated.order_count > 0
+          and aggregated.order_count = aggregated.filled_count
+        returning oi.id::text as intent_id
+        """,
+        (order_uuid,),
+    )
     return "created", get_fill(adapter, str(row["fill_id"]))

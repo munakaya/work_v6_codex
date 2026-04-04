@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from ..storage.store_protocol import ControlPlaneStoreProtocol
+from .arbitrage_models import ArbitrageDecision
 from .arbitrage_state_machine import classify_submit_failure_transition
 
 
@@ -14,6 +16,7 @@ class ArbitrageSubmitResult:
     recovery_required: bool
     unwind_in_progress: bool
     created_orders: tuple[dict[str, object], ...] = ()
+    created_fills: tuple[dict[str, object], ...] = ()
     details: dict[str, object] = field(default_factory=dict)
 
     def as_payload(self) -> dict[str, object]:
@@ -30,6 +33,16 @@ class ArbitrageSubmitResult:
                     "status": item.get("status"),
                 }
                 for item in self.created_orders
+            ],
+            "created_fills": [
+                {
+                    "fill_id": item.get("fill_id"),
+                    "order_id": item.get("order_id"),
+                    "exchange_name": item.get("exchange_name"),
+                    "fill_qty": item.get("fill_qty"),
+                    "order_status": item.get("order_status"),
+                }
+                for item in self.created_fills
             ],
             "details": self.details,
         }
@@ -84,6 +97,7 @@ def _create_simulated_order(
 def submit_arbitrage_orders(
     *,
     store: ControlPlaneStoreProtocol,
+    decision: ArbitrageDecision,
     intent: dict[str, object],
     execution_mode: str,
     auto_unwind_on_failure: bool,
@@ -121,6 +135,52 @@ def submit_arbitrage_orders(
                 created_orders=tuple(created_orders),
             )
         created_orders.append(order)
+
+    if normalized_mode == "simulate_fill":
+        if decision.executable_edge is None:
+            return _submit_failure_result(
+                auto_unwind_allowed=auto_unwind_on_failure,
+                details={"mode": normalized_mode, "reason": "missing executable edge"},
+                created_orders=tuple(created_orders),
+            )
+        created_fills: list[dict[str, object]] = []
+        fill_specs = (
+            (created_orders[0], str(decision.executable_edge.buy_vwap)),
+            (created_orders[1], str(decision.executable_edge.sell_vwap)),
+        )
+        for index, (order, fill_price) in enumerate(fill_specs, start=1):
+            outcome, fill = store.create_fill(
+                order_id=str(order["order_id"]),
+                exchange_trade_id=f"sim-fill-{index}-{uuid4().hex[:10]}",
+                fill_price=fill_price,
+                fill_qty=str(order["requested_qty"]),
+                fee_asset=None,
+                fee_amount="0",
+                filled_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            )
+            if outcome != "created" or fill is None:
+                return _submit_failure_result(
+                    auto_unwind_allowed=auto_unwind_on_failure,
+                    details={
+                        "mode": normalized_mode,
+                        "failed_leg": str(order.get("side") or ""),
+                        "fill_outcome": outcome,
+                    },
+                    created_orders=tuple(created_orders),
+                )
+            created_fills.append(fill)
+        return ArbitrageSubmitResult(
+            outcome="filled",
+            lifecycle_preview="hedge_balanced",
+            recovery_required=False,
+            unwind_in_progress=False,
+            created_orders=tuple(created_orders),
+            created_fills=tuple(created_fills),
+            details={
+                "mode": normalized_mode,
+                "filled_leg_count": len(created_fills),
+            },
+        )
 
     return ArbitrageSubmitResult(
         outcome="submitted",

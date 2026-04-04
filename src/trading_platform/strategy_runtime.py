@@ -20,7 +20,7 @@ from .strategy_runtime_execution import execute_persisted_arbitrage_intent
 
 
 LOGGER = logging.getLogger(__name__)
-SUPPORTED_EXECUTION_MODES = {"simulate_success", "simulate_failure"}
+SUPPORTED_EXECUTION_MODES = {"simulate_success", "simulate_failure", "simulate_fill"}
 
 
 def _iso_now() -> str:

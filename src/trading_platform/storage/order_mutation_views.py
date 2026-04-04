@@ -174,6 +174,16 @@ def create_fill(
         "created_at": created_at,
     }
     fills.insert(0, fill)
-    if intent is not None and intent.get("status") == "created":
-        intent["status"] = "submitted"
+    if intent is not None:
+        if intent.get("status") == "created":
+            intent["status"] = "submitted"
+        related_orders = [
+            item
+            for item in orders.values()
+            if item.get("order_intent_id") == intent.get("intent_id")
+        ]
+        if related_orders and all(
+            str(item.get("status") or "") == "filled" for item in related_orders
+        ):
+            intent["status"] = "simulated"
     return "created", fill
