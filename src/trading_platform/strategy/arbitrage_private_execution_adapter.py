@@ -547,28 +547,40 @@ def _validate_response_submit_failed_payload(
     orders_payload: object,
     fills_payload: object,
 ) -> str | None:
-    if fills_payload is None:
-        return None
+    requested_qty_by_leg: dict[tuple[str, str], Decimal] = {}
+    filled_status_legs: set[tuple[str, str]] = set()
+    partially_filled_status_legs: set[tuple[str, str]] = set()
     if not isinstance(orders_payload, list) or not orders_payload:
+        if fills_payload is None:
+            return None
         return (
             "private execution submit_failed outcome must not include "
             "fills without orders"
         )
-    if not isinstance(fills_payload, list):
-        return "private execution fills must be a list"
-
-    requested_qty_by_leg: dict[tuple[str, str], Decimal] = {}
     for item in orders_payload:
         if not isinstance(item, dict):
             continue
         side = (_json_text(item.get("side")) or "").lower()
         exchange_name = _json_text(item.get("exchange_name")) or ""
         requested_qty = json_number_text(item.get("requested_qty"))
+        status = (_json_text(item.get("status")) or "submitted").strip().lower()
         if side not in {"buy", "sell"} or not exchange_name:
             continue
+        leg_key = (side, exchange_name)
         if requested_qty is None or not is_positive_number_text(requested_qty):
             continue
-        requested_qty_by_leg[(side, exchange_name)] = Decimal(requested_qty)
+        requested_qty_by_leg[leg_key] = Decimal(requested_qty)
+        if status == "filled":
+            filled_status_legs.add(leg_key)
+        elif status == "partially_filled":
+            partially_filled_status_legs.add(leg_key)
+
+    if fills_payload is None:
+        if filled_status_legs or partially_filled_status_legs:
+            return "private execution submit_failed outcome missing fills for filled orders"
+        return None
+    if not isinstance(fills_payload, list):
+        return "private execution fills must be a list"
 
     fill_qty_by_leg: dict[tuple[str, str], Decimal] = {}
     seen_trade_ids: set[tuple[str, str, str]] = set()
@@ -598,6 +610,13 @@ def _validate_response_submit_failed_payload(
         if next_fill_qty > requested_qty_by_leg[leg_key]:
             return "private execution fills exceed requested_qty"
         fill_qty_by_leg[leg_key] = next_fill_qty
+
+    for leg_key in sorted(filled_status_legs | partially_filled_status_legs):
+        if leg_key not in fill_qty_by_leg:
+            return "private execution submit_failed outcome missing fills for filled orders"
+    for leg_key in sorted(filled_status_legs):
+        if fill_qty_by_leg.get(leg_key) != requested_qty_by_leg.get(leg_key):
+            return "private execution submit_failed filled orders require full fill coverage"
     return None
 
 
