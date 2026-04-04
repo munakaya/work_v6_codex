@@ -171,6 +171,7 @@ def _create_orders_from_response(
     store: ControlPlaneStoreProtocol,
     intent: dict[str, object],
     orders_payload: object,
+    normalize_filled_status_for_persistence: bool = False,
 ) -> tuple[tuple[dict[str, object], ...], dict[tuple[str, str], dict[str, object]], str | None]:
     if not isinstance(orders_payload, list) or not orders_payload:
         return (), {}, "private execution response missing orders"
@@ -237,11 +238,16 @@ def _create_orders_from_response(
                 "requested_qty": requested_qty,
                 "requested_price": requested_price,
                 "exchange_order_id": exchange_order_id,
-                "status": status,
+                "status": (
+                    "submitted"
+                    if normalize_filled_status_for_persistence and status == "filled"
+                    else status
+                ),
                 "raw_payload": {
                     **raw_payload,
                     "submission_mode": "private_http",
                     "adapter_response_order_index": index,
+                    "adapter_response_status": status,
                 },
             }
         )
@@ -401,6 +407,16 @@ def _validate_response_fill_leg_coverage(
             "private execution filled outcome missing required fill legs: "
             + ", ".join(missing_legs)
         )
+    unexpected_legs = [
+        f"{side}:{exchange_name}"
+        for side, exchange_name in sorted(observed_legs)
+        if (side, exchange_name) not in expected_legs
+    ]
+    if unexpected_legs:
+        return (
+            "private execution filled outcome returned unexpected fill legs: "
+            + ", ".join(unexpected_legs)
+        )
     return None
 
 
@@ -446,6 +462,83 @@ def _validate_response_submitted_payload(
             "private execution submitted outcome returned terminal orders: "
             + ", ".join(terminal_orders)
         )
+    return None
+
+
+def _validate_response_filled_payload(
+    *,
+    intent: dict[str, object],
+    orders_payload: object,
+    fills_payload: object,
+) -> str | None:
+    if not isinstance(fills_payload, list) or not fills_payload:
+        return "private execution filled outcome missing fills"
+    fill_leg_error = _validate_response_fill_leg_coverage(
+        fills_payload=fills_payload,
+        intent=intent,
+    )
+    if fill_leg_error is not None:
+        return fill_leg_error
+    if not isinstance(orders_payload, list):
+        return None
+
+    requested_qty_by_leg: dict[tuple[str, str], Decimal] = {}
+    for item in orders_payload:
+        if not isinstance(item, dict):
+            continue
+        side = (_json_text(item.get("side")) or "").lower()
+        exchange_name = _json_text(item.get("exchange_name")) or ""
+        requested_qty = json_number_text(item.get("requested_qty"))
+        status = (_json_text(item.get("status")) or "submitted").strip().lower()
+        if side not in {"buy", "sell"} or not exchange_name:
+            continue
+        if status != "filled":
+            return (
+                "private execution filled outcome returned non-filled order statuses: "
+                f"{side}:{exchange_name}:{status}"
+            )
+        if requested_qty is None or not is_positive_number_text(requested_qty):
+            continue
+        requested_qty_by_leg[(side, exchange_name)] = Decimal(requested_qty)
+
+    fill_qty_by_leg: dict[tuple[str, str], Decimal] = {}
+    seen_trade_ids: set[tuple[str, str, str]] = set()
+    for item in fills_payload:
+        if not isinstance(item, dict):
+            continue
+        side = (_json_text(item.get("side")) or "").lower()
+        exchange_name = _json_text(item.get("exchange_name")) or ""
+        fill_qty = json_number_text(item.get("fill_qty"))
+        fill_price = json_number_text(item.get("fill_price"))
+        exchange_trade_id = _json_text(item.get("exchange_trade_id"))
+        if side not in {"buy", "sell"} or not exchange_name:
+            continue
+        if not fill_price or not fill_qty:
+            return "private execution fill missing fill_price or fill_qty"
+        if not is_positive_number_text(fill_price):
+            return "private execution fill_price must be a positive number"
+        if fill_qty is None or not is_positive_number_text(fill_qty):
+            return "private execution fill_qty must be a positive number"
+        leg_key = (side, exchange_name)
+        if exchange_trade_id is not None:
+            trade_key = (side, exchange_name, exchange_trade_id)
+            if trade_key in seen_trade_ids:
+                return "private execution response duplicated fill exchange_trade_id"
+            seen_trade_ids.add(trade_key)
+        next_fill_qty = fill_qty_by_leg.get(leg_key, Decimal("0")) + Decimal(fill_qty)
+        requested_qty = requested_qty_by_leg.get(leg_key)
+        if requested_qty is not None and next_fill_qty > requested_qty:
+            return "private execution fills exceed requested_qty"
+        fill_qty_by_leg[leg_key] = next_fill_qty
+
+    for leg_key, requested_qty in requested_qty_by_leg.items():
+        observed_fill_qty = fill_qty_by_leg.get(leg_key)
+        if observed_fill_qty is None or observed_fill_qty != requested_qty:
+            side, exchange_name = leg_key
+            return (
+                "private execution filled outcome fill coverage mismatches requested_qty: "
+                f"{side}:{exchange_name}"
+            )
     return None
 
 
@@ -621,6 +714,17 @@ class PrivateHttpArbitrageExecutionAdapter:
                 reason=f"private execution returned unsupported outcome: {outcome}",
                 details=_response_details(response_payload),
             )
+        lifecycle_preview = _json_text(response_payload.get("lifecycle_preview"))
+        lifecycle_error = _validate_lifecycle_preview(
+            outcome=outcome,
+            lifecycle_preview=lifecycle_preview,
+        )
+        if lifecycle_error is not None:
+            return _failure_result(
+                auto_unwind_on_failure=auto_unwind_on_failure,
+                reason=lifecycle_error,
+                details=_response_details(response_payload),
+            )
 
         if outcome == "submit_failed":
             orders_payload = response_payload.get("orders")
@@ -702,10 +806,23 @@ class PrivateHttpArbitrageExecutionAdapter:
                     reason=submitted_payload_error,
                     details=_response_details(response_payload),
                 )
+        if outcome == "filled":
+            filled_payload_error = _validate_response_filled_payload(
+                intent=intent,
+                orders_payload=response_payload.get("orders"),
+                fills_payload=response_payload.get("fills"),
+            )
+            if filled_payload_error is not None:
+                return _failure_result(
+                    auto_unwind_on_failure=auto_unwind_on_failure,
+                    reason=filled_payload_error,
+                    details=_response_details(response_payload),
+                )
         created_orders, order_index, order_error = _create_orders_from_response(
             store=store,
             intent=intent,
             orders_payload=response_payload.get("orders"),
+            normalize_filled_status_for_persistence=(outcome == "filled"),
         )
         if order_error is not None:
             return _failure_result(
@@ -726,18 +843,6 @@ class PrivateHttpArbitrageExecutionAdapter:
                 details=_response_details(response_payload),
                 created_orders=created_orders,
             )
-        if outcome == "filled":
-            fill_leg_payload_error = _validate_response_fill_leg_coverage(
-                fills_payload=response_payload.get("fills"),
-                intent=intent,
-            )
-            if fill_leg_payload_error is not None:
-                return _failure_result(
-                    auto_unwind_on_failure=auto_unwind_on_failure,
-                    reason=fill_leg_payload_error,
-                    details=_response_details(response_payload),
-                    created_orders=created_orders,
-                )
         created_fills, fill_error = _create_fills_from_response(
             store=store,
             order_index=order_index,
@@ -797,19 +902,6 @@ class PrivateHttpArbitrageExecutionAdapter:
                     created_orders=refreshed_orders,
                     created_fills=created_fills,
                 )
-        lifecycle_preview = _json_text(response_payload.get("lifecycle_preview"))
-        lifecycle_error = _validate_lifecycle_preview(
-            outcome=outcome,
-            lifecycle_preview=lifecycle_preview,
-        )
-        if lifecycle_error is not None:
-            return _failure_result(
-                auto_unwind_on_failure=auto_unwind_on_failure,
-                reason=lifecycle_error,
-                details=_response_details(response_payload),
-                created_orders=refreshed_orders,
-                created_fills=created_fills,
-            )
         if not lifecycle_preview:
             lifecycle_preview = "hedge_balanced" if outcome == "filled" else "entry_submitting"
         details = {"mode": "private_http", **_response_details(response_payload)}

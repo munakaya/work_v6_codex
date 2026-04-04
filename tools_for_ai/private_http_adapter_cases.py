@@ -97,6 +97,130 @@ def _build_response(path: str, body: dict[str, object]) -> dict[str, object]:
     target_qty = str(body.get("target_qty") or "0.2")
     buy_exchange = str(body.get("buy_exchange") or "")
     sell_exchange = str(body.get("sell_exchange") or "")
+    if path == "/filled-bad-preview":
+        return {
+            "outcome": "filled",
+            "lifecycle_preview": "entry_submitting",
+            "orders": [
+                {
+                    "exchange_name": buy_exchange,
+                    "exchange_order_id": "filled-preview-buy-001",
+                    "market": market,
+                    "side": "buy",
+                    "requested_qty": target_qty,
+                    "status": "filled",
+                },
+                {
+                    "exchange_name": sell_exchange,
+                    "exchange_order_id": "filled-preview-sell-001",
+                    "market": market,
+                    "side": "sell",
+                    "requested_qty": target_qty,
+                    "status": "filled",
+                },
+            ],
+            "fills": [
+                {
+                    "exchange_name": buy_exchange,
+                    "side": "buy",
+                    "exchange_trade_id": "filled-preview-buy-trade-001",
+                    "fill_price": "100000",
+                    "fill_qty": target_qty,
+                    "filled_at": _iso_now(),
+                },
+                {
+                    "exchange_name": sell_exchange,
+                    "side": "sell",
+                    "exchange_trade_id": "filled-preview-sell-trade-001",
+                    "fill_price": "100500",
+                    "fill_qty": target_qty,
+                    "filled_at": _iso_now(),
+                },
+            ],
+            "details": {"remote_mode": "filled-bad-preview"},
+        }
+    if path == "/filled-partial":
+        return {
+            "outcome": "filled",
+            "orders": [
+                {
+                    "exchange_name": buy_exchange,
+                    "exchange_order_id": "filled-partial-buy-001",
+                    "market": market,
+                    "side": "buy",
+                    "requested_qty": target_qty,
+                    "status": "filled",
+                },
+                {
+                    "exchange_name": sell_exchange,
+                    "exchange_order_id": "filled-partial-sell-001",
+                    "market": market,
+                    "side": "sell",
+                    "requested_qty": target_qty,
+                    "status": "filled",
+                },
+            ],
+            "fills": [
+                {
+                    "exchange_name": buy_exchange,
+                    "side": "buy",
+                    "exchange_trade_id": "filled-partial-buy-trade-001",
+                    "fill_price": "100000",
+                    "fill_qty": target_qty,
+                    "filled_at": _iso_now(),
+                }
+            ],
+            "details": {"remote_mode": "filled-partial"},
+        }
+    if path == "/filled-extra-fill-leg":
+        return {
+            "outcome": "filled",
+            "orders": [
+                {
+                    "exchange_name": buy_exchange,
+                    "exchange_order_id": "filled-extra-fill-buy-001",
+                    "market": market,
+                    "side": "buy",
+                    "requested_qty": target_qty,
+                    "status": "filled",
+                },
+                {
+                    "exchange_name": sell_exchange,
+                    "exchange_order_id": "filled-extra-fill-sell-001",
+                    "market": market,
+                    "side": "sell",
+                    "requested_qty": target_qty,
+                    "status": "filled",
+                },
+            ],
+            "fills": [
+                {
+                    "exchange_name": buy_exchange,
+                    "side": "buy",
+                    "exchange_trade_id": "filled-extra-fill-buy-trade-001",
+                    "fill_price": "100000",
+                    "fill_qty": target_qty,
+                    "filled_at": _iso_now(),
+                },
+                {
+                    "exchange_name": sell_exchange,
+                    "side": "sell",
+                    "exchange_trade_id": "filled-extra-fill-sell-trade-001",
+                    "fill_price": "100500",
+                    "fill_qty": target_qty,
+                    "filled_at": _iso_now(),
+                },
+                {
+                    "exchange_name": "coinone",
+                    "side": "buy",
+                    "exchange_trade_id": "filled-extra-fill-third-trade-001",
+                    "fill_price": "99950",
+                    "fill_qty": target_qty,
+                    "filled_at": _iso_now(),
+                },
+            ],
+            "details": {"remote_mode": "filled-extra-fill-leg"},
+        }
     if path == "/submitted-with-fill":
         return {
             "outcome": "submitted",
@@ -269,8 +393,95 @@ def main() -> None:
             "submitted-with-fill should not persist fills",
         )
 
+        store, _bot_id, run_id = _fresh_store("private-http-adapter-filled-bad-preview")
+        decision, intent = _load_decision_and_intent(store, run_id)
+        adapter = build_arbitrage_execution_adapter(
+            mode="private_http",
+            private_execution_url=f"{base_url}/filled-bad-preview",
+            private_execution_timeout_ms=3000,
+        )
+        submit_result = adapter.submit(
+            store=store,
+            decision=decision,
+            intent=intent,
+            auto_unwind_on_failure=False,
+        )
+        _assert(submit_result.outcome == "submit_failed", "filled-bad-preview should fail")
+        _assert(
+            str(submit_result.details.get("reason"))
+            == "private execution lifecycle_preview is inconsistent with outcome: filled:entry_submitting",
+            "filled-bad-preview reason mismatch",
+        )
+        _assert(
+            len(store.list_orders(strategy_run_id=run_id)) == 0,
+            "filled-bad-preview should not persist orders",
+        )
+        _assert(
+            len(store.list_fills(strategy_run_id=run_id)) == 0,
+            "filled-bad-preview should not persist fills",
+        )
+
+        store, _bot_id, run_id = _fresh_store("private-http-adapter-filled-partial")
+        decision, intent = _load_decision_and_intent(store, run_id)
+        adapter = build_arbitrage_execution_adapter(
+            mode="private_http",
+            private_execution_url=f"{base_url}/filled-partial",
+            private_execution_timeout_ms=3000,
+        )
+        submit_result = adapter.submit(
+            store=store,
+            decision=decision,
+            intent=intent,
+            auto_unwind_on_failure=False,
+        )
+        _assert(submit_result.outcome == "submit_failed", "filled-partial should fail")
+        _assert(
+            str(submit_result.details.get("reason"))
+            == "private execution filled outcome missing required fill legs: sell:upbit",
+            "filled-partial reason mismatch",
+        )
+        _assert(
+            len(store.list_orders(strategy_run_id=run_id)) == 0,
+            "filled-partial should not persist orders",
+        )
+        _assert(
+            len(store.list_fills(strategy_run_id=run_id)) == 0,
+            "filled-partial should not persist fills",
+        )
+
+        store, _bot_id, run_id = _fresh_store("private-http-adapter-filled-extra-fill-leg")
+        decision, intent = _load_decision_and_intent(store, run_id)
+        adapter = build_arbitrage_execution_adapter(
+            mode="private_http",
+            private_execution_url=f"{base_url}/filled-extra-fill-leg",
+            private_execution_timeout_ms=3000,
+        )
+        submit_result = adapter.submit(
+            store=store,
+            decision=decision,
+            intent=intent,
+            auto_unwind_on_failure=False,
+        )
+        _assert(submit_result.outcome == "submit_failed", "filled-extra-fill-leg should fail")
+        _assert(
+            str(submit_result.details.get("reason"))
+            == "private execution filled outcome returned unexpected fill legs: buy:coinone",
+            "filled-extra-fill-leg reason mismatch",
+        )
+        _assert(
+            len(store.list_orders(strategy_run_id=run_id)) == 0,
+            "filled-extra-fill-leg should not persist orders",
+        )
+        _assert(
+            len(store.list_fills(strategy_run_id=run_id)) == 0,
+            "filled-extra-fill-leg should not persist fills",
+        )
+
         print("PASS private_http adapter case existing_order_conflict")
         print("PASS private_http adapter case submitted_with_fill_no_persist")
+        print("PASS private_http adapter case filled_bad_preview_no_persist")
+        print("PASS private_http adapter case filled_partial_no_persist")
+        print("PASS private_http adapter case filled_extra_fill_leg_no_persist")
 
     _with_server(_run)
 

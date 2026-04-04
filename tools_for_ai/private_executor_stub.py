@@ -48,9 +48,14 @@ def _build_payload(*, mode: str, body: dict[str, object]) -> dict[str, object]:
             "orders": orders,
             "details": {"remote_mode": mode},
         }
+    filled_orders = [
+        {**order, "status": "filled"}
+        for order in orders
+    ]
     return {
         "outcome": "filled",
-        "orders": orders,
+        "lifecycle_preview": "closed",
+        "orders": filled_orders,
         "fills": [
             {
                 "exchange_name": buy_exchange,
