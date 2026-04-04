@@ -141,7 +141,8 @@ MVP 기본안:
 - residual exposure
 - reservation release
 
-실패 시 즉시 `unwind_required`.
+실패 시 즉시 `recovery_required`.
+자동 unwind 조건이 맞으면 다음 상태는 `unwind_in_progress`.
 
 
 ## 필요한 내부 함수

@@ -120,7 +120,8 @@ MVP 권장:
 - partial fill imbalance
 - exposure 한도 초과
 
-위 셋 중 하나면 즉시 `unwind_required`로 전이한다.
+위 셋 중 하나면 즉시 `recovery_required`로 전이한다.
+자동 복구 정책이 켜져 있으면 이후 `unwind_in_progress`로 이어진다.
 
 
 ## 추가로 필요한 reject code

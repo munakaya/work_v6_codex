@@ -128,7 +128,8 @@
   - submit 단계에서 한쪽 leg가 실패
 - 기대 결과:
   - decision record는 accept로 남음
-  - 이후 상태는 `unwind_required` 또는 recovery 경로로 전이
+  - 이후 상태는 최소 `recovery_required`로 전이
+  - 정책이 자동 복구를 허용하면 `unwind_in_progress`로 이어질 수 있음
 
 
 ## 권장 테스트 형식
