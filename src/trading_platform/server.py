@@ -116,6 +116,10 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
         if path == "/api/v1/strategy-runs":
             return HTTPStatus.OK, self._strategy_runs_response(query), False
 
+        if path == "/api/v1/strategy-runs/latest-evaluations":
+            status, payload = self._latest_strategy_evaluations_response(query)
+            return status, payload, False
+
         if path == "/api/v1/strategy-runs/events":
             status, payload = self._strategy_events_response(query)
             return status, payload, False

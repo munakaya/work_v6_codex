@@ -74,6 +74,52 @@ class ControlPlaneReadRouteMixin:
         )
         return self._response(data={"items": runs, "count": len(runs)})
 
+    def _latest_strategy_evaluations_response(
+        self, query: str
+    ) -> tuple[HTTPStatus, dict[str, object]]:
+        if not self.server.redis_runtime.info.enabled:
+            return (
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                self._response(
+                    error={
+                        "code": "REDIS_RUNTIME_UNAVAILABLE",
+                        "message": "redis runtime is not enabled",
+                    }
+                ),
+            )
+        params = parse_qs(query)
+        accepted_param = single_query_value(params, "accepted")
+        accepted = optional_bool(accepted_param)
+        if accepted_param is not None and accepted is None:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "accepted must be true or false",
+                    }
+                ),
+            )
+        evaluations = self.server.redis_runtime.list_arbitrage_evaluations(
+            limit=query_limit(params),
+            bot_id=single_query_value(params, "bot_id"),
+            accepted=accepted,
+            lifecycle_preview=single_query_value(params, "lifecycle_preview"),
+        )
+        if evaluations is None:
+            return (
+                HTTPStatus.BAD_GATEWAY,
+                self._response(
+                    error={
+                        "code": "REDIS_RUNTIME_READ_FAILED",
+                        "message": "failed to read latest strategy evaluations",
+                    }
+                ),
+            )
+        return HTTPStatus.OK, self._response(
+            data={"items": evaluations, "count": len(evaluations)}
+        )
+
     def _order_intents_response(self, query: str) -> dict[str, object]:
         params = parse_qs(query)
         intents = self.server.read_store.list_order_intents(

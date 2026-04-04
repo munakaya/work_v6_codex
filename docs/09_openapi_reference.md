@@ -614,6 +614,42 @@ paths:
         '503':
           description: Redis runtime unavailable
 
+  /api/v1/strategy-runs/latest-evaluations:
+    get:
+      tags: [StrategyRuns]
+      summary: List latest cached arbitrage evaluations
+      operationId: listLatestArbitrageEvaluations
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: bot_id
+          schema:
+            type: string
+        - in: query
+          name: accepted
+          schema:
+            type: boolean
+        - in: query
+          name: lifecycle_preview
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Latest cached evaluations by strategy run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluateArbitrageListResponse'
+        '400':
+          description: Invalid request
+        '502':
+          description: Redis runtime read failed
+        '503':
+          description: Redis runtime unavailable
+
   /api/v1/strategy-runs/{run_id}/stop:
     post:
       tags: [StrategyRuns]
@@ -1398,12 +1434,19 @@ components:
         data:
           type: object
           properties:
+            bot_id:
+              type: string
+            strategy_run_id:
+              type: string
             accepted:
               type: boolean
             reason_code:
               type: string
             lifecycle_preview:
               type: string
+            cached_at:
+              type: string
+              format: date-time
             decision_context:
               $ref: '#/components/schemas/StrategyDecisionContext'
             candidate_size:
@@ -1426,6 +1469,61 @@ components:
               oneOf:
                 - type: 'null'
                 - $ref: '#/components/schemas/OrderIntentDetail'
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    EvaluateArbitrageListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  bot_id:
+                    type: string
+                  strategy_run_id:
+                    type: string
+                  accepted:
+                    type: boolean
+                  reason_code:
+                    type: string
+                  lifecycle_preview:
+                    type: string
+                  cached_at:
+                    type: string
+                    format: date-time
+                  decision_context:
+                    $ref: '#/components/schemas/StrategyDecisionContext'
+                  candidate_size:
+                    oneOf:
+                      - type: 'null'
+                      - $ref: '#/components/schemas/EvaluateArbitrageCandidateSize'
+                  executable_edge:
+                    oneOf:
+                      - type: 'null'
+                      - $ref: '#/components/schemas/EvaluateArbitrageExecutableEdge'
+                  reservation_plan:
+                    oneOf:
+                      - type: 'null'
+                      - $ref: '#/components/schemas/EvaluateArbitrageReservationPlan'
+                  submit_failure_preview:
+                    oneOf:
+                      - type: 'null'
+                      - $ref: '#/components/schemas/EvaluateArbitrageSubmitFailurePreview'
+                  persisted_intent:
+                    oneOf:
+                      - type: 'null'
+                      - $ref: '#/components/schemas/OrderIntentDetail'
+            count:
+              type: integer
         error:
           oneOf:
             - type: 'null'

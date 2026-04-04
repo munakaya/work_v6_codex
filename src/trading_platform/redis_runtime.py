@@ -17,6 +17,18 @@ def _iso_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
+def _parse_iso_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
 @dataclass(frozen=True)
 class RedisRuntimeInfo:
     configured: bool
@@ -174,16 +186,21 @@ class RedisRuntime:
         payload: dict[str, Any],
         trace_id: str | None = None,
     ) -> None:
-        if not self.set_json(["strategy_run", run_id, "latest_evaluation"], payload):
+        payload_to_store = {
+            **payload,
+            "strategy_run_id": run_id,
+            "cached_at": _iso_now(),
+        }
+        if not self.set_json(["strategy_run", run_id, "latest_evaluation"], payload_to_store):
             return
         self.append_event(
             "strategy_events",
             event_type="strategy.arbitrage_latest_evaluation.updated",
             payload={
                 "run_id": run_id,
-                "accepted": payload.get("accepted"),
-                "reason_code": payload.get("reason_code"),
-                "lifecycle_preview": payload.get("lifecycle_preview"),
+                "accepted": payload_to_store.get("accepted"),
+                "reason_code": payload_to_store.get("reason_code"),
+                "lifecycle_preview": payload_to_store.get("lifecycle_preview"),
             },
             trace_id=trace_id,
         )
@@ -233,6 +250,43 @@ class RedisRuntime:
 
     def get_arbitrage_evaluation(self, *, run_id: str) -> dict[str, Any] | None:
         return self.get_json(["strategy_run", run_id, "latest_evaluation"])
+
+    def list_arbitrage_evaluations(
+        self,
+        *,
+        limit: int = 20,
+        bot_id: str | None = None,
+        accepted: bool | None = None,
+        lifecycle_preview: str | None = None,
+    ) -> list[dict[str, Any]] | None:
+        key_prefix = self._key("strategy_run") + ":"
+        keys = self._scan_keys(self._key("strategy_run", "*", "latest_evaluation"))
+        if keys is None:
+            return None
+        normalized_lifecycle = (lifecycle_preview or "").strip()
+        evaluations: list[dict[str, Any]] = []
+        for key in keys:
+            if not key.startswith(key_prefix):
+                continue
+            payload = self._get_json_by_full_key(key)
+            if payload is None:
+                continue
+            if bot_id and str(payload.get("bot_id") or "") != bot_id:
+                continue
+            if accepted is not None:
+                payload_accepted = payload.get("accepted")
+                if not isinstance(payload_accepted, bool):
+                    continue
+                if payload_accepted is not accepted:
+                    continue
+            if normalized_lifecycle and str(payload.get("lifecycle_preview") or "") != normalized_lifecycle:
+                continue
+            evaluations.append(payload)
+        evaluations.sort(
+            key=lambda item: _parse_iso_datetime(item.get("cached_at")) or datetime.fromtimestamp(0, UTC),
+            reverse=True,
+        )
+        return evaluations[: max(1, min(limit, 100))]
 
     def list_market_orderbook_tops(
         self,

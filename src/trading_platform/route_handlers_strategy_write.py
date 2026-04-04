@@ -127,6 +127,8 @@ class ControlPlaneStrategyWriteRouteMixin:
             manual_handoff=False,
         )
         response_data = {
+            "bot_id": str(run.get("bot_id")),
+            "strategy_run_id": run_id,
             "accepted": decision.accepted,
             "reason_code": decision.reason_code,
             "lifecycle_preview": lifecycle_preview,

@@ -211,6 +211,8 @@
 
 응답 핵심 필드:
 
+- `bot_id`
+- `strategy_run_id`
 - `accepted`
 - `reason_code`
 - `lifecycle_preview`
@@ -228,6 +230,34 @@
 - 성공 시 `strategy.arbitrage_evaluated` event를 남긴다
 - `persist_intent=true`로 저장되면 `strategy.arbitrage_intent_persisted` event를 추가로 남긴다
 
+#### `GET /api/v1/strategy-runs/latest-evaluations`
+
+목적:
+
+- Redis runtime에 저장된 최신 arbitrage 평가 snapshot을 run 기준으로 모아 조회
+
+필터:
+
+- `limit`
+- `bot_id`
+- `accepted`
+- `lifecycle_preview`
+
+응답 핵심 필드:
+
+- `bot_id`
+- `strategy_run_id`
+- `accepted`
+- `reason_code`
+- `lifecycle_preview`
+- `cached_at`
+
+주의:
+
+- Redis runtime이 꺼져 있으면 `REDIS_RUNTIME_UNAVAILABLE`
+- Redis read 실패 시 `REDIS_RUNTIME_READ_FAILED`
+- `accepted`는 `true|false`만 허용
+
 #### `GET /api/v1/strategy-runs/{run_id}/latest-evaluation`
 
 목적:
@@ -236,10 +266,13 @@
 
 응답 핵심 필드:
 
+- `bot_id`
+- `strategy_run_id`
 - `accepted`
 - `reason_code`
 - `lifecycle_preview`
 - `decision_context`
+- `cached_at`
 - `persisted_intent` optional
 
 주의:
@@ -444,6 +477,7 @@
 - `GET /api/v1/strategy-runs`
 - `GET /api/v1/strategy-runs/events`
 - `GET /api/v1/strategy-runs/{run_id}`
+- `GET /api/v1/strategy-runs/latest-evaluations`
 - `GET /api/v1/strategy-runs/{run_id}/latest-evaluation`
 - `POST /api/v1/strategy-runs/{run_id}/evaluate-arbitrage`
 - `POST /api/v1/strategy-runs/{run_id}/start`
