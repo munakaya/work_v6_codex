@@ -306,6 +306,12 @@ class RedisRuntime:
             oldest_entries = parsed
         oldest_event = self._parse_stream_entry(oldest_entries[0]) if oldest_entries else None
         newest_event = newest[0] if newest else None
+        if length == 0 and (newest_event is not None or oldest_event is not None):
+            length = 1
+        if newest_event is None and oldest_event is not None:
+            newest_event = oldest_event
+        if oldest_event is None and newest_event is not None:
+            oldest_event = newest_event
         return {
             "stream_name": stream_name,
             "length": length,

@@ -249,6 +249,15 @@ paths:
       tags: [Runtime]
       summary: List Redis runtime stream summaries
       operationId: listRuntimeStreams
+      parameters:
+        - in: query
+          name: stream_name
+          schema:
+            type: string
+        - in: query
+          name: include_empty
+          schema:
+            type: boolean
       responses:
         '200':
           description: Runtime stream summaries

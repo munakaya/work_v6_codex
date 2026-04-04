@@ -103,7 +103,7 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
             return HTTPStatus.OK, payload, True
 
         if path == "/api/v1/runtime/streams":
-            status, payload = self._runtime_streams_response()
+            status, payload = self._runtime_streams_response(query)
             return status, payload, False
 
         if path == "/api/v1/bots":

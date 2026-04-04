@@ -590,6 +590,11 @@
 
 - Redis runtime stream의 현재 길이와 oldest/newest 경계를 한 번에 확인
 
+쿼리:
+
+- `stream_name`: 선택. `market_events`, `bot_events`, `strategy_events`, `order_events`, `alert_events` 중 하나
+- `include_empty`: 선택. 기본 `true`, `false`면 길이가 0인 stream은 제외
+
 응답 핵심 필드:
 
 - `stream_name`
