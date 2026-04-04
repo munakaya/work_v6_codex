@@ -1534,6 +1534,18 @@ components:
               type: integer
             rejected_count:
               type: integer
+            unique_bot_count:
+              type: integer
+            newest_cached_at:
+              oneOf:
+                - type: 'null'
+                - type: string
+                  format: date-time
+            oldest_cached_at:
+              oneOf:
+                - type: 'null'
+                - type: string
+                  format: date-time
             reason_code_counts:
               type: object
               additionalProperties:

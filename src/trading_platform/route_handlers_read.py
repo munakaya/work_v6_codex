@@ -16,12 +16,16 @@ class ControlPlaneReadRouteMixin:
         rejected_count = 0
         reason_counts: Counter[str] = Counter()
         lifecycle_counts: Counter[str] = Counter()
+        bot_ids: set[str] = set()
         for item in evaluations:
             accepted = item.get("accepted")
             if accepted is True:
                 accepted_count += 1
             elif accepted is False:
                 rejected_count += 1
+            bot_id = str(item.get("bot_id") or "").strip()
+            if bot_id:
+                bot_ids.add(bot_id)
             reason_code = str(item.get("reason_code") or "").strip()
             if reason_code:
                 reason_counts[reason_code] += 1
@@ -31,6 +35,13 @@ class ControlPlaneReadRouteMixin:
         return {
             "accepted_count": accepted_count,
             "rejected_count": rejected_count,
+            "unique_bot_count": len(bot_ids),
+            "newest_cached_at": (
+                str(evaluations[0].get("cached_at")) if evaluations else None
+            ),
+            "oldest_cached_at": (
+                str(evaluations[-1].get("cached_at")) if evaluations else None
+            ),
             "reason_code_counts": dict(reason_counts),
             "lifecycle_preview_counts": dict(lifecycle_counts),
         }

@@ -256,6 +256,9 @@
 - `matched_count`
 - `accepted_count`
 - `rejected_count`
+- `unique_bot_count`
+- `newest_cached_at`
+- `oldest_cached_at`
 - `reason_code_counts`
 - `lifecycle_preview_counts`
 
