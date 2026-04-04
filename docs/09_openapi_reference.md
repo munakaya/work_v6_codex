@@ -28,6 +28,7 @@ servers:
 tags:
   - name: Health
   - name: MarketData
+  - name: Recovery
   - name: Bots
   - name: Configs
   - name: StrategyRuns
@@ -63,6 +64,139 @@ paths:
                 $ref: '#/components/schemas/ReadyResponse'
         '503':
           description: Dependency unavailable
+
+  /api/v1/recovery-traces:
+    get:
+      tags: [Recovery]
+      summary: List recovery traces
+      operationId: listRecoveryTraces
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: bot_id
+          schema:
+            type: string
+        - in: query
+          name: run_id
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: lifecycle_state
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recovery trace list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryTraceListResponse'
+        '502':
+          description: Redis runtime read failed
+        '503':
+          description: Redis runtime unavailable
+
+  /api/v1/recovery-traces/{recovery_trace_id}:
+    get:
+      tags: [Recovery]
+      summary: Get recovery trace
+      operationId: getRecoveryTrace
+      parameters:
+        - in: path
+          name: recovery_trace_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recovery trace detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryTraceResponse'
+        '404':
+          description: Recovery trace not found
+        '503':
+          description: Redis runtime unavailable
+
+  /api/v1/recovery-traces/{recovery_trace_id}/resolve:
+    post:
+      tags: [Recovery]
+      summary: Resolve recovery trace
+      operationId: resolveRecoveryTrace
+      parameters:
+        - in: path
+          name: recovery_trace_id
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: X-Trace-Id
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryTraceActionRequest'
+      responses:
+        '200':
+          description: Recovery trace resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryTraceResponse'
+        '404':
+          description: Recovery trace not found
+        '409':
+          description: Recovery trace already terminal or residual exposure remains
+        '503':
+          description: Redis runtime unavailable
+
+  /api/v1/recovery-traces/{recovery_trace_id}/handoff:
+    post:
+      tags: [Recovery]
+      summary: Mark recovery trace as manual handoff
+      operationId: handoffRecoveryTrace
+      parameters:
+        - in: path
+          name: recovery_trace_id
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: X-Trace-Id
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryTraceActionRequest'
+      responses:
+        '200':
+          description: Recovery trace marked as handoff required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryTraceResponse'
+        '404':
+          description: Recovery trace not found
+        '409':
+          description: Recovery trace already terminal
+        '503':
+          description: Redis runtime unavailable
 
   /api/v1/market-data/orderbook-top:
     get:
@@ -2250,6 +2384,116 @@ components:
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/ApiError'
+
+    RecoveryTraceSummary:
+      type: object
+      properties:
+        recovery_trace_id:
+          type: string
+        run_id:
+          type: string
+        bot_id:
+          type: string
+        intent_id:
+          oneOf:
+            - type: 'null'
+            - type: string
+        status:
+          type: string
+        lifecycle_state:
+          type: string
+        incident_code:
+          oneOf:
+            - type: 'null'
+            - type: string
+        reason_code:
+          oneOf:
+            - type: 'null'
+            - type: string
+        manual_handoff_required:
+          type: boolean
+        residual_exposure_quote:
+          oneOf:
+            - type: 'null'
+            - type: string
+        created_at:
+          oneOf:
+            - type: 'null'
+            - type: string
+              format: date-time
+        updated_at:
+          oneOf:
+            - type: 'null'
+            - type: string
+              format: date-time
+        closed_at:
+          oneOf:
+            - type: 'null'
+            - type: string
+              format: date-time
+        resolution_reason:
+          oneOf:
+            - type: 'null'
+            - type: string
+        handoff_reason:
+          oneOf:
+            - type: 'null'
+            - type: string
+        verified_by:
+          oneOf:
+            - type: 'null'
+            - type: string
+        summary:
+          oneOf:
+            - type: 'null'
+            - type: string
+
+    RecoveryTraceResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/RecoveryTraceSummary'
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    RecoveryTraceListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/RecoveryTraceSummary'
+            count:
+              type: integer
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    RecoveryTraceActionRequest:
+      type: object
+      properties:
+        resolution_reason:
+          type: string
+        residual_exposure_quote:
+          type: string
+        handoff_reason:
+          type: string
+        verified_by:
+          type: string
+        summary:
+          type: string
+        operator_context:
+          type: object
 
     MarketOrderbookTopResponse:
       type: object

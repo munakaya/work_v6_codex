@@ -93,6 +93,32 @@
 
 - recovery trace 단건 상세 조회
 
+#### `POST /api/v1/recovery-traces/{recovery_trace_id}/resolve`
+
+목적:
+
+- operator가 recovery trace를 `resolved`로 종료
+
+요청 핵심 필드:
+
+- `resolution_reason`
+- `residual_exposure_quote` (`0`일 때만 resolve 허용)
+- `verified_by`
+- `summary`
+
+#### `POST /api/v1/recovery-traces/{recovery_trace_id}/handoff`
+
+목적:
+
+- operator가 recovery trace를 `manual_handoff` 상태로 승격
+
+요청 핵심 필드:
+
+- `handoff_reason`
+- `verified_by`
+- `summary`
+- `operator_context`
+
 #### `POST /api/v1/bots/register`
 
 목적:

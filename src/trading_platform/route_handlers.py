@@ -8,6 +8,7 @@ from .route_handlers_market_read import ControlPlaneMarketReadRouteMixin
 from .route_handlers_market_write import ControlPlaneMarketWriteRouteMixin
 from .route_handlers_order_write import ControlPlaneOrderWriteRouteMixin
 from .route_handlers_recovery_read import ControlPlaneRecoveryReadRouteMixin
+from .route_handlers_recovery_write import ControlPlaneRecoveryWriteRouteMixin
 from .route_handlers_redis import ControlPlaneRedisRouteMixin
 from .route_handlers_read import ControlPlaneReadRouteMixin
 from .route_handlers_runtime_read import ControlPlaneRuntimeReadRouteMixin
@@ -19,6 +20,7 @@ from .route_handlers_write import ControlPlaneWriteRouteMixin
 class ControlPlaneRouteMixin(
     ControlPlaneRedisRouteMixin,
     ControlPlaneRecoveryReadRouteMixin,
+    ControlPlaneRecoveryWriteRouteMixin,
     ControlPlaneMarketReadRouteMixin,
     ControlPlaneRuntimeReadRouteMixin,
     ControlPlaneStreamReadRouteMixin,

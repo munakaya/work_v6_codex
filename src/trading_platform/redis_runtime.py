@@ -72,6 +72,9 @@ class RedisRuntime:
             return "redis_cli_missing"
         return "enabled"
 
+    def now_iso(self) -> str:
+        return _iso_now()
+
     def set_json(
         self, key_parts: list[str], payload: dict[str, Any], ttl_seconds: int | None = None
     ) -> bool:
@@ -247,6 +250,48 @@ class RedisRuntime:
 
     def get_recovery_trace(self, *, recovery_trace_id: str) -> dict[str, Any] | None:
         return self.get_json(["recovery_trace", recovery_trace_id])
+
+    def transition_recovery_trace(
+        self,
+        *,
+        recovery_trace_id: str,
+        status: str,
+        lifecycle_state: str,
+        patch: dict[str, Any] | None = None,
+        trace_id: str | None = None,
+        event_type: str | None = None,
+    ) -> dict[str, Any] | None:
+        current = self.get_recovery_trace(recovery_trace_id=recovery_trace_id)
+        if current is None:
+            return None
+        current_status = str(current.get("status") or "").strip().lower()
+        if current_status in {"resolved", "cancelled"}:
+            return {**current, "_conflict": "terminal"}
+        payload = {
+            **current,
+            "status": status,
+            "lifecycle_state": lifecycle_state,
+            **(patch or {}),
+        }
+        self.sync_recovery_trace(
+            recovery_trace_id=recovery_trace_id,
+            payload=payload,
+            trace_id=trace_id,
+        )
+        if event_type:
+            self.append_event(
+                "strategy_events",
+                event_type=event_type,
+                payload={
+                    "recovery_trace_id": recovery_trace_id,
+                    "run_id": payload.get("run_id"),
+                    "bot_id": payload.get("bot_id"),
+                    "status": payload.get("status"),
+                    "lifecycle_state": payload.get("lifecycle_state"),
+                },
+                trace_id=trace_id,
+            )
+        return self.get_recovery_trace(recovery_trace_id=recovery_trace_id)
 
     def list_recovery_traces(
         self,
