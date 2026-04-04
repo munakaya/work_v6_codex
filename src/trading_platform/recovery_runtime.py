@@ -871,6 +871,20 @@ class RecoveryRuntime:
                 )
         if reconciliation_open_order_count is None or reconciliation_open_order_count < 0:
             return None
+        if reconciliation_open_order_count == 0 and observed_order_statuses:
+            nonterminal_statuses = sorted(
+                {
+                    str(status["status"]).strip().lower()
+                    for status in observed_order_statuses
+                    if str(status["status"]).strip().lower() not in TERMINAL_ORDER_STATUSES
+                }
+            )
+            if nonterminal_statuses:
+                return (
+                    "reconciliation_zero_open_orders_status_conflict",
+                    "reconciliation reports no open orders but observed order statuses are non-terminal: "
+                    + ", ".join(nonterminal_statuses),
+                )
         if reconciliation_residual is None:
             return None
         if reconciliation_open_order_count == 0 and reconciliation_residual > Decimal("0"):

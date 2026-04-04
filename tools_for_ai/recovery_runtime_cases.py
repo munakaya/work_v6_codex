@@ -2116,6 +2116,46 @@ def main() -> None:
         "terminal success status handoff reason mismatch",
     )
 
+    zero_open_orders_status_conflict_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=zero_open_orders_status_conflict_trace_id,
+        payload={
+            "recovery_trace_id": zero_open_orders_status_conflict_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "mismatch",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_mismatch_streak": 1,
+            "reconciliation_observed_order_statuses": [
+                {"order_id": "ord-submitted-1", "status": "submitted"}
+            ],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+    )
+    runtime.run_once()
+    zero_open_orders_status_conflict_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=zero_open_orders_status_conflict_trace_id
+    )
+    _assert(
+        zero_open_orders_status_conflict_trace is not None,
+        "zero open orders status conflict trace missing",
+    )
+    _assert(
+        zero_open_orders_status_conflict_trace.get("status") == "handoff_required",
+        "zero open orders with non-terminal statuses should trigger manual handoff",
+    )
+    _assert(
+        zero_open_orders_status_conflict_trace.get("handoff_reason")
+        == "reconciliation_zero_open_orders_status_conflict",
+        "zero open orders status conflict handoff reason mismatch",
+    )
+
     print("PASS recovery runtime resolves zero-exposure traces")
     print("PASS recovery runtime resolves terminal intents without active orders")
     print("PASS recovery runtime opens submit-timeout recovery traces")
