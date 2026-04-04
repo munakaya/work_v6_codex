@@ -109,6 +109,11 @@
 - shadow diff 지표 요약
   - `reservation_mismatch`, `target_qty_bucket_mismatch`가 있으면 `time_window`, `top_reason`, `affected_bot_ids`, `suggested_action` 포함
 - recovery/unwind 사례 요약
+  - `strategy_run_id`
+  - `lifecycle_state`
+  - `residual_exposure_quote`
+  - `action_taken`
+  - `result`
 - stop command 확인 결과
   - `bot_id`
   - `stop_requested_at`

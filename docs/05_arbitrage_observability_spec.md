@@ -163,6 +163,8 @@
 - reject code 분포
 - P0 invariant violation 건수
 - recovery_required / unwind_in_progress 사례 수
+- 최근 recovery/unwind 사례
+  - `strategy_run_id`, `lifecycle_state`, `residual_exposure_quote`, `action_taken`, `result`
 - stale alert / connector degraded / reconciliation mismatch 건수와 `top_reason`
 - stop command 반영 시간
   - `stop_requested_at` 이후 `accept_after_stop_count`, `order_intent_after_stop_count`
