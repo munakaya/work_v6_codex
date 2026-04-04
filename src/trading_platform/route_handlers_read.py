@@ -3,6 +3,7 @@ from __future__ import annotations
 from http import HTTPStatus
 from urllib.parse import parse_qs
 
+from .market_data_connector import MarketDataError
 from .request_utils import optional_bool, query_limit, single_query_value
 from .storage.dependencies import postgres_status, redis_status
 
@@ -114,6 +115,28 @@ class ControlPlaneReadRouteMixin:
             created_to=single_query_value(params, "to"),
         )
         return self._response(data={"items": fills, "count": len(fills)})
+
+    def _market_orderbook_top_response(self, query: str) -> tuple[HTTPStatus, dict[str, object]]:
+        params = parse_qs(query)
+        exchange = single_query_value(params, "exchange")
+        market = single_query_value(params, "market")
+        try:
+            snapshot = self.server.market_data_connector.get_orderbook_top(
+                exchange=exchange or "",
+                market=market or "",
+            )
+        except MarketDataError as exc:
+            return (
+                exc.status,
+                self._response(error={"code": exc.code, "message": exc.message}),
+            )
+        self.server.metrics.observe_orderbook_snapshot(
+            exchange=str(snapshot["exchange"]),
+            market=str(snapshot["market"]),
+            age_ms=int(snapshot["exchange_age_ms"]),
+            stale=bool(snapshot["stale"]),
+        )
+        return HTTPStatus.OK, self._response(data=snapshot)
 
     def _match_latest_config(
         self, path: str

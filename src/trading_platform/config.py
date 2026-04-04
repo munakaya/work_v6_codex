@@ -34,6 +34,9 @@ class AppConfig:
     postgres_dsn: str | None
     redis_url: str | None
     redis_key_prefix: str
+    market_data_timeout_ms: int
+    market_data_stale_threshold_ms: int
+    upbit_quotation_base_url: str
     use_sample_read_model: bool
     enable_postgres_mutation: bool
 
@@ -59,6 +62,11 @@ def load_config() -> AppConfig:
         postgres_dsn=os.getenv("TP_POSTGRES_DSN"),
         redis_url=os.getenv("TP_REDIS_URL"),
         redis_key_prefix=os.getenv("TP_REDIS_KEY_PREFIX", "tp"),
+        market_data_timeout_ms=_env_int("TP_MARKET_DATA_TIMEOUT_MS", 3000),
+        market_data_stale_threshold_ms=_env_int("TP_MARKET_DATA_STALE_THRESHOLD_MS", 3000),
+        upbit_quotation_base_url=os.getenv(
+            "TP_UPBIT_QUOTATION_BASE_URL", "https://api.upbit.com"
+        ),
         use_sample_read_model=_env_bool("TP_USE_SAMPLE_READ_MODEL", True),
         enable_postgres_mutation=_env_bool("TP_ENABLE_POSTGRES_MUTATION", False),
     )

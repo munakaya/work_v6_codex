@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .config import AppConfig
+from .market_data_connector import PublicMarketDataConnector
 from .observability import AlertHookNotifier, MetricsRegistry
 from .redis_runtime import RedisRuntime
 from .route_handlers import ControlPlaneRouteMixin
@@ -31,6 +32,7 @@ class ControlPlaneServer(ThreadingHTTPServer):
         metrics: MetricsRegistry,
         alert_hook: AlertHookNotifier,
         redis_runtime: RedisRuntime,
+        market_data_connector: PublicMarketDataConnector,
     ):
         super().__init__(server_address, ControlPlaneRequestHandler)
         self.config = config
@@ -39,6 +41,7 @@ class ControlPlaneServer(ThreadingHTTPServer):
         self.metrics = metrics
         self.alert_hook = alert_hook
         self.redis_runtime = redis_runtime
+        self.market_data_connector = market_data_connector
 
 
 class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler):
@@ -114,6 +117,10 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
         if path == "/api/v1/alerts":
             return HTTPStatus.OK, self._alerts_response(query), False
 
+        if path == "/api/v1/market-data/orderbook-top":
+            status, payload = self._market_orderbook_top_response(query)
+            return status, payload, False
+
         for resolver in (
             lambda: self._match_latest_config(path),
             lambda: self._match_config_versions(path),
@@ -180,4 +187,9 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         MetricsRegistry(),
         AlertHookNotifier(config.alert_hook_path, config.service_name),
         RedisRuntime(config.redis_url, config.redis_key_prefix, config.service_name),
+        PublicMarketDataConnector(
+            timeout_ms=config.market_data_timeout_ms,
+            stale_threshold_ms=config.market_data_stale_threshold_ms,
+            upbit_base_url=config.upbit_quotation_base_url,
+        ),
     )

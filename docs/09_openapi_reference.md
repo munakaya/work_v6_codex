@@ -27,6 +27,7 @@ servers:
 
 tags:
   - name: Health
+  - name: MarketData
   - name: Bots
   - name: Configs
   - name: StrategyRuns
@@ -62,6 +63,38 @@ paths:
                 $ref: '#/components/schemas/ReadyResponse'
         '503':
           description: Dependency unavailable
+
+  /api/v1/market-data/orderbook-top:
+    get:
+      tags: [MarketData]
+      summary: Get public orderbook top
+      operationId: getOrderbookTop
+      parameters:
+        - in: query
+          name: exchange
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: market
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Latest orderbook top snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketOrderbookTopResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Market not found
+        '502':
+          description: Upstream provider error
+        '503':
+          description: Upstream rate limited
 
   /api/v1/bots/register:
     post:
@@ -1289,6 +1322,43 @@ components:
                       oneOf:
                         - type: 'null'
                         - type: integer
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    MarketOrderbookTopResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            exchange:
+              type: string
+            market:
+              type: string
+            best_bid:
+              type: string
+            best_ask:
+              type: string
+            bid_volume:
+              type: string
+            ask_volume:
+              type: string
+            exchange_timestamp:
+              type: string
+              format: date-time
+            received_at:
+              type: string
+              format: date-time
+            exchange_age_ms:
+              type: integer
+            stale:
+              type: boolean
+            source_type:
+              type: string
         error:
           oneOf:
             - type: 'null'

@@ -334,6 +334,10 @@
 - `GET /api/v1/health`
 - `GET /api/v1/ready`
 
+#### Public Market Data
+
+- `GET /api/v1/market-data/orderbook-top`
+
 #### Bots
 
 - `POST /api/v1/bots/register`
@@ -421,6 +425,35 @@
   "context": {
     "orderbook_stale_count": 0
   }
+}
+```
+
+#### `GET /api/v1/market-data/orderbook-top`
+
+쿼리:
+
+- `exchange`: 현재 `upbit`, `sample` 지원
+- `market`: 예시 `KRW-BTC`
+
+응답:
+
+```json
+{
+  "success": true,
+  "data": {
+    "exchange": "upbit",
+    "market": "KRW-BTC",
+    "best_bid": "101574000",
+    "best_ask": "101598000",
+    "bid_volume": "0.00035401",
+    "ask_volume": "0.00623162",
+    "exchange_timestamp": "2026-04-04T01:19:53.387000Z",
+    "received_at": "2026-04-04T01:19:53.512000Z",
+    "exchange_age_ms": 125,
+    "stale": false,
+    "source_type": "rest"
+  },
+  "error": null
 }
 ```
 

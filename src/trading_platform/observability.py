@@ -55,6 +55,9 @@ class MetricsRegistry:
         self._http_duration_sum: dict[str, float] = defaultdict(float)
         self._alerts_emitted: dict[str, int] = defaultdict(int)
         self._alerts_acknowledged = 0
+        self._market_orderbook_updates: dict[str, int] = defaultdict(int)
+        self._market_orderbook_stale: dict[str, int] = defaultdict(int)
+        self._market_orderbook_age_ms: dict[tuple[str, str], int] = {}
 
     def observe_request(self, method: str, status_code: int, duration_seconds: float) -> None:
         status = str(status_code)
@@ -71,6 +74,15 @@ class MetricsRegistry:
         with self._lock:
             self._alerts_acknowledged += 1
 
+    def observe_orderbook_snapshot(
+        self, *, exchange: str, market: str, age_ms: int, stale: bool
+    ) -> None:
+        with self._lock:
+            self._market_orderbook_updates[exchange] += 1
+            self._market_orderbook_age_ms[(exchange, market)] = age_ms
+            if stale:
+                self._market_orderbook_stale[exchange] += 1
+
     def render(self, read_store: ControlPlaneStoreProtocol) -> str:
         lines = [
             "# HELP control_plane_http_requests_total Total HTTP requests handled by control-plane.",
@@ -83,6 +95,9 @@ class MetricsRegistry:
             duration_sum = dict(self._http_duration_sum)
             alerts_emitted = dict(self._alerts_emitted)
             alerts_acknowledged = self._alerts_acknowledged
+            market_orderbook_updates = dict(self._market_orderbook_updates)
+            market_orderbook_stale = dict(self._market_orderbook_stale)
+            market_orderbook_age_ms = dict(self._market_orderbook_age_ms)
 
         for (method, status), value in request_items:
             lines.append(
@@ -128,8 +143,39 @@ class MetricsRegistry:
                 "# HELP alerts_acknowledged_total Alert events acknowledged by operators.",
                 "# TYPE alerts_acknowledged_total counter",
                 f"alerts_acknowledged_total {alerts_acknowledged}",
+                "# HELP market_orderbook_updates_total Market orderbook snapshots fetched by exchange.",
+                "# TYPE market_orderbook_updates_total counter",
             ]
         )
+        for exchange in sorted(market_orderbook_updates):
+            lines.append(
+                'market_orderbook_updates_total{exchange="%s"} %s'
+                % (exchange, market_orderbook_updates[exchange])
+            )
+
+        lines.extend(
+            [
+                "# HELP market_orderbook_stale_total Stale market orderbook snapshots by exchange.",
+                "# TYPE market_orderbook_stale_total counter",
+            ]
+        )
+        for exchange in sorted(market_orderbook_stale):
+            lines.append(
+                'market_orderbook_stale_total{exchange="%s"} %s'
+                % (exchange, market_orderbook_stale[exchange])
+            )
+
+        lines.extend(
+            [
+                "# HELP market_orderbook_age_ms Latest observed orderbook age in milliseconds.",
+                "# TYPE market_orderbook_age_ms gauge",
+            ]
+        )
+        for (exchange, market), age_ms in sorted(market_orderbook_age_ms.items()):
+            lines.append(
+                'market_orderbook_age_ms{exchange="%s",market="%s"} %s'
+                % (exchange, market, age_ms)
+            )
         return "\n".join(lines) + "\n"
 
 
