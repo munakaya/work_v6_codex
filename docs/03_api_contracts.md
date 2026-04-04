@@ -302,6 +302,10 @@
 - `accepted`
 - `reason_code`
 - `lifecycle_preview`
+- `recovery_trace_id` optional
+- `recovery_status` optional
+- `recovery_lifecycle_state` optional
+- `recovery_updated_at` optional
 - `cached_at`
 - `count`
 - `matched_count`
@@ -338,6 +342,10 @@
 - `accepted`
 - `reason_code`
 - `lifecycle_preview`
+- `recovery_trace_id` optional
+- `recovery_status` optional
+- `recovery_lifecycle_state` optional
+- `recovery_updated_at` optional
 - `decision_context`
 - `cached_at`
 - `persisted_intent` optional

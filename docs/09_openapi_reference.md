@@ -1591,6 +1591,23 @@ components:
               type: string
             lifecycle_preview:
               type: string
+            recovery_trace_id:
+              oneOf:
+                - type: 'null'
+                - type: string
+            recovery_status:
+              oneOf:
+                - type: 'null'
+                - type: string
+            recovery_lifecycle_state:
+              oneOf:
+                - type: 'null'
+                - type: string
+            recovery_updated_at:
+              oneOf:
+                - type: 'null'
+                - type: string
+                  format: date-time
             cached_at:
               type: string
               format: date-time
@@ -1644,6 +1661,23 @@ components:
                     type: string
                   lifecycle_preview:
                     type: string
+                  recovery_trace_id:
+                    oneOf:
+                      - type: 'null'
+                      - type: string
+                  recovery_status:
+                    oneOf:
+                      - type: 'null'
+                      - type: string
+                  recovery_lifecycle_state:
+                    oneOf:
+                      - type: 'null'
+                      - type: string
+                  recovery_updated_at:
+                    oneOf:
+                      - type: 'null'
+                      - type: string
+                        format: date-time
                   cached_at:
                     type: string
                     format: date-time

@@ -211,6 +211,39 @@ class RedisRuntime:
             trace_id=trace_id,
         )
 
+    def sync_arbitrage_evaluation_recovery_state(
+        self,
+        *,
+        run_id: str,
+        recovery_trace: dict[str, Any],
+        trace_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        current = self.get_arbitrage_evaluation(run_id=run_id)
+        if current is None:
+            return None
+        status = str(recovery_trace.get("status") or "").strip().lower()
+        lifecycle_state = str(recovery_trace.get("lifecycle_state") or "").strip()
+        lifecycle_preview = lifecycle_state or str(current.get("lifecycle_preview") or "")
+        if status in {"resolved", "cancelled"}:
+            lifecycle_preview = "closed"
+        elif status == "handoff_required":
+            lifecycle_preview = "manual_handoff"
+        payload = {
+            **current,
+            "lifecycle_preview": lifecycle_preview,
+            "recovery_trace_id": recovery_trace.get("recovery_trace_id"),
+            "recovery_status": recovery_trace.get("status"),
+            "recovery_lifecycle_state": recovery_trace.get("lifecycle_state"),
+            "recovery_updated_at": recovery_trace.get("updated_at"),
+        }
+        self.sync_arbitrage_evaluation(
+            run_id=run_id,
+            payload=payload,
+            trace_id=trace_id,
+            publish_event=True,
+        )
+        return self.get_arbitrage_evaluation(run_id=run_id)
+
     def publish_order_event(
         self, *, event_type: str, payload: dict[str, Any], trace_id: str | None = None
     ) -> None:
@@ -278,6 +311,15 @@ class RedisRuntime:
             payload=payload,
             trace_id=trace_id,
         )
+        run_id = str(payload.get("run_id") or "").strip()
+        if run_id:
+            latest_trace = self.get_recovery_trace(recovery_trace_id=recovery_trace_id)
+            if latest_trace is not None:
+                self.sync_arbitrage_evaluation_recovery_state(
+                    run_id=run_id,
+                    recovery_trace=latest_trace,
+                    trace_id=trace_id,
+                )
         if event_type:
             self.append_event(
                 "strategy_events",

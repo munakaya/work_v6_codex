@@ -261,6 +261,17 @@ class RecoveryRuntime:
             payload=payload,
             trace_id=None,
         )
+        run_id = str(payload.get("run_id") or "").strip()
+        if run_id:
+            latest_trace = self.redis_runtime.get_recovery_trace(
+                recovery_trace_id=recovery_trace_id
+            )
+            if latest_trace is not None:
+                self.redis_runtime.sync_arbitrage_evaluation_recovery_state(
+                    run_id=run_id,
+                    recovery_trace=latest_trace,
+                    trace_id=None,
+                )
         self.redis_runtime.append_event(
             "strategy_events",
             event_type="strategy.recovery_trace.resolved",
@@ -300,6 +311,17 @@ class RecoveryRuntime:
             payload=payload,
             trace_id=None,
         )
+        run_id = str(payload.get("run_id") or "").strip()
+        if run_id:
+            latest_trace = self.redis_runtime.get_recovery_trace(
+                recovery_trace_id=recovery_trace_id
+            )
+            if latest_trace is not None:
+                self.redis_runtime.sync_arbitrage_evaluation_recovery_state(
+                    run_id=run_id,
+                    recovery_trace=latest_trace,
+                    trace_id=None,
+                )
         if alert is not None:
             self.redis_runtime.publish_alert_event(
                 event_type="alert.created",

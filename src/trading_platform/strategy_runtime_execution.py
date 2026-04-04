@@ -132,6 +132,13 @@ def execute_persisted_arbitrage_intent(
         payload=recovery_trace,
         trace_id=trace_id,
     )
+    latest_trace = redis_runtime.get_recovery_trace(recovery_trace_id=recovery_trace_id)
+    if latest_trace is not None:
+        redis_runtime.sync_arbitrage_evaluation_recovery_state(
+            run_id=run_id,
+            recovery_trace=latest_trace,
+            trace_id=trace_id,
+        )
     redis_runtime.publish_alert_event(
         event_type="alert.created",
         payload={
