@@ -12,6 +12,7 @@ from .storage.store_protocol import ControlPlaneStoreProtocol
 
 LOGGER = logging.getLogger(__name__)
 TERMINAL_ORDER_STATUSES = {"filled", "cancelled", "rejected", "expired", "failed"}
+TERMINAL_INTENT_STATUSES = {"filled", "closed", "simulated", "cancelled", "expired", "rejected"}
 
 
 def _iso_now() -> str:
@@ -215,9 +216,13 @@ class RecoveryRuntime:
             str(order.get("status") or "").strip().lower() not in TERMINAL_ORDER_STATUSES
             for order in related_orders
         )
+        intent_terminal = self._intent_is_terminal(intent_id=intent_id)
         residual_exposure_quote = _parse_decimal(trace.get("residual_exposure_quote"))
         if not has_active_orders and residual_exposure_quote == Decimal("0"):
             self._resolve_trace(trace, resolution_reason="no_active_orders_and_zero_residual")
+            return
+        if not has_active_orders and intent_terminal:
+            self._resolve_trace(trace, resolution_reason="terminal_intent_and_no_active_orders")
             return
         age_seconds = self._trace_age_seconds(trace)
         if (
@@ -236,6 +241,15 @@ class RecoveryRuntime:
         if intent_id:
             orders = [item for item in orders if str(item.get("order_intent_id") or "") == intent_id]
         return orders
+
+    def _intent_is_terminal(self, *, intent_id: str) -> bool:
+        if not intent_id:
+            return False
+        intent = self.read_store.get_order_intent(intent_id)
+        if intent is None:
+            return False
+        status = str(intent.get("status") or "").strip().lower()
+        return status in TERMINAL_INTENT_STATUSES
 
     def _trace_age_seconds(self, trace: dict[str, object]) -> int | None:
         now = datetime.now(UTC)
