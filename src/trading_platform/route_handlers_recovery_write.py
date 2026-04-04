@@ -803,6 +803,12 @@ class ControlPlaneRecoveryWriteRouteMixin:
                 "manual_handoff_required": False,
                 "last_unwind_fill_id": fill.get("fill_id"),
                 "last_unwind_fill_at": fill.get("filled_at"),
+                "last_unwind_order_status": fill.get("order_status"),
+                "residual_exposure_quote": (
+                    "0"
+                    if str(fill.get("order_status") or "").strip().lower() == "filled"
+                    else optional_string(current.get("residual_exposure_quote"))
+                ),
             },
             event_type="strategy.recovery_trace.unwind_fill_recorded",
         )
