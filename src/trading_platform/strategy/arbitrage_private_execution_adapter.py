@@ -184,6 +184,13 @@ def _create_orders_from_response(
                 order_index,
                 f"private execution order status not allowed: {status}",
             )
+        order_key = (side, exchange_name)
+        if order_key in order_index:
+            return (
+                tuple(created_orders),
+                order_index,
+                "private execution response duplicated arbitrage order leg",
+            )
         raw_payload = item.get("raw_payload")
         if not isinstance(raw_payload, dict):
             raw_payload = {}
@@ -210,8 +217,62 @@ def _create_orders_from_response(
                 f"private execution order create failed: {outcome}",
             )
         created_orders.append(order)
-        order_index[(side, exchange_name)] = order
+        order_index[order_key] = order
     return tuple(created_orders), order_index, None
+
+
+def _refresh_orders(
+    *,
+    store: ControlPlaneStoreProtocol,
+    created_orders: tuple[dict[str, object], ...],
+) -> tuple[dict[str, object], ...]:
+    refreshed_orders: list[dict[str, object]] = []
+    for order in created_orders:
+        order_id = _json_text(order.get("order_id"))
+        latest = store.get_order_detail(order_id) if order_id else None
+        refreshed_orders.append(latest if latest is not None else order)
+    return tuple(refreshed_orders)
+
+
+def _validate_required_arbitrage_legs(
+    *,
+    order_index: dict[tuple[str, str], dict[str, object]],
+    intent: dict[str, object],
+) -> str | None:
+    expected_legs = {
+        ("buy", str(intent.get("buy_exchange") or "")),
+        ("sell", str(intent.get("sell_exchange") or "")),
+    }
+    if "" in {exchange_name for _, exchange_name in expected_legs}:
+        return "private execution response missing arbitrage exchange context"
+    missing_legs = [
+        f"{side}:{exchange_name}"
+        for side, exchange_name in sorted(expected_legs)
+        if (side, exchange_name) not in order_index
+    ]
+    if missing_legs:
+        return (
+            "private execution response missing required arbitrage order legs: "
+            + ", ".join(missing_legs)
+        )
+    return None
+
+
+def _validate_filled_order_states(
+    *,
+    created_orders: tuple[dict[str, object], ...],
+) -> str | None:
+    non_filled_orders = [
+        f"{order.get('order_id')}:{order.get('status')}"
+        for order in created_orders
+        if str(order.get("status") or "").strip().lower() != "filled"
+    ]
+    if non_filled_orders:
+        return (
+            "private execution filled outcome left orders non-terminal: "
+            + ", ".join(non_filled_orders)
+        )
+    return None
 
 
 def _match_order_for_fill(
@@ -338,17 +399,22 @@ class PrivateHttpArbitrageExecutionAdapter:
                     order_index=order_index,
                     fills_payload=response_payload.get("fills"),
                 )
+                refreshed_orders = _refresh_orders(
+                    store=store,
+                    created_orders=created_orders,
+                )
                 if fill_error is not None:
                     return _failure_result(
                         auto_unwind_on_failure=auto_unwind_on_failure,
                         reason=fill_error,
                         details=_response_details(response_payload),
-                        created_orders=created_orders,
+                        created_orders=refreshed_orders,
                         created_fills=created_fills,
                     )
             else:
                 created_orders = ()
                 created_fills = ()
+                refreshed_orders = ()
             return _failure_result(
                 auto_unwind_on_failure=auto_unwind_on_failure,
                 reason=(
@@ -356,7 +422,7 @@ class PrivateHttpArbitrageExecutionAdapter:
                     or "private execution submit failed"
                 ),
                 details=_response_details(response_payload),
-                created_orders=created_orders,
+                created_orders=refreshed_orders,
                 created_fills=created_fills,
             )
         created_orders, order_index, order_error = _create_orders_from_response(
@@ -371,17 +437,32 @@ class PrivateHttpArbitrageExecutionAdapter:
                 details=_response_details(response_payload),
                 created_orders=created_orders,
             )
+        leg_error = _validate_required_arbitrage_legs(
+            order_index=order_index,
+            intent=intent,
+        )
+        if leg_error is not None:
+            return _failure_result(
+                auto_unwind_on_failure=auto_unwind_on_failure,
+                reason=leg_error,
+                details=_response_details(response_payload),
+                created_orders=created_orders,
+            )
         created_fills, fill_error = _create_fills_from_response(
             store=store,
             order_index=order_index,
             fills_payload=response_payload.get("fills"),
+        )
+        refreshed_orders = _refresh_orders(
+            store=store,
+            created_orders=created_orders,
         )
         if fill_error is not None:
             return _failure_result(
                 auto_unwind_on_failure=auto_unwind_on_failure,
                 reason=fill_error,
                 details=_response_details(response_payload),
-                created_orders=created_orders,
+                created_orders=refreshed_orders,
                 created_fills=created_fills,
             )
         if outcome == "filled" and not created_fills:
@@ -389,8 +470,18 @@ class PrivateHttpArbitrageExecutionAdapter:
                 auto_unwind_on_failure=auto_unwind_on_failure,
                 reason="private execution filled outcome missing fills",
                 details=_response_details(response_payload),
-                created_orders=created_orders,
+                created_orders=refreshed_orders,
             )
+        if outcome == "filled":
+            filled_state_error = _validate_filled_order_states(created_orders=refreshed_orders)
+            if filled_state_error is not None:
+                return _failure_result(
+                    auto_unwind_on_failure=auto_unwind_on_failure,
+                    reason=filled_state_error,
+                    details=_response_details(response_payload),
+                    created_orders=refreshed_orders,
+                    created_fills=created_fills,
+                )
         lifecycle_preview = _json_text(response_payload.get("lifecycle_preview"))
         if not lifecycle_preview:
             lifecycle_preview = "hedge_balanced" if outcome == "filled" else "entry_submitting"
@@ -400,7 +491,7 @@ class PrivateHttpArbitrageExecutionAdapter:
             lifecycle_preview=lifecycle_preview,
             recovery_required=False,
             unwind_in_progress=False,
-            created_orders=created_orders,
+            created_orders=refreshed_orders,
             created_fills=created_fills,
             details=details,
         )
