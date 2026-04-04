@@ -1390,6 +1390,42 @@ def main() -> None:
         "order-ids-only handoff reason mismatch",
     )
 
+    invalid_order_ids_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=invalid_order_ids_trace_id,
+        payload={
+            "recovery_trace_id": invalid_order_ids_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": str(reconciliation_intent["intent_id"]),
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_order_ids": ["ord-ok", ""],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+        trace_id=None,
+    )
+    runtime.run_once()
+    invalid_order_ids_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=invalid_order_ids_trace_id
+    )
+    _assert(invalid_order_ids_trace is not None, "invalid order ids trace missing")
+    _assert(
+        invalid_order_ids_trace.get("status") == "handoff_required",
+        "invalid order ids should trigger manual handoff",
+    )
+    _assert(
+        invalid_order_ids_trace.get("handoff_reason")
+        == "reconciliation_evidence_invalid",
+        "invalid order ids handoff reason mismatch",
+    )
+
     duplicate_fill_ids_trace_id = f"rt_{uuid4().hex}"
     redis_runtime.sync_recovery_trace(
         recovery_trace_id=duplicate_fill_ids_trace_id,

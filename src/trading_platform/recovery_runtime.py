@@ -847,6 +847,12 @@ class RecoveryRuntime:
             return None
         invalid_fields: list[str] = []
         if (
+            "reconciliation_observed_order_ids" in trace
+            and trace.get("reconciliation_observed_order_ids") is not None
+            and _observed_string_ids(trace.get("reconciliation_observed_order_ids")) is None
+        ):
+            invalid_fields.append("observed_order_ids")
+        if (
             "reconciliation_observed_fill_ids" in trace
             and trace.get("reconciliation_observed_fill_ids") is not None
             and _observed_string_ids(trace.get("reconciliation_observed_fill_ids")) is None
