@@ -186,48 +186,6 @@ class ControlPlaneReadRouteMixin:
             )
         return HTTPStatus.OK, self._response(data=payload)
 
-    def _market_events_response(self, query: str) -> tuple[HTTPStatus, dict[str, object]]:
-        params = parse_qs(query)
-        if not self.server.redis_runtime.info.enabled:
-            return (
-                HTTPStatus.SERVICE_UNAVAILABLE,
-                self._response(
-                    error={
-                        "code": "REDIS_RUNTIME_UNAVAILABLE",
-                        "message": "redis runtime is not enabled",
-                    }
-                ),
-            )
-        events = self.server.redis_runtime.list_stream_events(
-            stream_name="market_events",
-            limit=query_limit(params),
-        )
-        if events is None:
-            return (
-                HTTPStatus.BAD_GATEWAY,
-                self._response(
-                    error={
-                        "code": "REDIS_STREAM_READ_FAILED",
-                        "message": "failed to read market event stream",
-                    }
-                ),
-            )
-        exchange = (single_query_value(params, "exchange") or "").strip().lower()
-        market = (single_query_value(params, "market") or "").strip().upper()
-        if exchange:
-            events = [
-                event
-                for event in events
-                if str((event.get("payload") or {}).get("exchange", "")).lower() == exchange
-            ]
-        if market:
-            events = [
-                event
-                for event in events
-                if str((event.get("payload") or {}).get("market", "")).upper() == market
-            ]
-        return HTTPStatus.OK, self._response(data={"items": events, "count": len(events)})
-
     def _match_latest_config(
         self, path: str
     ) -> tuple[HTTPStatus, dict[str, object]] | None:

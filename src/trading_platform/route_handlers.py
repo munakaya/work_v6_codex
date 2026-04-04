@@ -7,11 +7,13 @@ from .request_utils import read_json_body, response_payload, write_json, write_t
 from .route_handlers_order_write import ControlPlaneOrderWriteRouteMixin
 from .route_handlers_redis import ControlPlaneRedisRouteMixin
 from .route_handlers_read import ControlPlaneReadRouteMixin
+from .route_handlers_stream_read import ControlPlaneStreamReadRouteMixin
 from .route_handlers_write import ControlPlaneWriteRouteMixin
 
 
 class ControlPlaneRouteMixin(
     ControlPlaneRedisRouteMixin,
+    ControlPlaneStreamReadRouteMixin,
     ControlPlaneReadRouteMixin,
     ControlPlaneWriteRouteMixin,
     ControlPlaneOrderWriteRouteMixin,

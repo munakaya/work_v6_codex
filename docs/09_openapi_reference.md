@@ -144,6 +144,10 @@ paths:
           name: market
           schema:
             type: string
+        - in: query
+          name: event_type
+          schema:
+            type: string
       responses:
         '200':
           description: Recent market events
@@ -151,6 +155,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MarketEventListResponse'
+        '502':
+          description: Redis stream read failed
+        '503':
+          description: Redis runtime unavailable
+
+  /api/v1/bots/events:
+    get:
+      tags: [Bots]
+      summary: List bot runtime events
+      operationId: listBotEvents
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: event_type
+          schema:
+            type: string
+        - in: query
+          name: bot_id
+          schema:
+            type: string
+        - in: query
+          name: bot_key
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recent bot events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeEventListResponse'
         '502':
           description: Redis stream read failed
         '503':
@@ -389,6 +427,44 @@ paths:
         '404':
           description: Run not found
 
+  /api/v1/strategy-runs/events:
+    get:
+      tags: [StrategyRuns]
+      summary: List strategy runtime events
+      operationId: listStrategyEvents
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: event_type
+          schema:
+            type: string
+        - in: query
+          name: bot_id
+          schema:
+            type: string
+        - in: query
+          name: run_id
+          schema:
+            type: string
+        - in: query
+          name: config_scope
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recent strategy events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeEventListResponse'
+        '502':
+          description: Redis stream read failed
+        '503':
+          description: Redis runtime unavailable
+
   /api/v1/order-intents:
     get:
       tags: [OrderIntents]
@@ -494,6 +570,52 @@ paths:
         '422':
           description: Order validation failed
 
+  /api/v1/orders/events:
+    get:
+      tags: [Orders]
+      summary: List order runtime events
+      operationId: listOrderEvents
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: event_type
+          schema:
+            type: string
+        - in: query
+          name: bot_id
+          schema:
+            type: string
+        - in: query
+          name: order_id
+          schema:
+            type: string
+        - in: query
+          name: order_intent_id
+          schema:
+            type: string
+        - in: query
+          name: exchange_name
+          schema:
+            type: string
+        - in: query
+          name: exchange
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recent order events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeEventListResponse'
+        '502':
+          description: Redis stream read failed
+        '503':
+          description: Redis runtime unavailable
+
   /api/v1/fills:
     get:
       tags: [Orders]
@@ -577,6 +699,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AlertListResponse'
+
+  /api/v1/alerts/events:
+    get:
+      tags: [Alerts]
+      summary: List alert runtime events
+      operationId: listAlertEvents
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: event_type
+          schema:
+            type: string
+        - in: query
+          name: bot_id
+          schema:
+            type: string
+        - in: query
+          name: alert_id
+          schema:
+            type: string
+        - in: query
+          name: level
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recent alert events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeEventListResponse'
+        '502':
+          description: Redis stream read failed
+        '503':
+          description: Redis runtime unavailable
 
   /api/v1/alerts/{alert_id}/ack:
     post:
@@ -1502,6 +1662,46 @@ components:
                         type: string
                       exchange_age_ms:
                         type: integer
+            count:
+              type: integer
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    RuntimeEventListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  stream_id:
+                    type: string
+                  event_id:
+                    type: string
+                  event_type:
+                    type: string
+                  event_version:
+                    type: integer
+                  occurred_at:
+                    type: string
+                    format: date-time
+                  producer:
+                    type: string
+                  trace_id:
+                    oneOf:
+                      - type: 'null'
+                      - type: string
+                  payload:
+                    type: object
+                    additionalProperties: true
             count:
               type: integer
         error:

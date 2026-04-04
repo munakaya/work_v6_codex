@@ -105,8 +105,16 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
         if path == "/api/v1/bots":
             return HTTPStatus.OK, self._bots_response(query), False
 
+        if path == "/api/v1/bots/events":
+            status, payload = self._bot_events_response(query)
+            return status, payload, False
+
         if path == "/api/v1/strategy-runs":
             return HTTPStatus.OK, self._strategy_runs_response(query), False
+
+        if path == "/api/v1/strategy-runs/events":
+            status, payload = self._strategy_events_response(query)
+            return status, payload, False
 
         if path == "/api/v1/order-intents":
             return HTTPStatus.OK, self._order_intents_response(query), False
@@ -114,11 +122,19 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
         if path == "/api/v1/orders":
             return HTTPStatus.OK, self._orders_response(query), False
 
+        if path == "/api/v1/orders/events":
+            status, payload = self._order_events_response(query)
+            return status, payload, False
+
         if path == "/api/v1/fills":
             return HTTPStatus.OK, self._fills_response(query), False
 
         if path == "/api/v1/alerts":
             return HTTPStatus.OK, self._alerts_response(query), False
+
+        if path == "/api/v1/alerts/events":
+            status, payload = self._alert_events_response(query)
+            return status, payload, False
 
         if path == "/api/v1/market-data/orderbook-top":
             status, payload = self._market_orderbook_top_response(query)

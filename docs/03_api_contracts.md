@@ -344,6 +344,7 @@
 
 - `POST /api/v1/bots/register`
 - `GET /api/v1/bots`
+- `GET /api/v1/bots/events`
 - `GET /api/v1/bots/{bot_id}`
 - `POST /api/v1/bots/{bot_id}/heartbeat`
 - `POST /api/v1/bots/{bot_id}/assign-config`
@@ -358,6 +359,7 @@
 
 - `POST /api/v1/strategy-runs`
 - `GET /api/v1/strategy-runs`
+- `GET /api/v1/strategy-runs/events`
 - `GET /api/v1/strategy-runs/{run_id}`
 - `POST /api/v1/strategy-runs/{run_id}/start`
 - `POST /api/v1/strategy-runs/{run_id}/stop`
@@ -367,12 +369,14 @@
 - `GET /api/v1/order-intents`
 - `GET /api/v1/order-intents/{intent_id}`
 - `GET /api/v1/orders`
+- `GET /api/v1/orders/events`
 - `GET /api/v1/orders/{order_id}`
 - `GET /api/v1/fills`
 
 #### Alerts
 
 - `GET /api/v1/alerts`
+- `GET /api/v1/alerts/events`
 - `GET /api/v1/alerts/{alert_id}`
 - `POST /api/v1/alerts/{alert_id}/ack`
 
@@ -493,6 +497,7 @@
 쿼리:
 
 - `limit`: 기본 20, 최대 100
+- `event_type`: 선택
 - `exchange`: 선택
 - `market`: 선택
 
@@ -526,14 +531,67 @@
 }
 ```
 
-응답:
+#### `GET /api/v1/bots/events`
+
+쿼리:
+
+- `limit`: 기본 20, 최대 100
+- `event_type`: 선택
+- `bot_id`: 선택
+- `bot_key`: 선택
+
+#### `GET /api/v1/strategy-runs/events`
+
+쿼리:
+
+- `limit`: 기본 20, 최대 100
+- `event_type`: 선택
+- `bot_id`: 선택
+- `run_id`: 선택
+- `config_scope`: 선택
+
+#### `GET /api/v1/orders/events`
+
+쿼리:
+
+- `limit`: 기본 20, 최대 100
+- `event_type`: 선택
+- `bot_id`: 선택
+- `order_id`: 선택
+- `order_intent_id`: 선택
+- `exchange_name` 또는 `exchange`: 선택
+
+#### `GET /api/v1/alerts/events`
+
+쿼리:
+
+- `limit`: 기본 20, 최대 100
+- `event_type`: 선택
+- `bot_id`: 선택
+- `alert_id`: 선택
+- `level`: 선택
+
+공통 응답 형태:
 
 ```json
 {
   "success": true,
   "data": {
-    "accepted": true,
-    "server_time": "2026-04-03T14:12:03Z"
+    "items": [
+      {
+        "stream_id": "1775266477835-0",
+        "event_id": "evt_xxx",
+        "event_type": "bot.state.updated",
+        "event_version": 1,
+        "occurred_at": "2026-04-04T01:34:37.833672Z",
+        "producer": "control-plane",
+        "trace_id": null,
+        "payload": {
+          "bot_id": "uuid"
+        }
+      }
+    ],
+    "count": 1
   },
   "error": null
 }
