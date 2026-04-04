@@ -109,6 +109,10 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
             status, payload = self._runtime_streams_response(query)
             return status, payload, False
 
+        if path == "/api/v1/recovery-traces":
+            status, payload = self._recovery_traces_response(query)
+            return status, payload, False
+
         if path == "/api/v1/bots":
             return HTTPStatus.OK, self._bots_response(query), False
 
@@ -171,6 +175,7 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
             lambda: self._match_latest_config(path),
             lambda: self._match_config_versions(path),
             lambda: self._match_latest_strategy_evaluation(path),
+            lambda: self._match_recovery_trace_detail(path),
             lambda: self._match_bot_heartbeats(path, query),
             lambda: self._match_strategy_run_detail(path),
             lambda: self._match_order_intent_detail(path),

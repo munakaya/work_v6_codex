@@ -72,6 +72,26 @@
 
 ### 18.3 Bot API
 
+#### `GET /api/v1/recovery-traces`
+
+목적:
+
+- Redis runtime에 기록된 active recovery trace를 조회
+
+주요 query:
+
+- `bot_id`
+- `run_id`
+- `status`
+- `lifecycle_state`
+- `limit`
+
+#### `GET /api/v1/recovery-traces/{recovery_trace_id}`
+
+목적:
+
+- recovery trace 단건 상세 조회
+
 #### `POST /api/v1/bots/register`
 
 목적:

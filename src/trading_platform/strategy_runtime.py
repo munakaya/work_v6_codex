@@ -13,10 +13,10 @@ from .strategy import (
     evaluate_arbitrage,
     load_strategy_inputs,
     persist_order_intent_plan,
-    submit_arbitrage_orders,
 )
 from .strategy.arbitrage_evaluation_payload import build_arbitrage_evaluation_payload
 from .strategy.arbitrage_runtime_loader import load_arbitrage_runtime_payload
+from .strategy_runtime_execution import execute_persisted_arbitrage_intent
 
 
 LOGGER = logging.getLogger(__name__)
@@ -328,88 +328,24 @@ class StrategyRuntime:
 
         with self._lock:
             self._submit_attempt_count += 1
-        submit_result = submit_arbitrage_orders(
+        execution_outcome = execute_persisted_arbitrage_intent(
             store=self.read_store,
+            redis_runtime=self.redis_runtime,
+            decision=decision,
             intent=intent,
+            run_id=run_id,
+            bot_id=bot_id,
+            trace_id=trace_id,
             execution_mode=self.execution_mode,
             auto_unwind_on_failure=self.auto_unwind_on_failure,
-        )
-        for order in submit_result.created_orders:
-            self.redis_runtime.publish_order_event(
-                event_type="order.created",
-                payload={
-                    "order_id": order.get("order_id"),
-                    "order_intent_id": order.get("order_intent_id"),
-                    "bot_id": order.get("bot_id"),
-                    "exchange_name": order.get("exchange_name"),
-                    "status": order.get("status"),
-                },
-                trace_id=trace_id,
-            )
-
-        payload = build_arbitrage_evaluation_payload(
-            decision=decision,
-            bot_id=bot_id,
-            strategy_run_id=run_id,
-            persisted_intent=intent,
-            lifecycle_preview_override=submit_result.lifecycle_preview,
-            submit_result=submit_result.as_payload(),
-        )
-        self.redis_runtime.sync_arbitrage_evaluation(
-            run_id=run_id,
-            payload=payload,
-            trace_id=trace_id,
-            publish_event=True,
+            payload_builder=build_arbitrage_evaluation_payload,
         )
 
-        if submit_result.outcome == "submitted":
-            self.redis_runtime.append_event(
-                "strategy_events",
-                event_type="strategy.arbitrage_orders_submitted",
-                payload={
-                    "run_id": run_id,
-                    "bot_id": bot_id,
-                    "intent_id": intent.get("intent_id"),
-                    "order_count": len(submit_result.created_orders),
-                    "lifecycle_preview": submit_result.lifecycle_preview,
-                    "source": "runtime_loop",
-                },
-                trace_id=trace_id,
-            )
+        if execution_outcome.status == "submitted":
             with self._lock:
                 self._submit_success_count += 1
                 self._last_success_at = _iso_now()
             return
-
-        alert = self.read_store.emit_alert(
-            bot_id=bot_id,
-            level="error",
-            code="ARBITRAGE_SUBMIT_FAILED",
-            message="arbitrage runtime submit simulation failed",
-        )
-        self.redis_runtime.publish_alert_event(
-            event_type="alert.created",
-            payload={
-                "alert_id": alert.get("alert_id"),
-                "bot_id": alert.get("bot_id"),
-                "level": alert.get("level"),
-                "code": alert.get("code"),
-            },
-            trace_id=trace_id,
-        )
-        self.redis_runtime.append_event(
-            "strategy_events",
-            event_type="strategy.arbitrage_submit_failed",
-            payload={
-                "run_id": run_id,
-                "bot_id": bot_id,
-                "intent_id": intent.get("intent_id"),
-                "lifecycle_preview": submit_result.lifecycle_preview,
-                "auto_unwind_on_failure": self.auto_unwind_on_failure,
-                "source": "runtime_loop",
-            },
-            trace_id=trace_id,
-        )
         with self._lock:
             self._submit_failure_count += 1
             self._last_error_message = "submit simulation failed"

@@ -218,6 +218,75 @@ class RedisRuntime:
     ) -> None:
         self.append_event("alert_events", event_type=event_type, payload=payload, trace_id=trace_id)
 
+    def sync_recovery_trace(
+        self,
+        *,
+        recovery_trace_id: str,
+        payload: dict[str, Any],
+        trace_id: str | None = None,
+    ) -> None:
+        payload_to_store = {
+            **payload,
+            "recovery_trace_id": recovery_trace_id,
+            "updated_at": _iso_now(),
+        }
+        if not self.set_json(["recovery_trace", recovery_trace_id], payload_to_store):
+            return
+        self.append_event(
+            "strategy_events",
+            event_type="strategy.recovery_trace.updated",
+            payload={
+                "recovery_trace_id": recovery_trace_id,
+                "run_id": payload_to_store.get("run_id"),
+                "bot_id": payload_to_store.get("bot_id"),
+                "status": payload_to_store.get("status"),
+                "lifecycle_state": payload_to_store.get("lifecycle_state"),
+            },
+            trace_id=trace_id,
+        )
+
+    def get_recovery_trace(self, *, recovery_trace_id: str) -> dict[str, Any] | None:
+        return self.get_json(["recovery_trace", recovery_trace_id])
+
+    def list_recovery_traces(
+        self,
+        *,
+        limit: int = 20,
+        bot_id: str | None = None,
+        run_id: str | None = None,
+        status: str | None = None,
+        lifecycle_state: str | None = None,
+    ) -> list[dict[str, Any]] | None:
+        key_prefix = self._key("recovery_trace") + ":"
+        keys = self._scan_keys(self._key("recovery_trace", "*"))
+        if keys is None:
+            return None
+        normalized_status = (status or "").strip().lower()
+        normalized_lifecycle = (lifecycle_state or "").strip().lower()
+        items: list[dict[str, Any]] = []
+        for key in keys:
+            if not key.startswith(key_prefix):
+                continue
+            payload = self._get_json_by_full_key(key)
+            if payload is None:
+                continue
+            if bot_id and str(payload.get("bot_id") or "") != bot_id:
+                continue
+            if run_id and str(payload.get("run_id") or "") != run_id:
+                continue
+            if normalized_status and str(payload.get("status") or "").strip().lower() != normalized_status:
+                continue
+            if normalized_lifecycle and str(payload.get("lifecycle_state") or "").strip().lower() != normalized_lifecycle:
+                continue
+            items.append(payload)
+        items.sort(
+            key=lambda item: _parse_iso_datetime(item.get("updated_at"))
+            or _parse_iso_datetime(item.get("created_at"))
+            or datetime.fromtimestamp(0, UTC),
+            reverse=True,
+        )
+        return items[: max(1, min(limit, 100))]
+
     def sync_market_orderbook_top(
         self,
         *,
