@@ -902,6 +902,19 @@ class RecoveryRuntime:
         )
         if not observed_order_statuses:
             return None
+        terminal_failure_statuses = sorted(
+            {
+                str(item["status"]).strip().lower()
+                for item in observed_order_statuses
+                if str(item["status"]).strip().lower() in TERMINAL_FAILURE_ORDER_STATUSES
+            }
+        )
+        if terminal_failure_statuses:
+            return (
+                "reconciliation_terminal_failure_status_conflict",
+                "reconciliation matched result conflicts with terminal failure order statuses: "
+                + ", ".join(terminal_failure_statuses),
+            )
         nonterminal_statuses = sorted(
             {
                 str(item["status"]).strip().lower()
