@@ -1528,6 +1528,20 @@ components:
                       - $ref: '#/components/schemas/OrderIntentDetail'
             count:
               type: integer
+            matched_count:
+              type: integer
+            accepted_count:
+              type: integer
+            rejected_count:
+              type: integer
+            reason_code_counts:
+              type: object
+              additionalProperties:
+                type: integer
+            lifecycle_preview_counts:
+              type: object
+              additionalProperties:
+                type: integer
         error:
           oneOf:
             - type: 'null'

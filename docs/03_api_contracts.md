@@ -252,6 +252,12 @@
 - `reason_code`
 - `lifecycle_preview`
 - `cached_at`
+- `count`
+- `matched_count`
+- `accepted_count`
+- `rejected_count`
+- `reason_code_counts`
+- `lifecycle_preview_counts`
 
 주의:
 

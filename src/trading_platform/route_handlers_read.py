@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from http import HTTPStatus
 from urllib.parse import parse_qs
 
@@ -8,6 +9,32 @@ from .storage.dependencies import postgres_status, redis_status
 
 
 class ControlPlaneReadRouteMixin:
+    def _latest_strategy_evaluation_summary(
+        self, evaluations: list[dict[str, object]]
+    ) -> dict[str, object]:
+        accepted_count = 0
+        rejected_count = 0
+        reason_counts: Counter[str] = Counter()
+        lifecycle_counts: Counter[str] = Counter()
+        for item in evaluations:
+            accepted = item.get("accepted")
+            if accepted is True:
+                accepted_count += 1
+            elif accepted is False:
+                rejected_count += 1
+            reason_code = str(item.get("reason_code") or "").strip()
+            if reason_code:
+                reason_counts[reason_code] += 1
+            lifecycle_preview = str(item.get("lifecycle_preview") or "").strip()
+            if lifecycle_preview:
+                lifecycle_counts[lifecycle_preview] += 1
+        return {
+            "accepted_count": accepted_count,
+            "rejected_count": rejected_count,
+            "reason_code_counts": dict(reason_counts),
+            "lifecycle_preview_counts": dict(lifecycle_counts),
+        }
+
     def _health_payload(self) -> dict[str, object]:
         config = self.server.config
         return self._response(
@@ -101,7 +128,7 @@ class ControlPlaneReadRouteMixin:
                 ),
             )
         evaluations = self.server.redis_runtime.list_arbitrage_evaluations(
-            limit=query_limit(params),
+            limit=100,
             bot_id=single_query_value(params, "bot_id"),
             accepted=accepted,
             lifecycle_preview=single_query_value(params, "lifecycle_preview"),
@@ -117,8 +144,14 @@ class ControlPlaneReadRouteMixin:
                     }
                 ),
             )
+        limited = evaluations[: query_limit(params)]
         return HTTPStatus.OK, self._response(
-            data={"items": evaluations, "count": len(evaluations)}
+            data={
+                "items": limited,
+                "count": len(limited),
+                "matched_count": len(evaluations),
+                **self._latest_strategy_evaluation_summary(evaluations),
+            }
         )
 
     def _order_intents_response(self, query: str) -> dict[str, object]:
