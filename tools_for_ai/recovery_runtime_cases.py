@@ -517,12 +517,119 @@ def main() -> None:
         "failed unwind latest evaluation should switch to manual_handoff",
     )
 
+    stale_unwind_run_id = "run_unwind_timeout_case"
+    stale_unwind_bot_id = bot_id
+    store.strategy_runs[stale_unwind_run_id] = {
+        "run_id": stale_unwind_run_id,
+        "bot_id": stale_unwind_bot_id,
+        "strategy_name": "arbitrage",
+        "mode": "shadow",
+        "status": "running",
+        "created_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "started_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "stopped_at": None,
+        "decision_count": 1,
+    }
+    stale_unwind_outcome, stale_unwind_intent = store.create_order_intent(
+        strategy_run_id=stale_unwind_run_id,
+        market="KRW-BTC",
+        buy_exchange="sample",
+        sell_exchange="upbit",
+        side_pair="buy_then_sell",
+        target_qty="0.11",
+        expected_profit=None,
+        expected_profit_ratio=None,
+        status="submitted",
+        decision_context={"source": "unwind_timeout_case"},
+    )
+    _assert(
+        stale_unwind_outcome == "created" and stale_unwind_intent is not None,
+        "stale unwind intent create failed",
+    )
+    stale_unwind_order_outcome, stale_unwind_order = store.create_order(
+        order_intent_id=str(stale_unwind_intent["intent_id"]),
+        exchange_name="sample",
+        exchange_order_id="unwind-timeout-buy-1",
+        market="KRW-BTC",
+        side="buy",
+        requested_price="100000",
+        requested_qty="0.11",
+        status="submitted",
+        raw_payload={"source": "unwind_timeout_case"},
+    )
+    _assert(
+        stale_unwind_order_outcome == "created" and stale_unwind_order is not None,
+        "stale unwind order create failed",
+    )
+    stale_unwind_order["submitted_at"] = _iso(datetime.now(UTC) - timedelta(seconds=5))
+    stale_unwind_order["created_at"] = stale_unwind_order["submitted_at"]
+    stale_unwind_order["updated_at"] = stale_unwind_order["submitted_at"]
+    stale_unwind_trace_id = "rt_unwind_timeout_case"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=stale_unwind_trace_id,
+        payload={
+            "recovery_trace_id": stale_unwind_trace_id,
+            "run_id": stale_unwind_run_id,
+            "bot_id": stale_unwind_bot_id,
+            "intent_id": "original_entry_intent_timeout_case",
+            "linked_unwind_action_id": str(stale_unwind_intent["intent_id"]),
+            "linked_unwind_order_id": str(stale_unwind_order["order_id"]),
+            "status": "active",
+            "lifecycle_state": "unwind_in_progress",
+            "manual_handoff_required": False,
+            "incident_code": "ARB-202 UNWIND_IN_PROGRESS",
+            "residual_exposure_quote": "11",
+            "created_at": _iso(datetime.now(UTC)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+        trace_id=None,
+    )
+    redis_runtime.sync_arbitrage_evaluation(
+        run_id=stale_unwind_run_id,
+        payload={
+            "bot_id": stale_unwind_bot_id,
+            "strategy_run_id": stale_unwind_run_id,
+            "accepted": True,
+            "reason_code": "ARBITRAGE_OPPORTUNITY_FOUND",
+            "lifecycle_preview": "unwind_in_progress",
+            "persisted_intent": {"intent_id": "original_entry_intent_timeout_case"},
+            "recovery_trace_id": stale_unwind_trace_id,
+            "recovery_status": "active",
+            "recovery_lifecycle_state": "unwind_in_progress",
+        },
+        publish_event=False,
+    )
+    runtime.run_once()
+    stale_unwind_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=stale_unwind_trace_id
+    )
+    _assert(stale_unwind_trace is not None, "stale unwind recovery trace missing")
+    _assert(
+        stale_unwind_trace.get("status") == "handoff_required",
+        "stale unwind trace should require manual handoff",
+    )
+    _assert(
+        stale_unwind_trace.get("lifecycle_state") == "manual_handoff",
+        "stale unwind lifecycle should switch to manual_handoff",
+    )
+    _assert(
+        stale_unwind_trace.get("handoff_reason") == "unwind_order_timeout_exceeded",
+        "stale unwind handoff reason mismatch",
+    )
+    stale_unwind_eval = redis_runtime.get_arbitrage_evaluation(run_id=stale_unwind_run_id)
+    _assert(stale_unwind_eval is not None, "stale unwind latest evaluation missing")
+    _assert(
+        stale_unwind_eval.get("lifecycle_preview") == "manual_handoff",
+        "stale unwind latest evaluation should switch to manual_handoff",
+    )
+
     print("PASS recovery runtime resolves zero-exposure traces")
     print("PASS recovery runtime resolves terminal intents without active orders")
     print("PASS recovery runtime opens submit-timeout recovery traces")
     print("PASS recovery runtime closes terminal latest evaluations")
     print("PASS recovery runtime resolves linked unwind actions after terminal fills")
     print("PASS recovery runtime escalates failed unwind orders to manual handoff")
+    print("PASS recovery runtime escalates stale unwind orders to manual handoff")
     print("PASS recovery runtime escalates aged traces to manual handoff")
 
 

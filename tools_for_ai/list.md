@@ -1,6 +1,6 @@
 - db_inspect.py: PostgreSQL/Redis 설정과 코드 기준 스키마를 읽기 전용으로 요약해 `.tmp/db_report/`에 저장
 - db_bootstrap_local.py: 로컬 PostgreSQL 개발 DB를 생성하고 migrations와 sample seed를 적용해 `postgres_readonly` 검증용 상태를 만든다
 - arbitrage_runtime_cases.py: 재정거래 전략 런타임의 핵심 accept/reject 케이스(C1~C9)를 코드로 검증한다
-- recovery_runtime_cases.py: recovery trace가 zero-exposure 또는 terminal intent 상태면 resolved, 오래 지속되면 handoff_required로 바뀌는지 Redis 기준으로 검증한다
+- recovery_runtime_cases.py: recovery trace가 zero-exposure/terminal/unwind fill이면 resolved, failed or stale unwind와 오래 지속된 trace는 handoff_required로 바뀌는지 Redis 기준으로 검증한다
 - strategy_runtime_guard_cases.py: active recovery/manual handoff trace가 있을 때 strategy runtime이 새 평가를 skip하는지 검증한다
 - private_execution_readiness_cases.py: private_http execution이 health probe 기준으로 reachable, missing, not_required 상태를 올바르게 판정하는지 검증한다

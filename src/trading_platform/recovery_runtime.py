@@ -332,6 +332,18 @@ class RecoveryRuntime:
                 summary=f"linked unwind order became terminal without resolution: {unwind_failure_status}",
             )
             return
+        stale_unwind_order = self._linked_unwind_order_stale(trace)
+        if stale_unwind_order is not None:
+            unwind_status, age_seconds = stale_unwind_order
+            self._mark_handoff_required(
+                trace,
+                handoff_reason="unwind_order_timeout_exceeded",
+                summary=(
+                    "linked unwind order remained non-terminal beyond submit timeout: "
+                    f"status={unwind_status} age_seconds={age_seconds}"
+                ),
+            )
+            return
         age_seconds = self._trace_age_seconds(trace)
         if (
             age_seconds is not None
@@ -394,6 +406,28 @@ class RecoveryRuntime:
         if status in TERMINAL_FAILURE_ORDER_STATUSES:
             return status
         return None
+
+    def _linked_unwind_order_stale(self, trace: dict[str, object]) -> tuple[str, int] | None:
+        linked_order_id = str(trace.get("linked_unwind_order_id") or "").strip()
+        if not linked_order_id:
+            return None
+        order = self.read_store.get_order_detail(linked_order_id)
+        if order is None:
+            return None
+        status = str(order.get("status") or "").strip().lower()
+        if status in TERMINAL_ORDER_STATUSES:
+            return None
+        observed_at = (
+            _parse_iso_datetime(order.get("updated_at"))
+            or _parse_iso_datetime(order.get("submitted_at"))
+            or _parse_iso_datetime(order.get("created_at"))
+        )
+        if observed_at is None:
+            return None
+        age_seconds = max(0, int((datetime.now(UTC) - observed_at).total_seconds()))
+        if age_seconds < self.submit_timeout_seconds:
+            return None
+        return status, age_seconds
 
     def _create_submit_timeout_trace(
         self,
