@@ -238,6 +238,22 @@ def _case_rebalance_buffer_reject() -> tuple[bool, str, str]:
     )
 
 
+def _case_depth_insufficient() -> tuple[bool, str, bool]:
+    payload = _base_payload()
+    payload["risk_config"] = {
+        **dict(payload["risk_config"]),
+        "min_orderbook_depth_levels": 3,
+        "min_available_depth_quote": "250",
+    }
+    decision = evaluate_arbitrage(load_strategy_inputs(payload))
+    computed = dict(decision.decision_context.get("computed") or {})
+    return (
+        decision.accepted is False,
+        str(decision.reason_code),
+        bool(computed.get("depth_passed")),
+    )
+
+
 CASES = [
     ("C1", _case_accept, True, "ARBITRAGE_OPPORTUNITY_FOUND"),
     ("C2", _case_depth_negative, False, "EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH"),
@@ -286,6 +302,19 @@ def main() -> int:
         f"rejected={c13_rejected} reason={c13_reason} rebalance_buffer_quote={c13_rebalance}"
     )
     if not c13_pass:
+        failed += 1
+
+    c14_rejected, c14_reason, c14_depth_passed = _case_depth_insufficient()
+    c14_pass = (
+        c14_rejected
+        and c14_reason == "ORDERBOOK_DEPTH_INSUFFICIENT"
+        and c14_depth_passed is False
+    )
+    print(
+        f"C14 {'PASS' if c14_pass else 'FAIL'} "
+        f"rejected={c14_rejected} reason={c14_reason} depth_passed={c14_depth_passed}"
+    )
+    if not c14_pass:
         failed += 1
 
     return failed

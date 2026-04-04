@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from .arbitrage_models import (
     ArbitrageDecision,
     ArbitrageInputs,
@@ -41,6 +43,26 @@ def build_decision_context(
     )
     computed = {
         "target_qty": str(candidate_size.target_qty) if candidate_size is not None else None,
+        "buy_depth_levels": (
+            candidate_size.components.get("buy_depth_levels")
+            if candidate_size is not None
+            else None
+        ),
+        "sell_depth_levels": (
+            candidate_size.components.get("sell_depth_levels")
+            if candidate_size is not None
+            else None
+        ),
+        "buy_depth_notional_quote": (
+            candidate_size.components.get("buy_depth_notional_quote")
+            if candidate_size is not None
+            else None
+        ),
+        "sell_depth_notional_quote": (
+            candidate_size.components.get("sell_depth_notional_quote")
+            if candidate_size is not None
+            else None
+        ),
         "executable_buy_cost_quote": (
             str(executable_edge.executable_buy_cost_quote)
             if executable_edge is not None
@@ -95,6 +117,7 @@ def build_decision_context(
             if executable_edge is not None
             else None
         ),
+        "depth_passed": _depth_passed(inputs=inputs, candidate_size=candidate_size),
     }
     reservation = {
         "reservation_passed": (
@@ -120,6 +143,27 @@ def build_decision_context(
         "reservation_passed": reservation["reservation_passed"],
         "reason_code": reason_code,
     }
+
+
+def _depth_passed(
+    *,
+    inputs: ArbitrageInputs,
+    candidate_size: CandidateSizeResult | None,
+) -> bool:
+    if candidate_size is None:
+        return False
+    buy_depth_levels = int(candidate_size.components.get("buy_depth_levels") or "0")
+    sell_depth_levels = int(candidate_size.components.get("sell_depth_levels") or "0")
+    buy_depth_notional = candidate_size.components.get("buy_depth_notional_quote") or "0"
+    sell_depth_notional = candidate_size.components.get("sell_depth_notional_quote") or "0"
+    required_levels = max(inputs.risk_config.min_orderbook_depth_levels, 1)
+    required_notional = inputs.risk_config.min_available_depth_quote
+    return (
+        buy_depth_levels >= required_levels
+        and sell_depth_levels >= required_levels
+        and Decimal(buy_depth_notional) >= required_notional
+        and Decimal(sell_depth_notional) >= required_notional
+    )
 
 
 def build_order_intent_plan(

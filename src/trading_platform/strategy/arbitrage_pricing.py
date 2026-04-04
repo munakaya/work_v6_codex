@@ -12,6 +12,13 @@ def _sum_depth_qty(levels: tuple[object, ...]) -> Decimal:
     return total
 
 
+def _sum_depth_notional(levels: tuple[object, ...]) -> Decimal:
+    total = Decimal("0")
+    for level in levels:
+        total += level.price * level.quantity
+    return total
+
+
 def _vwap(levels: tuple[object, ...], target_qty: Decimal) -> Decimal | None:
     remaining = target_qty
     total_notional = Decimal("0")
@@ -40,10 +47,16 @@ def compute_candidate_size(inputs: ArbitrageInputs) -> CandidateSizeResult:
         )
     buy_depth_qty = _sum_depth_qty(inputs.base_orderbook.asks)
     sell_depth_qty = _sum_depth_qty(inputs.hedge_orderbook.bids)
+    buy_depth_notional_quote = _sum_depth_notional(inputs.base_orderbook.asks)
+    sell_depth_notional_quote = _sum_depth_notional(inputs.hedge_orderbook.bids)
 
     components = {
+        "buy_depth_levels": str(len(inputs.base_orderbook.asks)),
+        "sell_depth_levels": str(len(inputs.hedge_orderbook.bids)),
         "buy_depth_qty": str(buy_depth_qty),
         "sell_depth_qty": str(sell_depth_qty),
+        "buy_depth_notional_quote": str(buy_depth_notional_quote),
+        "sell_depth_notional_quote": str(sell_depth_notional_quote),
         "buy_quote_available": str(inputs.base_balance.available_quote),
         "sell_base_available": str(inputs.hedge_balance.available_base),
     }

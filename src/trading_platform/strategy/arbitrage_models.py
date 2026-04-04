@@ -54,6 +54,8 @@ class RiskConfig:
     max_notional_per_order: Decimal
     max_total_notional_per_bot: Decimal
     max_spread_bps: Decimal
+    min_orderbook_depth_levels: int = 1
+    min_available_depth_quote: Decimal = Decimal("0")
     slippage_buffer_bps: Decimal = Decimal("0")
     unwind_buffer_quote: Decimal = Decimal("0")
     rebalance_buffer_quote: Decimal = Decimal("0")

@@ -2030,6 +2030,26 @@ components:
               oneOf:
                 - type: 'null'
                 - type: string
+            depth_passed:
+              oneOf:
+                - type: 'null'
+                - type: boolean
+            buy_depth_levels:
+              oneOf:
+                - type: 'null'
+                - type: string
+            sell_depth_levels:
+              oneOf:
+                - type: 'null'
+                - type: string
+            buy_depth_notional_quote:
+              oneOf:
+                - type: 'null'
+                - type: string
+            sell_depth_notional_quote:
+              oneOf:
+                - type: 'null'
+                - type: string
             executable_buy_cost_quote:
               oneOf:
                 - type: 'null'

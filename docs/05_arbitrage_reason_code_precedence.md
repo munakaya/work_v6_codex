@@ -50,11 +50,13 @@
 
 ### 4. 실행 가능 수익 부족
 
+- `ORDERBOOK_DEPTH_INSUFFICIENT`
 - `EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH`
 - `PROFIT_TOO_LOW`
 
 원칙:
 
+- depth 수준 또는 depth 금액 자체가 기준 미만이면 `ORDERBOOK_DEPTH_INSUFFICIENT`
 - depth 반영 후 음수면 `EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH`
 - 음수는 아니지만 기준 미만이면 `PROFIT_TOO_LOW`
 

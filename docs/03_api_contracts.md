@@ -507,6 +507,11 @@
 - `computed.executable_profit_quote`
 - `computed.executable_profit_bps`
 - `computed.gross_profit_quote`
+- `computed.depth_passed`
+- `computed.buy_depth_levels`
+- `computed.sell_depth_levels`
+- `computed.buy_depth_notional_quote`
+- `computed.sell_depth_notional_quote`
 - `computed.fee_buy_quote`
 - `computed.fee_sell_quote`
 - `computed.buy_slippage_buffer_quote`

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from .arbitrage_gate import validate_gate_conditions
-from .arbitrage_models import ArbitrageDecision, ArbitrageInputs
+from .arbitrage_models import ArbitrageDecision, ArbitrageInputs, CandidateSizeResult
 from .arbitrage_planner import (
     build_decision_context,
     build_order_intent_plan,
@@ -24,6 +26,24 @@ def _is_risk_cap_blocked(inputs: ArbitrageInputs, notional: object) -> bool:
     return False
 
 
+def _is_depth_insufficient(
+    inputs: ArbitrageInputs, candidate_size: CandidateSizeResult
+) -> bool:
+    components = candidate_size.components
+    required_levels = max(inputs.risk_config.min_orderbook_depth_levels, 1)
+    required_notional = inputs.risk_config.min_available_depth_quote
+    buy_depth_levels = int(components.get("buy_depth_levels") or "0")
+    sell_depth_levels = int(components.get("sell_depth_levels") or "0")
+    buy_depth_notional = Decimal(components.get("buy_depth_notional_quote") or "0")
+    sell_depth_notional = Decimal(components.get("sell_depth_notional_quote") or "0")
+    return (
+        buy_depth_levels < required_levels
+        or sell_depth_levels < required_levels
+        or buy_depth_notional < required_notional
+        or sell_depth_notional < required_notional
+    )
+
+
 def evaluate_arbitrage(inputs: ArbitrageInputs) -> ArbitrageDecision:
     gate_checks, gate_reason = validate_gate_conditions(inputs)
     gate_tuple = tuple(gate_checks)
@@ -41,7 +61,17 @@ def evaluate_arbitrage(inputs: ArbitrageInputs) -> ArbitrageDecision:
     if candidate_size.target_qty <= 0:
         return build_reject_decision(
             inputs=inputs,
-            reason_code="RISK_LIMIT_BLOCKED",
+            reason_code="ORDERBOOK_DEPTH_INSUFFICIENT",
+            gate_checks=gate_tuple,
+            candidate_size=candidate_size,
+            executable_edge=None,
+            reservation_plan=None,
+        )
+
+    if _is_depth_insufficient(inputs, candidate_size):
+        return build_reject_decision(
+            inputs=inputs,
+            reason_code="ORDERBOOK_DEPTH_INSUFFICIENT",
             gate_checks=gate_tuple,
             candidate_size=candidate_size,
             executable_edge=None,

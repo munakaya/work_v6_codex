@@ -131,6 +131,16 @@
   - 이후 상태는 최소 `recovery_required`로 전이
   - 정책이 자동 복구를 허용하면 `unwind_in_progress`로 이어질 수 있음
 
+### C14. depth 수준 또는 depth 금액 부족
+
+- 조건:
+  - orderbook은 fresh
+  - top-of-book spread는 양수일 수 있음
+  - 하지만 `min_orderbook_depth_levels` 또는 `min_available_depth_quote`를 만족하지 못함
+- 기대 결과:
+  - `reject`
+  - `reason_code=ORDERBOOK_DEPTH_INSUFFICIENT`
+
 
 ## 권장 테스트 형식
 

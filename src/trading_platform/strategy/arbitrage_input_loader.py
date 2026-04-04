@@ -101,6 +101,12 @@ def load_strategy_inputs(payload: dict[str, object]) -> ArbitrageInputs:
                 risk_payload["max_total_notional_per_bot"]
             ),
             max_spread_bps=_parse_decimal(risk_payload["max_spread_bps"]),
+            min_orderbook_depth_levels=int(
+                risk_payload.get("min_orderbook_depth_levels", 1)
+            ),
+            min_available_depth_quote=_parse_decimal(
+                risk_payload.get("min_available_depth_quote", "0")
+            ),
             slippage_buffer_bps=_parse_decimal(risk_payload.get("slippage_buffer_bps", "0")),
             unwind_buffer_quote=_parse_decimal(risk_payload.get("unwind_buffer_quote", "0")),
             rebalance_buffer_quote=_parse_decimal(
