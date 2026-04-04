@@ -167,6 +167,27 @@ class RedisRuntime:
             trace_id=trace_id,
         )
 
+    def sync_arbitrage_evaluation(
+        self,
+        *,
+        run_id: str,
+        payload: dict[str, Any],
+        trace_id: str | None = None,
+    ) -> None:
+        if not self.set_json(["strategy_run", run_id, "latest_evaluation"], payload):
+            return
+        self.append_event(
+            "strategy_events",
+            event_type="strategy.arbitrage_latest_evaluation.updated",
+            payload={
+                "run_id": run_id,
+                "accepted": payload.get("accepted"),
+                "reason_code": payload.get("reason_code"),
+                "lifecycle_preview": payload.get("lifecycle_preview"),
+            },
+            trace_id=trace_id,
+        )
+
     def publish_order_event(
         self, *, event_type: str, payload: dict[str, Any], trace_id: str | None = None
     ) -> None:
@@ -209,6 +230,9 @@ class RedisRuntime:
         self, *, exchange: str, market: str
     ) -> dict[str, Any] | None:
         return self.get_json(["market", "orderbook_top", exchange, market])
+
+    def get_arbitrage_evaluation(self, *, run_id: str) -> dict[str, Any] | None:
+        return self.get_json(["strategy_run", run_id, "latest_evaluation"])
 
     def list_market_orderbook_tops(
         self,

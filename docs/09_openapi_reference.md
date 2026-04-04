@@ -595,6 +595,25 @@ paths:
         '501':
           description: Mutation unavailable for current backend
 
+  /api/v1/strategy-runs/{run_id}/latest-evaluation:
+    get:
+      tags: [StrategyRuns]
+      summary: Get latest cached arbitrage evaluation for a strategy run
+      operationId: getLatestArbitrageEvaluation
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Latest cached evaluation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluateArbitrageResponse'
+        '404':
+          description: Latest evaluation not found
+        '503':
+          description: Redis runtime unavailable
+
   /api/v1/strategy-runs/{run_id}/stop:
     post:
       tags: [StrategyRuns]

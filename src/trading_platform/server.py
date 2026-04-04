@@ -163,6 +163,7 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
         for resolver in (
             lambda: self._match_latest_config(path),
             lambda: self._match_config_versions(path),
+            lambda: self._match_latest_strategy_evaluation(path),
             lambda: self._match_bot_heartbeats(path, query),
             lambda: self._match_strategy_run_detail(path),
             lambda: self._match_order_intent_detail(path),

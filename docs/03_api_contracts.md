@@ -228,6 +228,25 @@
 - 성공 시 `strategy.arbitrage_evaluated` event를 남긴다
 - `persist_intent=true`로 저장되면 `strategy.arbitrage_intent_persisted` event를 추가로 남긴다
 
+#### `GET /api/v1/strategy-runs/{run_id}/latest-evaluation`
+
+목적:
+
+- Redis runtime에 저장된 run 기준 최신 arbitrage 평가 snapshot 조회
+
+응답 핵심 필드:
+
+- `accepted`
+- `reason_code`
+- `lifecycle_preview`
+- `decision_context`
+- `persisted_intent` optional
+
+주의:
+
+- Redis runtime이 꺼져 있으면 `REDIS_RUNTIME_UNAVAILABLE`
+- 아직 평가가 없으면 `STRATEGY_EVALUATION_NOT_FOUND`
+
 #### `GET /api/v1/strategy-runs/{run_id}`
 
 목적:
@@ -425,6 +444,7 @@
 - `GET /api/v1/strategy-runs`
 - `GET /api/v1/strategy-runs/events`
 - `GET /api/v1/strategy-runs/{run_id}`
+- `GET /api/v1/strategy-runs/{run_id}/latest-evaluation`
 - `POST /api/v1/strategy-runs/{run_id}/evaluate-arbitrage`
 - `POST /api/v1/strategy-runs/{run_id}/start`
 - `POST /api/v1/strategy-runs/{run_id}/stop`

@@ -194,6 +194,7 @@ class ControlPlaneStrategyWriteRouteMixin:
                 "with_auto_unwind": with_auto_unwind["next_state"],
             }
 
+        self._sync_arbitrage_evaluation(run_id, response_data)
         self._publish_strategy_event(
             "strategy.arbitrage_evaluated",
             {
@@ -256,4 +257,5 @@ class ControlPlaneStrategyWriteRouteMixin:
             manual_handoff=False,
         )
         response_data["persisted_intent"] = intent
+        self._sync_arbitrage_evaluation(run_id, response_data)
         return HTTPStatus.CREATED, self._response(data=response_data)

@@ -190,6 +190,41 @@ class ControlPlaneReadRouteMixin:
             )
         return HTTPStatus.OK, self._response(data=run)
 
+    def _match_latest_strategy_evaluation(
+        self, path: str
+    ) -> tuple[HTTPStatus, dict[str, object]] | None:
+        prefix = "/api/v1/strategy-runs/"
+        suffix = "/latest-evaluation"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+
+        run_id = path[len(prefix) : -len(suffix)]
+        if not run_id:
+            return None
+        if not self.server.redis_runtime.info.enabled:
+            return (
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                self._response(
+                    error={
+                        "code": "REDIS_RUNTIME_UNAVAILABLE",
+                        "message": "redis runtime is not enabled",
+                    }
+                ),
+            )
+
+        evaluation = self.server.redis_runtime.get_arbitrage_evaluation(run_id=run_id)
+        if evaluation is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "STRATEGY_EVALUATION_NOT_FOUND",
+                        "message": "latest strategy evaluation not found",
+                    }
+                ),
+            )
+        return HTTPStatus.OK, self._response(data=evaluation)
+
     def _match_bot_detail(
         self, path: str
     ) -> tuple[HTTPStatus, dict[str, object]] | None:

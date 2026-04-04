@@ -67,6 +67,17 @@ class ControlPlaneRedisRouteMixin:
             trace_id=self._redis_trace_id(),
         )
 
+    def _sync_arbitrage_evaluation(
+        self, run_id: str, payload: dict[str, object] | None
+    ) -> None:
+        if payload is None:
+            return
+        self.server.redis_runtime.sync_arbitrage_evaluation(
+            run_id=run_id,
+            payload=payload,
+            trace_id=self._redis_trace_id(),
+        )
+
     def _sync_market_orderbook_top(self, snapshot: dict[str, object] | None) -> None:
         if snapshot is None:
             return
