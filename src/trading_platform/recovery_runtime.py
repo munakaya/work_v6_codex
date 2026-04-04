@@ -12,6 +12,16 @@ from .storage.store_protocol import ControlPlaneStoreProtocol
 
 
 LOGGER = logging.getLogger(__name__)
+KNOWN_ORDER_STATUSES = {
+    "new",
+    "submitted",
+    "partially_filled",
+    "filled",
+    "cancelled",
+    "rejected",
+    "expired",
+    "failed",
+}
 TERMINAL_ORDER_STATUSES = {"filled", "cancelled", "rejected", "expired", "failed"}
 TERMINAL_FAILURE_ORDER_STATUSES = {"cancelled", "rejected", "expired", "failed"}
 TERMINAL_INTENT_STATUSES = {"filled", "closed", "simulated", "cancelled", "expired", "rejected"}
@@ -79,6 +89,8 @@ def _observed_order_statuses(value: object) -> list[dict[str, str]] | None:
         normalized_order_id = order_id.strip()
         normalized = status.strip().lower()
         if not normalized_order_id or not normalized:
+            return None
+        if normalized not in KNOWN_ORDER_STATUSES:
             return None
         if normalized_order_id in seen:
             return None

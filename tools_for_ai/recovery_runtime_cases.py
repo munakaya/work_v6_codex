@@ -2036,6 +2036,46 @@ def main() -> None:
         "invalid mismatch streak handoff reason mismatch",
     )
 
+    invalid_order_status_value_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=invalid_order_status_value_trace_id,
+        payload={
+            "recovery_trace_id": invalid_order_status_value_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "13",
+            "reconciliation_result": "mismatch",
+            "reconciliation_open_order_count": 1,
+            "reconciliation_residual_exposure_quote": "13",
+            "reconciliation_mismatch_streak": 1,
+            "reconciliation_observed_order_statuses": [
+                {"order_id": "ord-unknown-1", "status": "queued"}
+            ],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+    )
+    runtime.run_once()
+    invalid_order_status_value_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=invalid_order_status_value_trace_id
+    )
+    _assert(
+        invalid_order_status_value_trace is not None,
+        "invalid order status value trace missing",
+    )
+    _assert(
+        invalid_order_status_value_trace.get("status") == "handoff_required",
+        "unknown observed order status should trigger manual handoff",
+    )
+    _assert(
+        invalid_order_status_value_trace.get("handoff_reason")
+        == "reconciliation_evidence_invalid",
+        "unknown observed order status handoff reason mismatch",
+    )
+
     print("PASS recovery runtime resolves zero-exposure traces")
     print("PASS recovery runtime resolves terminal intents without active orders")
     print("PASS recovery runtime opens submit-timeout recovery traces")
