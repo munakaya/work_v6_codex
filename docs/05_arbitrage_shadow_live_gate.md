@@ -75,7 +75,10 @@
 - shadow 결과와 decision record 계약 불일치
 - 승인 윈도우에서 `accept_mismatch` 또는 `reason_code_mismatch` > 0
 - 운영자 stop/rollback 절차 미검증
-- 미확정 계약 항목이 live 안전성에 직접 연결됨
+- 아래 문서의 미완성 또는 TODO가 live 안전성에 직접 연결됨
+  - `05_arbitrage_recovery_trace_contract.md`
+  - `05_arbitrage_replay_restore_accounting.md`
+  - `05_arbitrage_observability_spec.md`의 shadow diff 규칙
 
 
 ## 권장 승인 산출물

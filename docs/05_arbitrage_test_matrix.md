@@ -126,4 +126,7 @@ live 전에는 최소 아래를 닫는다.
 - 새 validation case를 추가하면 이 표에도 넣는다.
 - 새 invariant를 추가하면 최소 L2 테스트를 같이 만든다.
 - 새 incident code를 추가하면 최소 L4 또는 L5 테스트를 같이 만든다.
-- 미확정 계약 항목은 live gate 대상이면 별도 pending 목록으로 올린다.
+- 아래 문서의 미완성 또는 TODO는 live gate 대상이면 별도 pending 목록으로 올린다.
+  - `05_arbitrage_recovery_trace_contract.md`
+  - `05_arbitrage_replay_restore_accounting.md`
+  - `05_arbitrage_observability_spec.md`의 shadow diff 규칙
