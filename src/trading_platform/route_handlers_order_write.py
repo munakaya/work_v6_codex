@@ -122,6 +122,15 @@ class ControlPlaneOrderWriteRouteMixin:
                     }
                 ),
             )
+        self._publish_order_event(
+            "order_intent.created",
+            {
+                "intent_id": intent.get("intent_id"),
+                "bot_id": intent.get("bot_id"),
+                "strategy_run_id": intent.get("strategy_run_id"),
+                "market": intent.get("market"),
+            },
+        )
         return HTTPStatus.CREATED, self._response(data=intent)
 
     def _create_order_response(self) -> tuple[HTTPStatus, dict[str, object]]:
@@ -243,6 +252,16 @@ class ControlPlaneOrderWriteRouteMixin:
                     }
                 ),
             )
+        self._publish_order_event(
+            "order.created",
+            {
+                "order_id": order.get("order_id"),
+                "order_intent_id": order.get("order_intent_id"),
+                "bot_id": order.get("bot_id"),
+                "exchange_name": order.get("exchange_name"),
+                "status": order.get("status"),
+            },
+        )
         return HTTPStatus.CREATED, self._response(data=order)
 
     def _create_fill_response(self) -> tuple[HTTPStatus, dict[str, object]]:
@@ -368,4 +387,15 @@ class ControlPlaneOrderWriteRouteMixin:
                     }
                 ),
             )
+        self._publish_order_event(
+            "fill.created",
+            {
+                "fill_id": fill.get("fill_id"),
+                "order_id": fill.get("order_id"),
+                "order_intent_id": fill.get("order_intent_id"),
+                "bot_id": fill.get("bot_id"),
+                "exchange_name": fill.get("exchange_name"),
+                "order_status": fill.get("order_status"),
+            },
+        )
         return HTTPStatus.CREATED, self._response(data=fill)

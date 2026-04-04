@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 from .config import AppConfig
 from .observability import AlertHookNotifier, MetricsRegistry
+from .redis_runtime import RedisRuntime
 from .route_handlers import ControlPlaneRouteMixin
 from .storage.store_factory import StoreBootstrapInfo, build_read_store_bundle
 from .storage.store_protocol import ControlPlaneStoreProtocol
@@ -29,6 +30,7 @@ class ControlPlaneServer(ThreadingHTTPServer):
         store_bootstrap: StoreBootstrapInfo,
         metrics: MetricsRegistry,
         alert_hook: AlertHookNotifier,
+        redis_runtime: RedisRuntime,
     ):
         super().__init__(server_address, ControlPlaneRequestHandler)
         self.config = config
@@ -36,6 +38,7 @@ class ControlPlaneServer(ThreadingHTTPServer):
         self.store_bootstrap = store_bootstrap
         self.metrics = metrics
         self.alert_hook = alert_hook
+        self.redis_runtime = redis_runtime
 
 
 class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler):
@@ -176,4 +179,5 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         bootstrap.info,
         MetricsRegistry(),
         AlertHookNotifier(config.alert_hook_path, config.service_name),
+        RedisRuntime(config.redis_url, config.redis_key_prefix, config.service_name),
     )

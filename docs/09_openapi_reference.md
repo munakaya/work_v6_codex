@@ -1216,10 +1216,79 @@ components:
           properties:
             status:
               type: string
-            database:
+            service:
               type: string
-            redis:
+            redis_key_prefix:
               type: string
+            redis_runtime:
+              type: object
+              properties:
+                configured:
+                  type: boolean
+                cli_available:
+                  type: boolean
+                enabled:
+                  type: boolean
+                key_prefix:
+                  type: string
+                state:
+                  type: string
+            read_store:
+              type: object
+              properties:
+                backend_name:
+                  type: string
+                supports_mutation:
+                  type: boolean
+                mode:
+                  type: string
+                driver_name:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                driver_available:
+                  type: boolean
+                reason:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+            dependencies:
+              type: object
+              properties:
+                postgres:
+                  type: object
+                  properties:
+                    configured:
+                      type: boolean
+                    reachable:
+                      type: boolean
+                    state:
+                      type: string
+                    host:
+                      oneOf:
+                        - type: 'null'
+                        - type: string
+                    port:
+                      oneOf:
+                        - type: 'null'
+                        - type: integer
+                redis:
+                  type: object
+                  properties:
+                    configured:
+                      type: boolean
+                    reachable:
+                      type: boolean
+                    state:
+                      type: string
+                    host:
+                      oneOf:
+                        - type: 'null'
+                        - type: string
+                    port:
+                      oneOf:
+                        - type: 'null'
+                        - type: integer
         error:
           oneOf:
             - type: 'null'

@@ -56,6 +56,7 @@ class ControlPlaneWriteRouteMixin:
             mode=str(body["mode"]),
             hostname=optional_string(body.get("hostname")),
         )
+        self._sync_bot_state(str(result["bot_id"]))
         return HTTPStatus.OK, self._response(data=result)
 
     def _record_heartbeat_response(
@@ -132,6 +133,16 @@ class ControlPlaneWriteRouteMixin:
         )
         if emitted_alert is not None:
             self.server.metrics.observe_alert_emitted(emitted_alert["level"])
+            self._publish_alert_event(
+                "alert.emitted",
+                {
+                    "alert_id": emitted_alert.get("alert_id"),
+                    "bot_id": emitted_alert.get("bot_id"),
+                    "code": emitted_alert.get("code"),
+                    "level": emitted_alert.get("level"),
+                },
+            )
+        self._sync_bot_state(bot_id)
         return HTTPStatus.ACCEPTED, self._response(data=result)
 
     def _create_config_response(self) -> tuple[HTTPStatus, dict[str, object]]:
@@ -186,6 +197,7 @@ class ControlPlaneWriteRouteMixin:
             checksum=checksum,
             created_by=created_by,
         )
+        self._sync_latest_config(config_scope, result)
         return HTTPStatus.CREATED, self._response(data=result)
 
     def _create_strategy_run_response(self) -> tuple[HTTPStatus, dict[str, object]]:
@@ -252,6 +264,7 @@ class ControlPlaneWriteRouteMixin:
                     }
                 ),
             )
+        self._sync_strategy_run_state(result)
         return HTTPStatus.CREATED, self._response(data=result)
 
     def _acknowledge_alert_response(
@@ -279,6 +292,17 @@ class ControlPlaneWriteRouteMixin:
                 ),
             )
         self.server.metrics.observe_alert_acknowledged()
+        detail = self.server.read_store.get_alert_detail(alert_id)
+        if detail is not None:
+            self._publish_alert_event(
+                "alert.acknowledged",
+                {
+                    "alert_id": detail.get("alert_id"),
+                    "bot_id": detail.get("bot_id"),
+                    "code": detail.get("code"),
+                    "level": detail.get("level"),
+                },
+            )
         return HTTPStatus.ACCEPTED, self._response(data=result)
 
     def _assign_config_response(
@@ -349,6 +373,7 @@ class ControlPlaneWriteRouteMixin:
                 ),
             )
         self.server.metrics.observe_alert_emitted("info")
+        self._sync_bot_state(bot_id)
         return HTTPStatus.ACCEPTED, self._response(data=result)
 
     def _strategy_run_action_response(
@@ -398,6 +423,7 @@ class ControlPlaneWriteRouteMixin:
                     }
                 ),
             )
+        self._sync_strategy_run_state(run)
         return HTTPStatus.ACCEPTED, self._response(data=run)
 
     def _stop_strategy_run_response(
@@ -431,6 +457,7 @@ class ControlPlaneWriteRouteMixin:
                     }
                 ),
             )
+        self._sync_strategy_run_state(run)
         return HTTPStatus.ACCEPTED, self._response(data=run)
 
     def _emit_heartbeat_alert_if_needed(
