@@ -312,10 +312,113 @@ def main() -> None:
         "terminal eval latest evaluation should be closed",
     )
 
+    unwind_run_id = "run_unwind_resolution_case"
+    unwind_bot_id = bot_id
+    store.strategy_runs[unwind_run_id] = {
+        "run_id": unwind_run_id,
+        "bot_id": unwind_bot_id,
+        "strategy_name": "arbitrage",
+        "mode": "shadow",
+        "status": "running",
+        "created_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "started_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "stopped_at": None,
+        "decision_count": 1,
+    }
+    unwind_outcome, unwind_intent = store.create_order_intent(
+        strategy_run_id=unwind_run_id,
+        market="KRW-BTC",
+        buy_exchange="sample",
+        sell_exchange="upbit",
+        side_pair="buy_then_sell",
+        target_qty="0.20",
+        expected_profit=None,
+        expected_profit_ratio=None,
+        status="created",
+        decision_context={"source": "unwind_resolution_case"},
+    )
+    _assert(
+        unwind_outcome == "created" and unwind_intent is not None,
+        "unwind intent create failed",
+    )
+    unwind_order_outcome, unwind_order = store.create_order(
+        order_intent_id=str(unwind_intent["intent_id"]),
+        exchange_name="sample",
+        exchange_order_id="unwind-resolution-buy-1",
+        market="KRW-BTC",
+        side="buy",
+        requested_price="100000",
+        requested_qty="0.20",
+        status="new",
+        raw_payload={"source": "unwind_resolution_case"},
+    )
+    _assert(
+        unwind_order_outcome == "created" and unwind_order is not None,
+        "unwind order create failed",
+    )
+    fill_outcome, unwind_fill = store.create_fill(
+        order_id=str(unwind_order["order_id"]),
+        exchange_trade_id="unwind-resolution-fill-1",
+        fill_price="100000",
+        fill_qty="0.20",
+        fee_asset=None,
+        fee_amount=None,
+        filled_at=_iso(datetime.now(UTC)),
+    )
+    _assert(fill_outcome == "created" and unwind_fill is not None, "unwind fill create failed")
+    unwind_trace_id = "rt_unwind_resolution_case"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=unwind_trace_id,
+        payload={
+            "recovery_trace_id": unwind_trace_id,
+            "run_id": unwind_run_id,
+            "bot_id": unwind_bot_id,
+            "intent_id": "original_entry_intent",
+            "linked_unwind_action_id": str(unwind_intent["intent_id"]),
+            "linked_unwind_order_id": str(unwind_order["order_id"]),
+            "status": "active",
+            "lifecycle_state": "unwind_in_progress",
+            "manual_handoff_required": False,
+            "incident_code": "ARB-202 UNWIND_IN_PROGRESS",
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=3)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+        trace_id=None,
+    )
+    redis_runtime.sync_arbitrage_evaluation(
+        run_id=unwind_run_id,
+        payload={
+            "bot_id": unwind_bot_id,
+            "strategy_run_id": unwind_run_id,
+            "accepted": True,
+            "reason_code": "ARBITRAGE_OPPORTUNITY_FOUND",
+            "lifecycle_preview": "unwind_in_progress",
+            "persisted_intent": {"intent_id": "original_entry_intent"},
+            "recovery_trace_id": unwind_trace_id,
+            "recovery_status": "active",
+            "recovery_lifecycle_state": "unwind_in_progress",
+        },
+        publish_event=False,
+    )
+    runtime.run_once()
+    unwind_trace = redis_runtime.get_recovery_trace(recovery_trace_id=unwind_trace_id)
+    _assert(unwind_trace is not None, "unwind recovery trace missing")
+    _assert(
+        unwind_trace.get("status") == "resolved",
+        "linked unwind trace should resolve after unwind fill",
+    )
+    unwind_eval = redis_runtime.get_arbitrage_evaluation(run_id=unwind_run_id)
+    _assert(unwind_eval is not None, "unwind latest evaluation missing")
+    _assert(
+        unwind_eval.get("lifecycle_preview") == "closed",
+        "unwind latest evaluation should be closed after unwind fill",
+    )
+
     print("PASS recovery runtime resolves zero-exposure traces")
     print("PASS recovery runtime resolves terminal intents without active orders")
     print("PASS recovery runtime opens submit-timeout recovery traces")
     print("PASS recovery runtime closes terminal latest evaluations")
+    print("PASS recovery runtime resolves linked unwind actions after terminal fills")
     print("PASS recovery runtime escalates aged traces to manual handoff")
 
 

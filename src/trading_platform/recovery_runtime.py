@@ -306,7 +306,7 @@ class RecoveryRuntime:
         recovery_trace_id = str(trace.get("recovery_trace_id") or "")
         bot_id = str(trace.get("bot_id") or "")
         run_id = str(trace.get("run_id") or "")
-        intent_id = str(trace.get("intent_id") or "")
+        intent_id = self._trace_intent_id(trace)
         if not recovery_trace_id:
             self._record_skip("TRACE_ID_MISSING")
             return
@@ -349,6 +349,12 @@ class RecoveryRuntime:
             return False
         status = str(intent.get("status") or "").strip().lower()
         return status in TERMINAL_INTENT_STATUSES
+
+    def _trace_intent_id(self, trace: dict[str, object]) -> str:
+        linked_unwind_action_id = str(trace.get("linked_unwind_action_id") or "").strip()
+        if linked_unwind_action_id:
+            return linked_unwind_action_id
+        return str(trace.get("intent_id") or "").strip()
 
     def _oldest_open_order_timestamp(self, *, bot_id: str, run_id: str) -> datetime | None:
         orders = self.read_store.list_orders(bot_id=bot_id or None, strategy_run_id=run_id or None)

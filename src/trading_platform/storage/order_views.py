@@ -14,15 +14,24 @@ def _fill_aggregate(
             "fee_amount": None,
         }
 
-    total_qty = sum(Decimal(str(fill["fill_qty"])) for fill in order_fills)
+    total_qty = sum(
+        (Decimal(str(fill["fill_qty"])) for fill in order_fills),
+        Decimal("0"),
+    )
     total_notional = sum(
-        Decimal(str(fill["fill_price"])) * Decimal(str(fill["fill_qty"]))
-        for fill in order_fills
+        (
+            Decimal(str(fill["fill_price"])) * Decimal(str(fill["fill_qty"]))
+            for fill in order_fills
+        ),
+        Decimal("0"),
     )
     total_fee = sum(
-        Decimal(str(fill["fee_amount"]))
-        for fill in order_fills
-        if fill.get("fee_amount") is not None
+        (
+            Decimal(str(fill["fee_amount"]))
+            for fill in order_fills
+            if fill.get("fee_amount") is not None
+        ),
+        Decimal("0"),
     )
     avg_fill_price = None
     if total_qty > 0:
