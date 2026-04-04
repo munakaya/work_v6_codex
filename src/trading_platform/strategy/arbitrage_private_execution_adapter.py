@@ -182,6 +182,7 @@ def _create_orders_from_response(
         ("sell", str(intent.get("sell_exchange") or "")),
     }
     seen_order_keys: set[tuple[str, str]] = set()
+    seen_exchange_order_ids: set[tuple[str, str]] = set()
     for index, item in enumerate(orders_payload, start=1):
         if not isinstance(item, dict):
             return (), {}, "private execution order item must be an object"
@@ -213,6 +214,18 @@ def _create_orders_from_response(
         if order_key in seen_order_keys:
             return (), {}, "private execution response duplicated arbitrage order leg"
         seen_order_keys.add(order_key)
+        if exchange_order_id is not None:
+            exchange_order_key = (exchange_name, exchange_order_id)
+            if exchange_order_key in seen_exchange_order_ids:
+                return (), {}, "private execution response duplicated exchange_order_id"
+            seen_exchange_order_ids.add(exchange_order_key)
+            existing_order_ids = {
+                str(existing_order.get("exchange_order_id") or "")
+                for existing_order in store.list_orders(exchange_name=exchange_name)
+                if existing_order.get("exchange_order_id") is not None
+            }
+            if exchange_order_id in existing_order_ids:
+                return (), {}, "private execution exchange_order_id conflicts with existing order"
         raw_payload = item.get("raw_payload")
         if not isinstance(raw_payload, dict):
             raw_payload = {}
