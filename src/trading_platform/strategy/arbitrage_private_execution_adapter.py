@@ -28,6 +28,10 @@ ALLOWED_ORDER_STATUSES = {
     "failed",
 }
 TERMINAL_ORDER_STATUSES = {"filled", "cancelled", "rejected", "expired", "failed"}
+ALLOWED_LIFECYCLE_PREVIEWS_BY_OUTCOME = {
+    "submitted": {"entry_submitting", "entry_open"},
+    "filled": {"hedge_balanced", "closed"},
+}
 
 
 def _iso_now() -> str:
@@ -327,6 +331,24 @@ def _validate_submitted_order_states(
     return None
 
 
+def _validate_lifecycle_preview(
+    *,
+    outcome: str,
+    lifecycle_preview: str | None,
+) -> str | None:
+    if not lifecycle_preview:
+        return None
+    allowed = ALLOWED_LIFECYCLE_PREVIEWS_BY_OUTCOME.get(outcome)
+    if allowed is None:
+        return None
+    if lifecycle_preview not in allowed:
+        return (
+            "private execution lifecycle_preview is inconsistent with outcome: "
+            f"{outcome}:{lifecycle_preview}"
+        )
+    return None
+
+
 def _match_order_for_fill(
     *,
     order_index: dict[tuple[str, str], dict[str, object]],
@@ -557,6 +579,18 @@ class PrivateHttpArbitrageExecutionAdapter:
                     created_fills=created_fills,
                 )
         lifecycle_preview = _json_text(response_payload.get("lifecycle_preview"))
+        lifecycle_error = _validate_lifecycle_preview(
+            outcome=outcome,
+            lifecycle_preview=lifecycle_preview,
+        )
+        if lifecycle_error is not None:
+            return _failure_result(
+                auto_unwind_on_failure=auto_unwind_on_failure,
+                reason=lifecycle_error,
+                details=_response_details(response_payload),
+                created_orders=refreshed_orders,
+                created_fills=created_fills,
+            )
         if not lifecycle_preview:
             lifecycle_preview = "hedge_balanced" if outcome == "filled" else "entry_submitting"
         details = {"mode": "private_http", **_response_details(response_payload)}

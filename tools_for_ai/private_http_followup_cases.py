@@ -318,10 +318,21 @@ def _run_submit_timeout_case(*, submit_url: str, health_url: str) -> None:
             str(trace["status"]) == "active",
             f"submit_timeout: trace status mismatch: {trace}",
         )
-        latest_status, latest_payload = _http_json(
-            "GET", f"/api/v1/strategy-runs/{run_id}/latest-evaluation"
-        )
-        _assert(latest_status == 200, "submit_timeout: latest evaluation fetch failed")
+        def _latest_recovery_synced():
+            latest_status, latest_payload = _http_json(
+                "GET", f"/api/v1/strategy-runs/{run_id}/latest-evaluation"
+            )
+            if latest_status != 200:
+                return None
+            data = latest_payload.get("data") or {}
+            if (
+                data.get("lifecycle_preview") != "recovery_required"
+                or data.get("recovery_status") != "active"
+            ):
+                return None
+            return latest_payload
+
+        latest_payload = _wait_until(_latest_recovery_synced, timeout_seconds=5.0)
         _assert(
             latest_payload["data"]["lifecycle_preview"] == "recovery_required",
             f"submit_timeout: lifecycle mismatch: {latest_payload}",
