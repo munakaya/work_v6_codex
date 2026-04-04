@@ -204,6 +204,7 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
             return self._market_data_poll_response()
 
         for resolver in (
+            lambda: self._evaluate_arbitrage_response(path),
             lambda: self._acknowledge_alert_response(path),
             lambda: self._assign_config_response(path),
             lambda: self._strategy_run_action_response(path),

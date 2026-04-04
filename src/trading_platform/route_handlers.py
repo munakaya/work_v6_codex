@@ -10,6 +10,7 @@ from .route_handlers_order_write import ControlPlaneOrderWriteRouteMixin
 from .route_handlers_redis import ControlPlaneRedisRouteMixin
 from .route_handlers_read import ControlPlaneReadRouteMixin
 from .route_handlers_runtime_read import ControlPlaneRuntimeReadRouteMixin
+from .route_handlers_strategy_write import ControlPlaneStrategyWriteRouteMixin
 from .route_handlers_stream_read import ControlPlaneStreamReadRouteMixin
 from .route_handlers_write import ControlPlaneWriteRouteMixin
 
@@ -23,6 +24,7 @@ class ControlPlaneRouteMixin(
     ControlPlaneMarketWriteRouteMixin,
     ControlPlaneWriteRouteMixin,
     ControlPlaneOrderWriteRouteMixin,
+    ControlPlaneStrategyWriteRouteMixin,
 ):
     def _response(
         self,

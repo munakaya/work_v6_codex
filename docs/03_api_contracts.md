@@ -188,6 +188,42 @@
 
 - 특정 strategy run 정지 명령
 
+#### `POST /api/v1/strategy-runs/{run_id}/evaluate-arbitrage`
+
+목적:
+
+- arbitrage strategy run에 대해 실행 가능 수익, gate, reservation을 평가
+- `persist_intent=true`일 때만 accept 결과를 `order_intent`로 저장
+
+요청 핵심 필드:
+
+- `canonical_symbol`
+- `market`
+- `base_exchange`
+- `hedge_exchange`
+- `base_orderbook`
+- `hedge_orderbook`
+- `base_balance`
+- `hedge_balance`
+- `risk_config`
+- `runtime_state`
+- `persist_intent` optional boolean
+
+응답 핵심 필드:
+
+- `accepted`
+- `reason_code`
+- `decision_context`
+- `candidate_size`
+- `executable_edge`
+- `reservation_plan`
+- `persisted_intent` optional
+
+주의:
+
+- `persist_intent=false`면 read-only backend에서도 평가만 가능
+- `persist_intent=true`인데 backend가 read-only면 `STORE_MUTATION_UNAVAILABLE`
+
 #### `GET /api/v1/strategy-runs/{run_id}`
 
 목적:
@@ -385,6 +421,7 @@
 - `GET /api/v1/strategy-runs`
 - `GET /api/v1/strategy-runs/events`
 - `GET /api/v1/strategy-runs/{run_id}`
+- `POST /api/v1/strategy-runs/{run_id}/evaluate-arbitrage`
 - `POST /api/v1/strategy-runs/{run_id}/start`
 - `POST /api/v1/strategy-runs/{run_id}/stop`
 

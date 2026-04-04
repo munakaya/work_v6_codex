@@ -22,7 +22,7 @@ servers:
     description: Production
   - url: https://staging-api.example.com
     description: Staging
-  - url: http://localhost:8000
+  - url: http://localhost:38765
     description: Local
 
 tags:
@@ -559,6 +559,41 @@ paths:
           description: Start accepted
         '404':
           description: Run not found
+
+  /api/v1/strategy-runs/{run_id}/evaluate-arbitrage:
+    post:
+      tags: [StrategyRuns]
+      summary: Evaluate arbitrage opportunity for a strategy run
+      operationId: evaluateArbitrage
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluateArbitrageRequest'
+      responses:
+        '200':
+          description: Evaluation completed without persistence
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluateArbitrageResponse'
+        '201':
+          description: Evaluation completed and order intent persisted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluateArbitrageResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Strategy run not found
+        '422':
+          description: Strategy not supported
+        '501':
+          description: Mutation unavailable for current backend
 
   /api/v1/strategy-runs/{run_id}/stop:
     post:
@@ -1136,6 +1171,49 @@ components:
         mode:
           $ref: '#/components/schemas/RunMode'
 
+    EvaluateArbitrageRequest:
+      type: object
+      required:
+        - canonical_symbol
+        - market
+        - base_exchange
+        - hedge_exchange
+        - base_orderbook
+        - hedge_orderbook
+        - base_balance
+        - hedge_balance
+        - risk_config
+        - runtime_state
+      properties:
+        persist_intent:
+          type: boolean
+        canonical_symbol:
+          type: string
+        market:
+          type: string
+        base_exchange:
+          type: string
+        hedge_exchange:
+          type: string
+        base_orderbook:
+          type: object
+          additionalProperties: true
+        hedge_orderbook:
+          type: object
+          additionalProperties: true
+        base_balance:
+          type: object
+          additionalProperties: true
+        hedge_balance:
+          type: object
+          additionalProperties: true
+        risk_config:
+          type: object
+          additionalProperties: true
+        runtime_state:
+          type: object
+          additionalProperties: true
+
     CreateOrderIntentRequest:
       type: object
       required: [strategy_run_id, market, buy_exchange, sell_exchange, side_pair, target_qty]
@@ -1243,6 +1321,83 @@ components:
             - type: 'null'
             - $ref: '#/components/schemas/ApiError'
 
+    EvaluateArbitrageCandidateSize:
+      type: object
+      properties:
+        target_qty:
+          type: string
+        components:
+          type: object
+          additionalProperties:
+            type: string
+
+    EvaluateArbitrageExecutableEdge:
+      type: object
+      properties:
+        executable_buy_cost_quote:
+          type: string
+        executable_sell_proceeds_quote:
+          type: string
+        executable_profit_quote:
+          type: string
+        executable_profit_bps:
+          type: string
+
+    EvaluateArbitrageReservationPlan:
+      type: object
+      properties:
+        reservation_passed:
+          type: boolean
+        reason_code:
+          oneOf:
+            - type: 'null'
+            - type: string
+        quote_required:
+          type: string
+        base_required:
+          type: string
+        reserved_notional:
+          type: string
+        details:
+          type: object
+          additionalProperties:
+            type: string
+
+    EvaluateArbitrageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            accepted:
+              type: boolean
+            reason_code:
+              type: string
+            decision_context:
+              $ref: '#/components/schemas/StrategyDecisionContext'
+            candidate_size:
+              oneOf:
+                - type: 'null'
+                - $ref: '#/components/schemas/EvaluateArbitrageCandidateSize'
+            executable_edge:
+              oneOf:
+                - type: 'null'
+                - $ref: '#/components/schemas/EvaluateArbitrageExecutableEdge'
+            reservation_plan:
+              oneOf:
+                - type: 'null'
+                - $ref: '#/components/schemas/EvaluateArbitrageReservationPlan'
+            persisted_intent:
+              oneOf:
+                - type: 'null'
+                - $ref: '#/components/schemas/OrderIntentDetail'
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
     StrategyRunListResponse:
       type: object
       properties:
@@ -1323,44 +1478,53 @@ components:
       properties:
         decision_id:
           type: string
-          format: uuid
-        observed_at:
+        quote_pair_id:
           type: string
-          format: date-time
-        inputs:
-          type: object
-          properties:
-            quote_pair_id:
-              type: string
-            orderbook_age_ms:
-              type: object
-              additionalProperties:
-                type: integer
-            clock_skew_ms:
-              type: integer
+        clock_skew_ms:
+          type: integer
         gate_checks:
-          type: object
-          additionalProperties:
-            type: boolean
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              passed:
+                type: boolean
+              detail:
+                type: string
         computed:
           type: object
           properties:
+            target_qty:
+              oneOf:
+                - type: 'null'
+                - type: string
             executable_profit_quote:
               type: string
             executable_profit_bps:
-              type: string
-            unwind_buffer_quote:
               type: string
         reservation:
           type: object
           properties:
             reservation_passed:
               type: boolean
-        decision:
-          type: object
-          properties:
-            reason_code:
-              type: string
+            quote_required:
+              oneOf:
+                - type: 'null'
+                - type: string
+            base_required:
+              oneOf:
+                - type: 'null'
+                - type: string
+            details:
+              type: object
+              additionalProperties:
+                type: string
+        reservation_passed:
+          type: boolean
+        reason_code:
+          type: string
 
     OrderIntentListResponse:
       type: object

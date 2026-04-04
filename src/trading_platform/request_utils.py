@@ -149,6 +149,12 @@ def json_int(value: object) -> int | None:
     return None
 
 
+def json_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    return None
+
+
 def optional_object(value: object) -> dict[str, object] | None:
     if value is None:
         return None
