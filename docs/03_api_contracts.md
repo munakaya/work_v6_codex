@@ -750,7 +750,7 @@
 
 쿼리:
 
-- `exchange`: 현재 `upbit`, `sample` 지원
+- `exchange`: 현재 `upbit`, `bithumb`, `coinone`, `sample` 지원
 - `market`: 예시 `KRW-BTC`
 
 응답:
@@ -809,6 +809,7 @@
 목적:
 
 - poller runtime 상태와 Redis에 남아 있는 최신 snapshot 확인
+- poll interval 기본값은 `3000ms`
 
 응답 핵심 필드:
 

@@ -247,6 +247,8 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         timeout_ms=config.market_data_timeout_ms,
         stale_threshold_ms=config.market_data_stale_threshold_ms,
         upbit_base_url=config.upbit_quotation_base_url,
+        bithumb_base_url=config.bithumb_public_base_url,
+        coinone_base_url=config.coinone_public_base_url,
     )
     market_data_runtime = MarketDataRuntime(
         enabled=config.market_data_poll_enabled,

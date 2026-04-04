@@ -44,6 +44,8 @@ class AppConfig:
     market_data_timeout_ms: int
     market_data_stale_threshold_ms: int
     upbit_quotation_base_url: str
+    bithumb_public_base_url: str
+    coinone_public_base_url: str
     market_data_poll_enabled: bool
     market_data_poll_exchange: str
     market_data_poll_markets: tuple[str, ...]
@@ -94,10 +96,16 @@ def load_config() -> AppConfig:
         upbit_quotation_base_url=os.getenv(
             "TP_UPBIT_QUOTATION_BASE_URL", "https://api.upbit.com"
         ),
+        bithumb_public_base_url=os.getenv(
+            "TP_BITHUMB_PUBLIC_BASE_URL", "https://api.bithumb.com"
+        ),
+        coinone_public_base_url=os.getenv(
+            "TP_COINONE_PUBLIC_BASE_URL", "https://api.coinone.co.kr"
+        ),
         market_data_poll_enabled=_env_bool("TP_MARKET_DATA_POLL_ENABLED", False),
         market_data_poll_exchange=os.getenv("TP_MARKET_DATA_POLL_EXCHANGE", "upbit"),
         market_data_poll_markets=_env_csv("TP_MARKET_DATA_POLL_MARKETS"),
-        market_data_poll_interval_ms=_env_int("TP_MARKET_DATA_POLL_INTERVAL_MS", 1000),
+        market_data_poll_interval_ms=_env_int("TP_MARKET_DATA_POLL_INTERVAL_MS", 3000),
         strategy_runtime_enabled=_env_bool("TP_STRATEGY_RUNTIME_ENABLED", False),
         strategy_runtime_interval_ms=_env_int("TP_STRATEGY_RUNTIME_INTERVAL_MS", 3000),
         strategy_runtime_persist_intent=_env_bool(
