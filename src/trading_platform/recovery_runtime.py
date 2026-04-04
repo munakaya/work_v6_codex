@@ -649,11 +649,15 @@ class RecoveryRuntime:
         invalid_fields: list[str] = []
         open_order_count_raw = trace.get("reconciliation_open_order_count")
         reconciliation_open_order_count = _parse_int(open_order_count_raw)
-        if reconciliation_open_order_count is None or reconciliation_open_order_count < 0:
+        if (
+            isinstance(open_order_count_raw, bool)
+            or reconciliation_open_order_count is None
+            or reconciliation_open_order_count < 0
+        ):
             invalid_fields.append("open_order_count")
         residual_raw = trace.get("reconciliation_residual_exposure_quote")
         reconciliation_residual = _parse_decimal(residual_raw)
-        if reconciliation_residual is None:
+        if reconciliation_residual is None or reconciliation_residual < 0:
             invalid_fields.append("residual_exposure_quote")
         observed_at_raw = trace.get("reconciliation_observed_at")
         if observed_at_raw is not None:
