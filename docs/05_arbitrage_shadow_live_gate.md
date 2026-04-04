@@ -127,6 +127,10 @@
   - `count`
   - `ratio`
 - stale alert / connector degraded / reconciliation mismatch 건수와 `top_reason`
+  - `event_type`
+  - `count`
+  - `top_reason`
+  - `affected_bot_ids`
 - shadow diff 지표 요약
   - `reservation_mismatch`, `target_qty_bucket_mismatch`가 있으면 `time_window`, `top_reason`, `affected_bot_ids`, `suggested_action` 포함
 - recovery_required / unwind_in_progress 사례 수

@@ -167,6 +167,8 @@
   - `invariant_code`, `severity`, `count`
 - stale/skew/reject 분포
   - `reason_code`, `count`, `ratio`
+- stale alert / connector degraded / reconciliation mismatch 건수와 `top_reason`
+  - `event_type`, `count`, `top_reason`, `affected_bot_ids`
 - recovery_required / unwind_in_progress 사례 수
   - `state`, `count`
 - 최근 recovery/unwind 사례
