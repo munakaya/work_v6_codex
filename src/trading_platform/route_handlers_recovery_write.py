@@ -17,6 +17,47 @@ from .request_utils import (
 
 
 class ControlPlaneRecoveryWriteRouteMixin:
+    def _observed_balances(
+        self, value: object
+    ) -> list[dict[str, str]] | None:
+        if value is None or not isinstance(value, list):
+            return None
+        result: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for item in value:
+            if not isinstance(item, dict):
+                return None
+            exchange_name = json_string(item.get("exchange_name"))
+            asset = json_string(item.get("asset"))
+            free = json_number_text(item.get("free"))
+            locked = json_number_text(item.get("locked"))
+            if (
+                exchange_name is None
+                or asset is None
+                or free is None
+                or locked is None
+                or not is_nonnegative_number_text(free)
+                or not is_nonnegative_number_text(locked)
+            ):
+                return None
+            exchange_name = exchange_name.strip()
+            asset = asset.strip().upper()
+            if not exchange_name or not asset:
+                return None
+            key = (exchange_name, asset)
+            if key in seen:
+                return None
+            seen.add(key)
+            result.append(
+                {
+                    "exchange_name": exchange_name,
+                    "asset": asset,
+                    "free": free,
+                    "locked": locked,
+                }
+            )
+        return result
+
     def _observed_order_statuses(
         self, value: object
     ) -> list[dict[str, str]] | None:
@@ -958,6 +999,19 @@ class ControlPlaneRecoveryWriteRouteMixin:
                         }
                     ),
                 )
+        observed_balances = None
+        if "observed_balances" in body:
+            observed_balances = self._observed_balances(body.get("observed_balances"))
+            if observed_balances is None:
+                return (
+                    HTTPStatus.BAD_REQUEST,
+                    self._response(
+                        error={
+                            "code": "INVALID_REQUEST",
+                            "message": "observed_balances must be an array of unique {exchange_name, asset, free, locked} objects with non-negative numbers",
+                        }
+                    ),
+                )
         current = self.server.redis_runtime.get_recovery_trace(
             recovery_trace_id=recovery_trace_id
         )
@@ -1028,6 +1082,7 @@ class ControlPlaneRecoveryWriteRouteMixin:
             "reconciliation_observed_order_ids": observed_order_ids,
             "reconciliation_observed_fill_ids": observed_fill_ids,
             "reconciliation_observed_order_statuses": observed_order_statuses,
+            "reconciliation_observed_balances": observed_balances,
             "reconciliation_verified_by": optional_string(body.get("verified_by")),
             "reconciliation_updated_at": self.server.redis_runtime.now_iso(),
         }
@@ -1068,6 +1123,7 @@ class ControlPlaneRecoveryWriteRouteMixin:
                 "observed_order_count": len(observed_order_ids or []),
                 "observed_fill_count": len(observed_fill_ids or []),
                 "observed_order_status_count": len(observed_order_statuses or []),
+                "observed_balance_count": len(observed_balances or []),
             },
             trace_id=self.headers.get("X-Trace-Id"),
         )

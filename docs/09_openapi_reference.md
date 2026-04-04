@@ -2778,6 +2778,21 @@ components:
                     type: string
                   status:
                     type: string
+        reconciliation_observed_balances:
+          oneOf:
+            - type: 'null'
+            - type: array
+              items:
+                type: object
+                properties:
+                  exchange_name:
+                    type: string
+                  asset:
+                    type: string
+                  free:
+                    type: string
+                  locked:
+                    type: string
         reconciliation_attempt_count:
           oneOf:
             - type: 'null'
@@ -2968,6 +2983,19 @@ components:
               order_id:
                 type: string
               status:
+                type: string
+        observed_balances:
+          type: array
+          items:
+            type: object
+            properties:
+              exchange_name:
+                type: string
+              asset:
+                type: string
+              free:
+                type: string
+              locked:
                 type: string
         reconciliation_reason:
           type: string

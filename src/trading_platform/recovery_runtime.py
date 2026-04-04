@@ -78,6 +78,39 @@ def _observed_order_statuses(value: object) -> list[str] | None:
     return statuses
 
 
+def _observed_balances(value: object) -> list[dict[str, object]] | None:
+    if value is None or not isinstance(value, list):
+        return None
+    balances: list[dict[str, object]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            return None
+        exchange_name = item.get("exchange_name")
+        asset = item.get("asset")
+        free = _parse_decimal(item.get("free"))
+        locked = _parse_decimal(item.get("locked"))
+        if (
+            not isinstance(exchange_name, str)
+            or not exchange_name.strip()
+            or not isinstance(asset, str)
+            or not asset.strip()
+            or free is None
+            or locked is None
+            or free < 0
+            or locked < 0
+        ):
+            return None
+        balances.append(
+            {
+                "exchange_name": exchange_name.strip(),
+                "asset": asset.strip().upper(),
+                "free": free,
+                "locked": locked,
+            }
+        )
+    return balances
+
+
 @dataclass(frozen=True)
 class RecoveryRuntimeInfo:
     enabled: bool
@@ -371,6 +404,15 @@ class RecoveryRuntime:
                 summary=summary,
             )
             return
+        reconciliation_balance_handoff = self._reconciliation_balance_handoff_reason(trace)
+        if reconciliation_balance_handoff is not None:
+            handoff_reason, summary = reconciliation_balance_handoff
+            self._mark_handoff_required(
+                trace,
+                handoff_reason=handoff_reason,
+                summary=summary,
+            )
+            return
         reconciliation_resolution_reason = self._reconciliation_resolution_reason(trace)
         if reconciliation_resolution_reason is not None:
             self._resolve_trace(trace, resolution_reason=reconciliation_resolution_reason)
@@ -513,6 +555,51 @@ class RecoveryRuntime:
             return "reconciliation_matched_zero_residual"
         return None
 
+    def _reconciliation_balance_handoff_reason(
+        self, trace: dict[str, object]
+    ) -> tuple[str, str] | None:
+        reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
+        if reconciliation_result != "matched":
+            return None
+        reconciliation_open_order_count = _parse_int(
+            trace.get("reconciliation_open_order_count")
+        )
+        reconciliation_residual = _parse_decimal(
+            trace.get("reconciliation_residual_exposure_quote")
+        )
+        if (
+            reconciliation_open_order_count is None
+            or reconciliation_open_order_count != 0
+            or reconciliation_residual is None
+            or reconciliation_residual != Decimal("0")
+        ):
+            return None
+        relevant_exchanges = self._trace_relevant_exchanges(trace)
+        if not relevant_exchanges:
+            return None
+        observed_balances = _observed_balances(
+            trace.get("reconciliation_observed_balances")
+        )
+        if not observed_balances:
+            return None
+        locked_entries = [
+            balance
+            for balance in observed_balances
+            if str(balance["exchange_name"]).strip() in relevant_exchanges
+            and balance["locked"] > Decimal("0")
+        ]
+        if not locked_entries:
+            return None
+        summary_parts = [
+            f"{entry['exchange_name']}:{entry['asset']} locked={entry['locked']}"
+            for entry in locked_entries
+        ]
+        return (
+            "reconciliation_balance_locked",
+            "reconciliation matched result still has locked balances: "
+            + ", ".join(summary_parts),
+        )
+
     def _reconciliation_stale_handoff_reason(
         self, trace: dict[str, object]
     ) -> tuple[str, str] | None:
@@ -596,6 +683,22 @@ class RecoveryRuntime:
                 "reconciliation reports no open orders while residual exposure remains",
             )
         return None
+
+    def _trace_relevant_exchanges(self, trace: dict[str, object]) -> set[str]:
+        intent_id = self._trace_intent_id(trace)
+        if not intent_id:
+            return set()
+        intent = self.read_store.get_order_intent(intent_id)
+        if intent is None:
+            return set()
+        return {
+            str(exchange).strip()
+            for exchange in (
+                intent.get("buy_exchange"),
+                intent.get("sell_exchange"),
+            )
+            if isinstance(exchange, str) and exchange.strip()
+        }
 
     def _create_submit_timeout_trace(
         self,
