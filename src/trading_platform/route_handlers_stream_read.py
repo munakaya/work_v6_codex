@@ -161,6 +161,13 @@ class ControlPlaneStreamReadRouteMixin:
                 for event in events
                 if str(event.get("event_type") or "").strip() == event_type
             ]
+        trace_id = (single_query_value(params, "trace_id") or "").strip()
+        if trace_id:
+            events = [
+                event
+                for event in events
+                if str(event.get("trace_id") or "").strip() == trace_id
+            ]
 
         for event_filter in filters:
             raw_value = None

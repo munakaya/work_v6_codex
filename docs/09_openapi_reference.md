@@ -174,6 +174,12 @@ paths:
       tags: [MarketData]
       summary: Refresh market snapshots now
       operationId: pollMarketSnapshots
+      parameters:
+        - in: header
+          name: X-Trace-Id
+          required: false
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -218,6 +224,10 @@ paths:
           name: event_type
           schema:
             type: string
+        - in: query
+          name: trace_id
+          schema:
+            type: string
       responses:
         '200':
           description: Recent market events
@@ -242,6 +252,10 @@ paths:
             type: integer
         - in: query
           name: event_type
+          schema:
+            type: string
+        - in: query
+          name: trace_id
           schema:
             type: string
         - in: query
@@ -512,6 +526,10 @@ paths:
           schema:
             type: string
         - in: query
+          name: trace_id
+          schema:
+            type: string
+        - in: query
           name: bot_id
           schema:
             type: string
@@ -655,6 +673,10 @@ paths:
           schema:
             type: string
         - in: query
+          name: trace_id
+          schema:
+            type: string
+        - in: query
           name: bot_id
           schema:
             type: string
@@ -782,6 +804,10 @@ paths:
             type: integer
         - in: query
           name: event_type
+          schema:
+            type: string
+        - in: query
+          name: trace_id
           schema:
             type: string
         - in: query

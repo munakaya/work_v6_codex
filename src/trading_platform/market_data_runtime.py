@@ -138,7 +138,11 @@ class MarketDataRuntime:
                 self._running = False
 
     def refresh(
-        self, *, exchange: str, markets: Sequence[str]
+        self,
+        *,
+        exchange: str,
+        markets: Sequence[str],
+        trace_id: str | None = None,
     ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
         normalized_exchange = exchange.strip().lower()
         normalized_markets = [market.strip().upper() for market in markets if market.strip()]
@@ -163,14 +167,16 @@ class MarketDataRuntime:
                     }
                 )
                 continue
-            self._record_snapshot(snapshot)
+            self._record_snapshot(snapshot, trace_id=trace_id)
             snapshots.append(snapshot)
         return snapshots, errors
 
     def _poll_once(self) -> None:
         self.refresh(exchange=self.exchange, markets=self.markets)
 
-    def _record_snapshot(self, snapshot: dict[str, object]) -> None:
+    def _record_snapshot(
+        self, snapshot: dict[str, object], *, trace_id: str | None = None
+    ) -> None:
         self.metrics.observe_orderbook_snapshot(
             exchange=str(snapshot["exchange"]),
             market=str(snapshot["market"]),
@@ -181,6 +187,7 @@ class MarketDataRuntime:
             exchange=str(snapshot["exchange"]),
             market=str(snapshot["market"]),
             payload=snapshot,
+            trace_id=trace_id,
         )
         with self._lock:
             self._success_count += 1

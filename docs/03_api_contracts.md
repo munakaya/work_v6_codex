@@ -535,12 +535,17 @@
 - `exchange`
 - `markets`
 
+헤더:
+
+- `X-Trace-Id`: 선택. 주면 생성되는 `market.orderbook_top.updated` 이벤트의 `trace_id`로 그대로 기록
+
 #### `GET /api/v1/market-data/events`
 
 쿼리:
 
 - `limit`: 기본 20, 최대 100
 - `event_type`: 선택
+- `trace_id`: 선택
 - `exchange`: 선택
 - `market`: 선택
 
@@ -580,6 +585,7 @@
 
 - `limit`: 기본 20, 최대 100
 - `event_type`: 선택
+- `trace_id`: 선택
 - `bot_id`: 선택
 - `bot_key`: 선택
 
@@ -589,6 +595,7 @@
 
 - `limit`: 기본 20, 최대 100
 - `event_type`: 선택
+- `trace_id`: 선택
 - `bot_id`: 선택
 - `run_id`: 선택
 - `config_scope`: 선택
@@ -599,6 +606,7 @@
 
 - `limit`: 기본 20, 최대 100
 - `event_type`: 선택
+- `trace_id`: 선택
 - `bot_id`: 선택
 - `order_id`: 선택
 - `order_intent_id`: 선택
@@ -610,6 +618,7 @@
 
 - `limit`: 기본 20, 최대 100
 - `event_type`: 선택
+- `trace_id`: 선택
 - `bot_id`: 선택
 - `alert_id`: 선택
 - `level`: 선택

@@ -68,6 +68,7 @@ class ControlPlaneMarketWriteRouteMixin:
         snapshots, errors = self.server.market_data_runtime.refresh(
             exchange=exchange,
             markets=markets,
+            trace_id=self._redis_trace_id(),
         )
         status = HTTPStatus.OK if not errors else HTTPStatus.MULTI_STATUS
         return status, self._response(
