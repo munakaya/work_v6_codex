@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+from .arbitrage_models import (
+    ArbitrageDecision,
+    ArbitrageInputs,
+    CandidateSizeResult,
+    ExecutableEdgeResult,
+    GateCheckResult,
+    OrderIntentPlan,
+    ReservationPlan,
+)
+
+
+def _serialize_gate_checks(checks: tuple[GateCheckResult, ...]) -> list[dict[str, object]]:
+    return [
+        {
+            "name": check.name,
+            "passed": check.passed,
+            "detail": check.detail,
+        }
+        for check in checks
+    ]
+
+
+def build_decision_context(
+    *,
+    inputs: ArbitrageInputs,
+    reason_code: str,
+    gate_checks: tuple[GateCheckResult, ...],
+    candidate_size: CandidateSizeResult | None,
+    executable_edge: ExecutableEdgeResult | None,
+    reservation_plan: ReservationPlan | None,
+) -> dict[str, object]:
+    skew_ms = abs(
+        int(
+            (
+                inputs.base_orderbook.observed_at - inputs.hedge_orderbook.observed_at
+            ).total_seconds()
+            * 1000
+        )
+    )
+    computed = {
+        "target_qty": str(candidate_size.target_qty) if candidate_size is not None else None,
+        "executable_profit_quote": (
+            str(executable_edge.executable_profit_quote)
+            if executable_edge is not None
+            else None
+        ),
+        "executable_profit_bps": (
+            str(executable_edge.executable_profit_bps)
+            if executable_edge is not None
+            else None
+        ),
+    }
+    reservation = {
+        "reservation_passed": (
+            reservation_plan.reservation_passed if reservation_plan is not None else False
+        ),
+        "quote_required": (
+            str(reservation_plan.quote_required) if reservation_plan is not None else None
+        ),
+        "base_required": (
+            str(reservation_plan.base_required) if reservation_plan is not None else None
+        ),
+        "details": reservation_plan.details if reservation_plan is not None else {},
+    }
+    return {
+        "decision_id": f"{inputs.strategy_run_id}:{inputs.runtime_state.now.isoformat()}",
+        "quote_pair_id": (
+            f"{inputs.base_exchange}:{inputs.market}|{inputs.hedge_exchange}:{inputs.market}"
+        ),
+        "clock_skew_ms": skew_ms,
+        "gate_checks": _serialize_gate_checks(gate_checks),
+        "computed": computed,
+        "reservation": reservation,
+        "reservation_passed": reservation["reservation_passed"],
+        "reason_code": reason_code,
+    }
+
+
+def build_order_intent_plan(
+    *,
+    inputs: ArbitrageInputs,
+    executable_edge: ExecutableEdgeResult,
+    candidate_size: CandidateSizeResult,
+    decision_context: dict[str, object],
+) -> OrderIntentPlan:
+    return OrderIntentPlan(
+        market=inputs.market,
+        buy_exchange=inputs.base_exchange,
+        sell_exchange=inputs.hedge_exchange,
+        side_pair="buy_then_sell",
+        target_qty=str(candidate_size.target_qty),
+        expected_profit=str(executable_edge.executable_profit_quote),
+        expected_profit_ratio=str(executable_edge.executable_profit_bps),
+        decision_context=decision_context,
+    )
+
+
+def build_reject_decision(
+    *,
+    inputs: ArbitrageInputs,
+    reason_code: str,
+    gate_checks: tuple[GateCheckResult, ...],
+    candidate_size: CandidateSizeResult | None,
+    executable_edge: ExecutableEdgeResult | None,
+    reservation_plan: ReservationPlan | None,
+) -> ArbitrageDecision:
+    decision_context = build_decision_context(
+        inputs=inputs,
+        reason_code=reason_code,
+        gate_checks=gate_checks,
+        candidate_size=candidate_size,
+        executable_edge=executable_edge,
+        reservation_plan=reservation_plan,
+    )
+    return ArbitrageDecision(
+        accepted=False,
+        reason_code=reason_code,
+        gate_checks=gate_checks,
+        candidate_size=candidate_size,
+        executable_edge=executable_edge,
+        reservation_plan=reservation_plan,
+        decision_context=decision_context,
+    )
