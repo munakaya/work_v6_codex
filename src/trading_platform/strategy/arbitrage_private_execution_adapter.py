@@ -317,6 +317,71 @@ def _validate_filled_order_states(
     return None
 
 
+def _validate_filled_leg_coverage(
+    *,
+    created_fills: tuple[dict[str, object], ...],
+    intent: dict[str, object],
+) -> str | None:
+    expected_legs = {
+        ("buy", str(intent.get("buy_exchange") or "")),
+        ("sell", str(intent.get("sell_exchange") or "")),
+    }
+    if "" in {exchange_name for _, exchange_name in expected_legs}:
+        return "private execution response missing arbitrage exchange context"
+    observed_legs = {
+        (
+            str(fill.get("side") or "").strip().lower(),
+            str(fill.get("exchange_name") or "").strip(),
+        )
+        for fill in created_fills
+    }
+    missing_legs = [
+        f"{side}:{exchange_name}"
+        for side, exchange_name in sorted(expected_legs)
+        if (side, exchange_name) not in observed_legs
+    ]
+    if missing_legs:
+        return (
+            "private execution filled outcome missing required fill legs: "
+            + ", ".join(missing_legs)
+        )
+    return None
+
+
+def _validate_response_fill_leg_coverage(
+    *,
+    fills_payload: object,
+    intent: dict[str, object],
+) -> str | None:
+    if not isinstance(fills_payload, list):
+        return None
+    expected_legs = {
+        ("buy", str(intent.get("buy_exchange") or "")),
+        ("sell", str(intent.get("sell_exchange") or "")),
+    }
+    if "" in {exchange_name for _, exchange_name in expected_legs}:
+        return "private execution response missing arbitrage exchange context"
+    observed_legs: set[tuple[str, str]] = set()
+    for item in fills_payload:
+        if not isinstance(item, dict):
+            continue
+        side = (_json_text(item.get("side")) or "").lower()
+        exchange_name = _json_text(item.get("exchange_name")) or ""
+        if side in {"buy", "sell"} and exchange_name:
+            observed_legs.add((side, exchange_name))
+    missing_legs = [
+        f"{side}:{exchange_name}"
+        for side, exchange_name in sorted(expected_legs)
+        if (side, exchange_name) not in observed_legs
+    ]
+    if missing_legs:
+        return (
+            "private execution filled outcome missing required fill legs: "
+            + ", ".join(missing_legs)
+        )
+    return None
+
+
 def _validate_submitted_order_states(
     *,
     created_orders: tuple[dict[str, object], ...],
@@ -550,6 +615,18 @@ class PrivateHttpArbitrageExecutionAdapter:
                 details=_response_details(response_payload),
                 created_orders=created_orders,
             )
+        if outcome == "filled":
+            fill_leg_payload_error = _validate_response_fill_leg_coverage(
+                fills_payload=response_payload.get("fills"),
+                intent=intent,
+            )
+            if fill_leg_payload_error is not None:
+                return _failure_result(
+                    auto_unwind_on_failure=auto_unwind_on_failure,
+                    reason=fill_leg_payload_error,
+                    details=_response_details(response_payload),
+                    created_orders=created_orders,
+                )
         created_fills, fill_error = _create_fills_from_response(
             store=store,
             order_index=order_index,
@@ -593,6 +670,18 @@ class PrivateHttpArbitrageExecutionAdapter:
                 return _failure_result(
                     auto_unwind_on_failure=auto_unwind_on_failure,
                     reason=filled_state_error,
+                    details=_response_details(response_payload),
+                    created_orders=refreshed_orders,
+                    created_fills=created_fills,
+                )
+            filled_leg_error = _validate_filled_leg_coverage(
+                created_fills=created_fills,
+                intent=intent,
+            )
+            if filled_leg_error is not None:
+                return _failure_result(
+                    auto_unwind_on_failure=auto_unwind_on_failure,
+                    reason=filled_leg_error,
                     details=_response_details(response_payload),
                     created_orders=refreshed_orders,
                     created_fills=created_fills,
