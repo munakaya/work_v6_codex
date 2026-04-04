@@ -3,7 +3,13 @@ from __future__ import annotations
 from http import HTTPStatus
 
 from .request_utils import json_bool, json_string, optional_object
-from .strategy import evaluate_arbitrage, load_strategy_inputs, persist_order_intent_plan
+from .strategy import (
+    classify_submit_failure_transition,
+    derive_arbitrage_lifecycle_state,
+    evaluate_arbitrage,
+    load_strategy_inputs,
+    persist_order_intent_plan,
+)
 
 
 class ControlPlaneStrategyWriteRouteMixin:
@@ -110,9 +116,20 @@ class ControlPlaneStrategyWriteRouteMixin:
             },
         }
         decision = evaluate_arbitrage(load_strategy_inputs(payload))
+        lifecycle_preview = derive_arbitrage_lifecycle_state(
+            decision_accepted=decision.accepted,
+            has_order_intents=False,
+            has_submitted_orders=False,
+            has_open_orders=False,
+            hedge_balanced=False,
+            recovery_required=False,
+            unwind_in_progress=False,
+            manual_handoff=False,
+        )
         response_data = {
             "accepted": decision.accepted,
             "reason_code": decision.reason_code,
+            "lifecycle_preview": lifecycle_preview,
             "decision_context": decision.decision_context,
             "candidate_size": (
                 {
@@ -153,6 +170,41 @@ class ControlPlaneStrategyWriteRouteMixin:
                 else None
             ),
         }
+        if decision.accepted:
+            without_auto_unwind = classify_submit_failure_transition(
+                decision_accepted=True,
+                reservation_passed=bool(
+                    decision.reservation_plan
+                    and decision.reservation_plan.reservation_passed
+                ),
+                submit_failed=True,
+                auto_unwind_allowed=False,
+            )
+            with_auto_unwind = classify_submit_failure_transition(
+                decision_accepted=True,
+                reservation_passed=bool(
+                    decision.reservation_plan
+                    and decision.reservation_plan.reservation_passed
+                ),
+                submit_failed=True,
+                auto_unwind_allowed=True,
+            )
+            response_data["submit_failure_preview"] = {
+                "without_auto_unwind": without_auto_unwind["next_state"],
+                "with_auto_unwind": with_auto_unwind["next_state"],
+            }
+
+        self._publish_strategy_event(
+            "strategy.arbitrage_evaluated",
+            {
+                "run_id": run_id,
+                "bot_id": run.get("bot_id"),
+                "accepted": decision.accepted,
+                "reason_code": decision.reason_code,
+                "lifecycle_preview": lifecycle_preview,
+                "persist_intent": persist_intent,
+            },
+        )
 
         if not persist_intent:
             return HTTPStatus.OK, self._response(data=response_data)
@@ -183,6 +235,25 @@ class ControlPlaneStrategyWriteRouteMixin:
                 "strategy_run_id": intent.get("strategy_run_id"),
                 "market": intent.get("market"),
             },
+        )
+        self._publish_strategy_event(
+            "strategy.arbitrage_intent_persisted",
+            {
+                "run_id": run_id,
+                "bot_id": run.get("bot_id"),
+                "intent_id": intent.get("intent_id"),
+                "market": intent.get("market"),
+            },
+        )
+        response_data["lifecycle_preview"] = derive_arbitrage_lifecycle_state(
+            decision_accepted=True,
+            has_order_intents=True,
+            has_submitted_orders=False,
+            has_open_orders=False,
+            hedge_balanced=False,
+            recovery_required=False,
+            unwind_in_progress=False,
+            manual_handoff=False,
         )
         response_data["persisted_intent"] = intent
         return HTTPStatus.CREATED, self._response(data=response_data)

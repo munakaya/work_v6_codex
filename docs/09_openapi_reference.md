@@ -1363,6 +1363,14 @@ components:
           additionalProperties:
             type: string
 
+    EvaluateArbitrageSubmitFailurePreview:
+      type: object
+      properties:
+        without_auto_unwind:
+          type: string
+        with_auto_unwind:
+          type: string
+
     EvaluateArbitrageResponse:
       type: object
       properties:
@@ -1374,6 +1382,8 @@ components:
             accepted:
               type: boolean
             reason_code:
+              type: string
+            lifecycle_preview:
               type: string
             decision_context:
               $ref: '#/components/schemas/StrategyDecisionContext'
@@ -1389,6 +1399,10 @@ components:
               oneOf:
                 - type: 'null'
                 - $ref: '#/components/schemas/EvaluateArbitrageReservationPlan'
+            submit_failure_preview:
+              oneOf:
+                - type: 'null'
+                - $ref: '#/components/schemas/EvaluateArbitrageSubmitFailurePreview'
             persisted_intent:
               oneOf:
                 - type: 'null'

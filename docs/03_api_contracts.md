@@ -213,16 +213,20 @@
 
 - `accepted`
 - `reason_code`
+- `lifecycle_preview`
 - `decision_context`
 - `candidate_size`
 - `executable_edge`
 - `reservation_plan`
+- `submit_failure_preview`
 - `persisted_intent` optional
 
 주의:
 
 - `persist_intent=false`면 read-only backend에서도 평가만 가능
 - `persist_intent=true`인데 backend가 read-only면 `STORE_MUTATION_UNAVAILABLE`
+- 성공 시 `strategy.arbitrage_evaluated` event를 남긴다
+- `persist_intent=true`로 저장되면 `strategy.arbitrage_intent_persisted` event를 추가로 남긴다
 
 #### `GET /api/v1/strategy-runs/{run_id}`
 

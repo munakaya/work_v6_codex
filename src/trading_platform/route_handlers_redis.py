@@ -57,6 +57,16 @@ class ControlPlaneRedisRouteMixin:
             trace_id=self._redis_trace_id(),
         )
 
+    def _publish_strategy_event(
+        self, event_type: str, payload: dict[str, object]
+    ) -> None:
+        self.server.redis_runtime.append_event(
+            "strategy_events",
+            event_type=event_type,
+            payload=payload,
+            trace_id=self._redis_trace_id(),
+        )
+
     def _sync_market_orderbook_top(self, snapshot: dict[str, object] | None) -> None:
         if snapshot is None:
             return
