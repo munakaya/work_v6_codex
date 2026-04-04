@@ -335,6 +335,15 @@ class RecoveryRuntime:
         if reconciliation_resolution_reason is not None:
             self._resolve_trace(trace, resolution_reason=reconciliation_resolution_reason)
             return
+        reconciliation_handoff = self._reconciliation_handoff_reason(trace)
+        if reconciliation_handoff is not None:
+            handoff_reason, summary = reconciliation_handoff
+            self._mark_handoff_required(
+                trace,
+                handoff_reason=handoff_reason,
+                summary=summary,
+            )
+            return
         if not has_active_orders and residual_exposure_quote == Decimal("0"):
             self._resolve_trace(trace, resolution_reason="no_active_orders_and_zero_residual")
             return
@@ -462,6 +471,29 @@ class RecoveryRuntime:
             return None
         if reconciliation_open_order_count == 0 and reconciliation_residual == Decimal("0"):
             return "reconciliation_matched_zero_residual"
+        return None
+
+    def _reconciliation_handoff_reason(
+        self, trace: dict[str, object]
+    ) -> tuple[str, str] | None:
+        reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
+        if reconciliation_result != "mismatch":
+            return None
+        reconciliation_open_order_count = _parse_int(
+            trace.get("reconciliation_open_order_count")
+        )
+        reconciliation_residual = _parse_decimal(
+            trace.get("reconciliation_residual_exposure_quote")
+        )
+        if reconciliation_open_order_count is None or reconciliation_open_order_count < 0:
+            return None
+        if reconciliation_residual is None:
+            return None
+        if reconciliation_open_order_count == 0 and reconciliation_residual > Decimal("0"):
+            return (
+                "reconciliation_mismatch_residual_without_orders",
+                "reconciliation reports no open orders while residual exposure remains",
+            )
         return None
 
     def _create_submit_timeout_trace(

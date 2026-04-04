@@ -195,6 +195,7 @@
 
 - operator 또는 reconciliation job이 recovery trace에 정합성 결과를 기록
 - `matched + open_order_count=0 + residual_exposure_quote=0`이면 recovery runtime이 즉시 `resolved / closed`까지 반영할 수 있음
+- `mismatch + open_order_count=0 + residual_exposure_quote>0`이면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 
 요청 핵심 필드:
 
