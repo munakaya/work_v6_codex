@@ -594,6 +594,7 @@
 
 - `stream_name`: 선택. `market_events`, `bot_events`, `strategy_events`, `order_events`, `alert_events` 중 하나
 - `include_empty`: 선택. 기본 `true`, `false`면 길이가 0인 stream은 제외
+- `stale_only`: 선택. 기본 `false`, `true`면 stale stream만 반환
 - `sort_by`: 선택. `stream_name` 또는 `length`, 기본 `stream_name`
 - `order`: 선택. `asc` 또는 `desc`, 기본 `asc`
 - `stale_after_seconds`: 선택. 기본 `300`
@@ -605,6 +606,7 @@
 - `total_length`
 - `stale_after_seconds`
 - `stale_count`
+- `stale_only`
 - `sort_by`
 - `order`
 - `stream_name`

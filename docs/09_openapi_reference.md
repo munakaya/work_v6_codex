@@ -259,6 +259,10 @@ paths:
           schema:
             type: boolean
         - in: query
+          name: stale_only
+          schema:
+            type: boolean
+        - in: query
           name: sort_by
           schema:
             type: string
@@ -2154,6 +2158,8 @@ components:
               type: integer
             stale_count:
               type: integer
+            stale_only:
+              type: boolean
             sort_by:
               type: string
             order:

@@ -45,6 +45,18 @@ class ControlPlaneRuntimeReadRouteMixin:
         include_empty = optional_bool(single_query_value(params, "include_empty"))
         if include_empty is None:
             include_empty = True
+        raw_stale_only = (single_query_value(params, "stale_only") or "").strip()
+        stale_only = optional_bool(raw_stale_only)
+        if raw_stale_only and stale_only is None:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "stale_only must be true or false",
+                    }
+                ),
+            )
         sort_by = (single_query_value(params, "sort_by") or "").strip()
         if not sort_by:
             sort_by = "stream_name"
@@ -98,6 +110,8 @@ class ControlPlaneRuntimeReadRouteMixin:
             self._annotate_stream_summary(summary, stale_after_seconds=stale_after_seconds)
             if not include_empty and int(summary.get("length") or 0) == 0:
                 continue
+            if stale_only is True and summary.get("is_stale") is not True:
+                continue
             items.append(summary)
         reverse = order == "desc"
         if sort_by == "length":
@@ -118,6 +132,7 @@ class ControlPlaneRuntimeReadRouteMixin:
                 "total_length": total_length,
                 "stale_after_seconds": stale_after_seconds,
                 "stale_count": stale_count,
+                "stale_only": stale_only is True,
                 "sort_by": sort_by,
                 "order": order,
             }
