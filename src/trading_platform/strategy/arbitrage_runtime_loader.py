@@ -8,7 +8,7 @@ from ..storage.store_protocol import ControlPlaneStoreProtocol
 
 
 ACTIVE_INTENT_STATUSES = {"created", "submitted"}
-ACTIVE_ORDER_STATUSES = {"created", "submitted", "open", "partially_filled"}
+ACTIVE_ORDER_STATUSES = {"created", "submitted", "new", "open", "partially_filled"}
 
 
 def _iso_now() -> str:

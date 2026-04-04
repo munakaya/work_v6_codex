@@ -9,12 +9,18 @@ from uuid import uuid4
 from .market_data_connector import PublicMarketDataConnector
 from .redis_runtime import RedisRuntime
 from .storage.store_protocol import ControlPlaneStoreProtocol
-from .strategy import evaluate_arbitrage, load_strategy_inputs, persist_order_intent_plan
+from .strategy import (
+    evaluate_arbitrage,
+    load_strategy_inputs,
+    persist_order_intent_plan,
+    submit_arbitrage_orders,
+)
 from .strategy.arbitrage_evaluation_payload import build_arbitrage_evaluation_payload
 from .strategy.arbitrage_runtime_loader import load_arbitrage_runtime_payload
 
 
 LOGGER = logging.getLogger(__name__)
+SUPPORTED_EXECUTION_MODES = {"simulate_success", "simulate_failure"}
 
 
 def _iso_now() -> str:
@@ -26,6 +32,9 @@ class StrategyRuntimeInfo:
     enabled: bool
     interval_ms: int
     persist_intent: bool
+    execution_enabled: bool
+    execution_mode: str
+    auto_unwind_on_failure: bool
     running: bool
     state: str
     last_success_at: str | None
@@ -37,6 +46,9 @@ class StrategyRuntimeInfo:
     accepted_count: int
     rejected_count: int
     persisted_intent_count: int
+    submit_attempt_count: int
+    submit_success_count: int
+    submit_failure_count: int
     skipped_count: int
     failure_count: int
 
@@ -45,6 +57,9 @@ class StrategyRuntimeInfo:
             "enabled": self.enabled,
             "interval_ms": self.interval_ms,
             "persist_intent": self.persist_intent,
+            "execution_enabled": self.execution_enabled,
+            "execution_mode": self.execution_mode,
+            "auto_unwind_on_failure": self.auto_unwind_on_failure,
             "running": self.running,
             "state": self.state,
             "last_success_at": self.last_success_at,
@@ -56,6 +71,9 @@ class StrategyRuntimeInfo:
             "accepted_count": self.accepted_count,
             "rejected_count": self.rejected_count,
             "persisted_intent_count": self.persisted_intent_count,
+            "submit_attempt_count": self.submit_attempt_count,
+            "submit_success_count": self.submit_success_count,
+            "submit_failure_count": self.submit_failure_count,
             "skipped_count": self.skipped_count,
             "failure_count": self.failure_count,
         }
@@ -68,6 +86,9 @@ class StrategyRuntime:
         enabled: bool,
         interval_ms: int,
         persist_intent: bool,
+        execution_enabled: bool,
+        execution_mode: str,
+        auto_unwind_on_failure: bool,
         read_store: ControlPlaneStoreProtocol,
         connector: PublicMarketDataConnector,
         redis_runtime: RedisRuntime,
@@ -75,6 +96,14 @@ class StrategyRuntime:
         self.enabled = enabled
         self.interval_ms = max(interval_ms, 250)
         self.persist_intent = persist_intent
+        normalized_execution_mode = execution_mode.strip().lower() or "simulate_success"
+        self.execution_mode = (
+            normalized_execution_mode
+            if normalized_execution_mode in SUPPORTED_EXECUTION_MODES
+            else "simulate_failure"
+        )
+        self.execution_enabled = execution_enabled
+        self.auto_unwind_on_failure = auto_unwind_on_failure
         self.read_store = read_store
         self.connector = connector
         self.redis_runtime = redis_runtime
@@ -91,6 +120,9 @@ class StrategyRuntime:
         self._accepted_count = 0
         self._rejected_count = 0
         self._persisted_intent_count = 0
+        self._submit_attempt_count = 0
+        self._submit_success_count = 0
+        self._submit_failure_count = 0
         self._skipped_count = 0
         self._failure_count = 0
 
@@ -101,6 +133,9 @@ class StrategyRuntime:
                 enabled=self.enabled,
                 interval_ms=self.interval_ms,
                 persist_intent=self.persist_intent,
+                execution_enabled=self.execution_enabled,
+                execution_mode=self.execution_mode,
+                auto_unwind_on_failure=self.auto_unwind_on_failure,
                 running=self._running,
                 state=self._state_name(),
                 last_success_at=self._last_success_at,
@@ -112,6 +147,9 @@ class StrategyRuntime:
                 accepted_count=self._accepted_count,
                 rejected_count=self._rejected_count,
                 persisted_intent_count=self._persisted_intent_count,
+                submit_attempt_count=self._submit_attempt_count,
+                submit_success_count=self._submit_success_count,
+                submit_failure_count=self._submit_failure_count,
                 skipped_count=self._skipped_count,
                 failure_count=self._failure_count,
             )
@@ -179,6 +217,22 @@ class StrategyRuntime:
         if load_result.payload is None:
             self._record_skip(load_result.skip_reason or "SKIPPED", load_result.detail)
             return
+
+        runtime_state = load_result.payload.get("runtime_state")
+        if isinstance(runtime_state, dict):
+            if bool(runtime_state.get("unwind_in_progress")):
+                self._record_skip(
+                    "UNWIND_IN_PROGRESS",
+                    "existing recovery flow is active",
+                )
+                return
+            open_order_count = int(runtime_state.get("open_order_count", 0) or 0)
+            if bool(runtime_state.get("duplicate_intent_active")) or open_order_count > 0:
+                self._record_skip(
+                    "ACTIVE_ENTRY_PRESENT",
+                    "existing intent or open orders block new evaluation",
+                )
+                return
 
         try:
             decision = evaluate_arbitrage(load_strategy_inputs(load_result.payload))
@@ -269,6 +323,97 @@ class StrategyRuntime:
             self._last_success_at = _iso_now()
             self._last_error_message = None
 
+        if not self.execution_enabled:
+            return
+
+        with self._lock:
+            self._submit_attempt_count += 1
+        submit_result = submit_arbitrage_orders(
+            store=self.read_store,
+            intent=intent,
+            execution_mode=self.execution_mode,
+            auto_unwind_on_failure=self.auto_unwind_on_failure,
+        )
+        for order in submit_result.created_orders:
+            self.redis_runtime.publish_order_event(
+                event_type="order.created",
+                payload={
+                    "order_id": order.get("order_id"),
+                    "order_intent_id": order.get("order_intent_id"),
+                    "bot_id": order.get("bot_id"),
+                    "exchange_name": order.get("exchange_name"),
+                    "status": order.get("status"),
+                },
+                trace_id=trace_id,
+            )
+
+        payload = build_arbitrage_evaluation_payload(
+            decision=decision,
+            bot_id=bot_id,
+            strategy_run_id=run_id,
+            persisted_intent=intent,
+            lifecycle_preview_override=submit_result.lifecycle_preview,
+            submit_result=submit_result.as_payload(),
+        )
+        self.redis_runtime.sync_arbitrage_evaluation(
+            run_id=run_id,
+            payload=payload,
+            trace_id=trace_id,
+            publish_event=True,
+        )
+
+        if submit_result.outcome == "submitted":
+            self.redis_runtime.append_event(
+                "strategy_events",
+                event_type="strategy.arbitrage_orders_submitted",
+                payload={
+                    "run_id": run_id,
+                    "bot_id": bot_id,
+                    "intent_id": intent.get("intent_id"),
+                    "order_count": len(submit_result.created_orders),
+                    "lifecycle_preview": submit_result.lifecycle_preview,
+                    "source": "runtime_loop",
+                },
+                trace_id=trace_id,
+            )
+            with self._lock:
+                self._submit_success_count += 1
+                self._last_success_at = _iso_now()
+            return
+
+        alert = self.read_store.emit_alert(
+            bot_id=bot_id,
+            level="error",
+            code="ARBITRAGE_SUBMIT_FAILED",
+            message="arbitrage runtime submit simulation failed",
+        )
+        self.redis_runtime.publish_alert_event(
+            event_type="alert.created",
+            payload={
+                "alert_id": alert.get("alert_id"),
+                "bot_id": alert.get("bot_id"),
+                "level": alert.get("level"),
+                "code": alert.get("code"),
+            },
+            trace_id=trace_id,
+        )
+        self.redis_runtime.append_event(
+            "strategy_events",
+            event_type="strategy.arbitrage_submit_failed",
+            payload={
+                "run_id": run_id,
+                "bot_id": bot_id,
+                "intent_id": intent.get("intent_id"),
+                "lifecycle_preview": submit_result.lifecycle_preview,
+                "auto_unwind_on_failure": self.auto_unwind_on_failure,
+                "source": "runtime_loop",
+            },
+            trace_id=trace_id,
+        )
+        with self._lock:
+            self._submit_failure_count += 1
+            self._last_error_message = "submit simulation failed"
+
     def _evaluation_changed(self, *, run_id: str, payload: dict[str, object]) -> bool:
         previous = self.redis_runtime.get_arbitrage_evaluation(run_id=run_id)
         if previous is None:
@@ -283,6 +428,7 @@ class StrategyRuntime:
         candidate_size = payload.get("candidate_size")
         executable_edge = payload.get("executable_edge")
         reservation_plan = payload.get("reservation_plan")
+        submit_result = payload.get("submit_result")
         return {
             "accepted": payload.get("accepted"),
             "reason_code": payload.get("reason_code"),
@@ -303,6 +449,11 @@ class StrategyRuntime:
                 if isinstance(reservation_plan, dict)
                 else None
             ),
+            "submit_outcome": (
+                submit_result.get("outcome")
+                if isinstance(submit_result, dict)
+                else None
+            ),
         }
 
     def _record_success(self, accepted: bool) -> None:
@@ -319,8 +470,8 @@ class StrategyRuntime:
         with self._lock:
             self._skipped_count += 1
             self._last_skip_at = _iso_now()
-            self._last_skip_reason = reason
-            self._last_error_message = detail
+            self._last_skip_reason = reason if detail is None else f"{reason}: {detail}"
+            self._last_error_message = None
 
     def _record_failure(self, *, run_id: str, bot_id: str, exc: Exception) -> None:
         with self._lock:

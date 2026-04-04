@@ -51,6 +51,9 @@ class AppConfig:
     strategy_runtime_enabled: bool
     strategy_runtime_interval_ms: int
     strategy_runtime_persist_intent: bool
+    strategy_runtime_execution_enabled: bool
+    strategy_runtime_execution_mode: str
+    strategy_runtime_auto_unwind_on_failure: bool
     use_sample_read_model: bool
     enable_postgres_mutation: bool
 
@@ -89,6 +92,16 @@ def load_config() -> AppConfig:
         strategy_runtime_interval_ms=_env_int("TP_STRATEGY_RUNTIME_INTERVAL_MS", 3000),
         strategy_runtime_persist_intent=_env_bool(
             "TP_STRATEGY_RUNTIME_PERSIST_INTENT", False
+        ),
+        strategy_runtime_execution_enabled=_env_bool(
+            "TP_STRATEGY_RUNTIME_EXECUTION_ENABLED", False
+        ),
+        strategy_runtime_execution_mode=os.getenv(
+            "TP_STRATEGY_RUNTIME_EXECUTION_MODE", "simulate_success"
+        ).strip()
+        or "simulate_success",
+        strategy_runtime_auto_unwind_on_failure=_env_bool(
+            "TP_STRATEGY_RUNTIME_AUTO_UNWIND_ON_FAILURE", False
         ),
         use_sample_read_model=_env_bool("TP_USE_SAMPLE_READ_MODEL", True),
         enable_postgres_mutation=_env_bool("TP_ENABLE_POSTGRES_MUTATION", False),

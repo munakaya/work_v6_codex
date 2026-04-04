@@ -2092,6 +2092,12 @@ components:
                   type: integer
                 persist_intent:
                   type: boolean
+                execution_enabled:
+                  type: boolean
+                execution_mode:
+                  type: string
+                auto_unwind_on_failure:
+                  type: boolean
                 running:
                   type: boolean
                 state:
@@ -2126,6 +2132,12 @@ components:
                 rejected_count:
                   type: integer
                 persisted_intent_count:
+                  type: integer
+                submit_attempt_count:
+                  type: integer
+                submit_success_count:
+                  type: integer
+                submit_failure_count:
                   type: integer
                 skipped_count:
                   type: integer

@@ -74,8 +74,10 @@ def build_arbitrage_evaluation_payload(
     bot_id: str,
     strategy_run_id: str,
     persisted_intent: dict[str, object] | None = None,
+    lifecycle_preview_override: str | None = None,
+    submit_result: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    lifecycle_preview = derive_arbitrage_lifecycle_state(
+    lifecycle_preview = lifecycle_preview_override or derive_arbitrage_lifecycle_state(
         decision_accepted=decision.accepted,
         has_order_intents=persisted_intent is not None,
         has_submitted_orders=False,
@@ -101,4 +103,6 @@ def build_arbitrage_evaluation_payload(
         payload["submit_failure_preview"] = submit_failure_preview
     if persisted_intent is not None:
         payload["persisted_intent"] = persisted_intent
+    if submit_result is not None:
+        payload["submit_result"] = submit_result
     return payload

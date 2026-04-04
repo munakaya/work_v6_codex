@@ -1,5 +1,6 @@
 from .arbitrage_input_loader import load_strategy_inputs
 from .arbitrage_evaluation_payload import build_arbitrage_evaluation_payload
+from .arbitrage_execution import submit_arbitrage_orders
 from .arbitrage_runtime import evaluate_arbitrage, persist_order_intent_plan
 from .arbitrage_runtime_loader import load_arbitrage_runtime_payload
 from .arbitrage_state_machine import (
@@ -15,4 +16,5 @@ __all__ = [
     "load_arbitrage_runtime_payload",
     "load_strategy_inputs",
     "persist_order_intent_plan",
+    "submit_arbitrage_orders",
 ]

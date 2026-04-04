@@ -68,6 +68,7 @@
 목적:
 
 - PostgreSQL, Redis 연결과 market data / strategy runtime 상태 포함 준비 상태 확인
+- `strategy_runtime`에는 evaluation/persist/submit 카운터와 simulated execution 모드도 포함
 
 ### 18.3 Bot API
 

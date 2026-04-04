@@ -18,7 +18,7 @@ def main() -> None:
     server.strategy_runtime.start()
 
     LOGGER.info(
-        "starting %s on %s:%s log=%s store=%s mode=%s redis=%s market_data=%s strategy_runtime=%s",
+        "starting %s on %s:%s log=%s store=%s mode=%s redis=%s market_data=%s strategy_runtime=%s strategy_exec=%s/%s",
         config.service_name,
         config.host,
         config.port,
@@ -28,6 +28,8 @@ def main() -> None:
         server.redis_runtime.info.state,
         server.market_data_runtime.info.state,
         server.strategy_runtime.info.state,
+        "enabled" if config.strategy_runtime_execution_enabled else "disabled",
+        config.strategy_runtime_execution_mode,
     )
     try:
         server.serve_forever()
