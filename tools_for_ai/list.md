@@ -5,3 +5,4 @@
 - strategy_runtime_guard_cases.py: active recovery/manual handoff trace가 있을 때 strategy runtime이 새 평가를 skip하는지 검증한다
 - private_execution_readiness_cases.py: private_http execution이 health probe 기준으로 reachable, missing, not_required 상태를 올바르게 판정하는지 검증한다
 - private_http_server_cases.py: private_http executor를 실제 서버 흐름에서 filled/submitted/failed 세 경로로 검증한다
+- private_http_followup_cases.py: private_http가 submitted를 반환한 뒤 later fill로 closed 되거나 timeout으로 recovery trace가 열리는지 서버 전체 흐름에서 검증한다
