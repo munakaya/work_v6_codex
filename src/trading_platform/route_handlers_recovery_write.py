@@ -5,9 +5,12 @@ from http import HTTPStatus
 
 from .request_utils import (
     is_nonnegative_number_text,
+    is_positive_number_text,
     json_number_text,
     optional_object,
+    optional_bool,
     optional_string,
+    json_string,
 )
 
 
@@ -206,6 +209,18 @@ class ControlPlaneRecoveryWriteRouteMixin:
         body, error = self._read_optional_body()
         if error is not None:
             return error
+        create_unwind_intent_param = optional_bool(optional_string(body.get("create_unwind_intent")))
+        if "create_unwind_intent" in body and create_unwind_intent_param is None:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "create_unwind_intent must be true or false",
+                    }
+                ),
+            )
+        create_unwind_intent = bool(create_unwind_intent_param)
         residual_exposure_quote = json_number_text(body.get("residual_exposure_quote"))
         if "residual_exposure_quote" in body and (
             residual_exposure_quote is None
@@ -220,12 +235,133 @@ class ControlPlaneRecoveryWriteRouteMixin:
                     }
                 ),
             )
+        current = self.server.redis_runtime.get_recovery_trace(
+            recovery_trace_id=recovery_trace_id
+        )
+        if current is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_NOT_FOUND",
+                        "message": "recovery_trace_id not found",
+                    }
+                ),
+            )
+        current_status = str(current.get("status") or "").strip().lower()
+        if current_status in {"resolved", "cancelled"}:
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_TERMINAL",
+                        "message": "recovery trace is already terminal",
+                    }
+                ),
+            )
+        unwind_intent = None
+        unwind_intent_patch: dict[str, object] = {}
+        if create_unwind_intent:
+            unsupported = self._ensure_mutation_supported()
+            if unsupported is not None:
+                return unsupported
+            existing_linked_id = optional_string(current.get("linked_unwind_action_id"))
+            if existing_linked_id:
+                return (
+                    HTTPStatus.CONFLICT,
+                    self._response(
+                        error={
+                            "code": "RECOVERY_TRACE_UNWIND_INTENT_EXISTS",
+                            "message": "recovery trace already has a linked unwind action",
+                        }
+                    ),
+                )
+            required_fields = {
+                "market": json_string(body.get("market")),
+                "buy_exchange": json_string(body.get("buy_exchange")),
+                "sell_exchange": json_string(body.get("sell_exchange")),
+                "side_pair": json_string(body.get("side_pair")),
+                "target_qty": json_number_text(body.get("target_qty")),
+            }
+            invalid_fields = [
+                key for key, value in required_fields.items() if key in body and value is None
+            ]
+            missing = [key for key, value in required_fields.items() if not value]
+            if invalid_fields or missing:
+                parts: list[str] = []
+                if invalid_fields:
+                    parts.append("invalid fields: " + ", ".join(sorted(set(invalid_fields))))
+                if missing:
+                    parts.append("missing required fields: " + ", ".join(missing))
+                return (
+                    HTTPStatus.BAD_REQUEST,
+                    self._response(
+                        error={
+                            "code": "INVALID_REQUEST",
+                            "message": "; ".join(parts),
+                        }
+                    ),
+                )
+            if not is_positive_number_text(required_fields["target_qty"]):
+                return (
+                    HTTPStatus.BAD_REQUEST,
+                    self._response(
+                        error={
+                            "code": "INVALID_REQUEST",
+                            "message": "target_qty must be a positive number",
+                        }
+                    ),
+                )
+            run_id = optional_string(current.get("run_id"))
+            if not run_id:
+                return (
+                    HTTPStatus.CONFLICT,
+                    self._response(
+                        error={
+                            "code": "RECOVERY_TRACE_RUN_ID_MISSING",
+                            "message": "recovery trace does not have a strategy run id",
+                        }
+                    ),
+                )
+            decision_context = {
+                "recovery_action": "manual_unwind",
+                "recovery_trace_id": recovery_trace_id,
+                "operator_requested": True,
+                "operator_context": optional_object(body.get("operator_context")) or {},
+            }
+            outcome, unwind_intent = self.server.read_store.create_order_intent(
+                strategy_run_id=run_id,
+                market=required_fields["market"],
+                buy_exchange=required_fields["buy_exchange"],
+                sell_exchange=required_fields["sell_exchange"],
+                side_pair=required_fields["side_pair"],
+                target_qty=required_fields["target_qty"],
+                expected_profit=None,
+                expected_profit_ratio=None,
+                status="created",
+                decision_context=decision_context,
+            )
+            if outcome != "created" or unwind_intent is None:
+                return (
+                    HTTPStatus.CONFLICT,
+                    self._response(
+                        error={
+                            "code": "RECOVERY_TRACE_UNWIND_INTENT_CREATE_FAILED",
+                            "message": "failed to create linked unwind intent",
+                        }
+                    ),
+                )
+            unwind_intent_patch = {
+                "linked_unwind_action_id": unwind_intent.get("intent_id"),
+                "linked_unwind_intent_id": unwind_intent.get("intent_id"),
+            }
         trace = self.server.redis_runtime.transition_recovery_trace(
             recovery_trace_id=recovery_trace_id,
             status="active",
             lifecycle_state="unwind_in_progress",
             trace_id=self.headers.get("X-Trace-Id"),
             patch={
+                **unwind_intent_patch,
                 "manual_handoff_required": False,
                 "incident_code": "ARB-202 UNWIND_IN_PROGRESS",
                 "unwind_reason": optional_string(body.get("unwind_reason"))
@@ -258,4 +394,16 @@ class ControlPlaneRecoveryWriteRouteMixin:
                     }
                 ),
             )
-        return HTTPStatus.OK, self._response(data=trace)
+        data = dict(trace)
+        if unwind_intent is not None:
+            self._publish_order_event(
+                "order_intent.created",
+                {
+                    "intent_id": unwind_intent.get("intent_id"),
+                    "bot_id": unwind_intent.get("bot_id"),
+                    "strategy_run_id": unwind_intent.get("strategy_run_id"),
+                    "market": unwind_intent.get("market"),
+                },
+            )
+            data["created_unwind_intent"] = unwind_intent
+        return HTTPStatus.OK, self._response(data=data)

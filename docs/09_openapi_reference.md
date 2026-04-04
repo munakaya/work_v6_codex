@@ -2507,6 +2507,10 @@ components:
             - type: string
         manual_handoff_required:
           type: boolean
+        linked_unwind_action_id:
+          oneOf:
+            - type: 'null'
+            - type: string
         residual_exposure_quote:
           oneOf:
             - type: 'null'
@@ -2549,7 +2553,14 @@ components:
         success:
           type: boolean
         data:
-          $ref: '#/components/schemas/RecoveryTraceSummary'
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/RecoveryTraceSummary'
+          properties:
+            created_unwind_intent:
+              oneOf:
+                - type: 'null'
+                - $ref: '#/components/schemas/OrderIntentDetail'
         error:
           oneOf:
             - type: 'null'
@@ -2579,7 +2590,19 @@ components:
       properties:
         resolution_reason:
           type: string
+        create_unwind_intent:
+          type: boolean
         residual_exposure_quote:
+          type: string
+        market:
+          type: string
+        buy_exchange:
+          type: string
+        sell_exchange:
+          type: string
+        side_pair:
+          type: string
+        target_qty:
           type: string
         handoff_reason:
           type: string

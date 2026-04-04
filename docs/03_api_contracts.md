@@ -132,9 +132,18 @@
 
 - `unwind_reason`
 - `residual_exposure_quote` (주면 0 이상 숫자여야 함)
+- `create_unwind_intent` (선택, true면 linked unwind intent 생성)
+- `market`, `buy_exchange`, `sell_exchange`, `side_pair`, `target_qty`
+  - `create_unwind_intent=true`일 때 필수
 - `verified_by`
 - `summary`
 - `operator_context`
+
+응답 핵심 필드:
+
+- `lifecycle_state=unwind_in_progress`
+- `linked_unwind_action_id`
+- `created_unwind_intent` (`create_unwind_intent=true`일 때)
 
 #### `POST /api/v1/bots/register`
 
