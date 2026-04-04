@@ -2268,6 +2268,8 @@ components:
                   type: boolean
                 execution_mode:
                   type: string
+                execution_adapter:
+                  type: string
                 auto_unwind_on_failure:
                   type: boolean
                 running:

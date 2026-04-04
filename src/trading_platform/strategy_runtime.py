@@ -21,7 +21,12 @@ from .strategy_runtime_execution import execute_persisted_arbitrage_intent
 
 
 LOGGER = logging.getLogger(__name__)
-SUPPORTED_EXECUTION_MODES = {"simulate_success", "simulate_failure", "simulate_fill"}
+SUPPORTED_EXECUTION_MODES = {
+    "simulate_success",
+    "simulate_failure",
+    "simulate_fill",
+    "private_stub",
+}
 
 
 def _iso_now() -> str:
@@ -381,7 +386,9 @@ class StrategyRuntime:
             return
         with self._lock:
             self._submit_failure_count += 1
-            self._last_error_message = "submit simulation failed"
+            self._last_error_message = (
+                execution_outcome.error_message or "arbitrage runtime submit failed"
+            )
 
     def _evaluation_changed(self, *, run_id: str, payload: dict[str, object]) -> bool:
         previous = self.redis_runtime.get_arbitrage_evaluation(run_id=run_id)

@@ -15,10 +15,19 @@ class StrategyRuntimeExecutionOutcome:
     status: str
     latest_payload: dict[str, object]
     recovery_trace_id: str | None = None
+    error_message: str | None = None
 
 
 def _iso_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _submit_failure_message(submit_result: ArbitrageSubmitResult) -> str:
+    details = submit_result.details if isinstance(submit_result.details, dict) else {}
+    reason = str(details.get("reason") or "").strip()
+    if reason:
+        return reason
+    return "arbitrage runtime submit failed"
 
 
 TERMINAL_ORDER_STATUSES = {"filled", "cancelled", "rejected", "expired", "failed"}
@@ -159,11 +168,12 @@ def execute_persisted_arbitrage_intent(
             latest_payload=payload,
         )
 
+    error_message = _submit_failure_message(submit_result)
     alert = store.emit_alert(
         bot_id=bot_id,
         level="error",
         code="ARBITRAGE_SUBMIT_FAILED",
-        message="arbitrage runtime submit simulation failed",
+        message=error_message,
     )
     recovery_trace_id = f"rt_{uuid4().hex}"
     recovery_trace = {
@@ -221,4 +231,5 @@ def execute_persisted_arbitrage_intent(
         status="submit_failed",
         latest_payload=payload,
         recovery_trace_id=recovery_trace_id,
+        error_message=error_message,
     )
