@@ -33,6 +33,7 @@ class ControlPlaneRecoveryWriteRouteMixin:
             "/resolve": self._resolve_recovery_trace_response,
             "/handoff": self._handoff_recovery_trace_response,
             "/start-unwind": self._start_unwind_recovery_trace_response,
+            "/submit-unwind-order": self._submit_unwind_order_response,
         }
         for suffix, handler in suffixes.items():
             if not path.endswith(suffix):
@@ -407,3 +408,211 @@ class ControlPlaneRecoveryWriteRouteMixin:
             )
             data["created_unwind_intent"] = unwind_intent
         return HTTPStatus.OK, self._response(data=data)
+
+    def _submit_unwind_order_response(
+        self, recovery_trace_id: str
+    ) -> tuple[HTTPStatus, dict[str, object]]:
+        unsupported = self._ensure_mutation_supported()
+        if unsupported is not None:
+            return unsupported
+        if not self.server.redis_runtime.info.enabled:
+            return (
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                self._response(
+                    error={
+                        "code": "REDIS_RUNTIME_UNAVAILABLE",
+                        "message": "redis runtime is not enabled",
+                    }
+                ),
+            )
+        body, error = self._read_json_body()
+        if error is not None:
+            return error
+        current = self.server.redis_runtime.get_recovery_trace(
+            recovery_trace_id=recovery_trace_id
+        )
+        if current is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_NOT_FOUND",
+                        "message": "recovery_trace_id not found",
+                    }
+                ),
+            )
+        current_status = str(current.get("status") or "").strip().lower()
+        if current_status in {"resolved", "cancelled"}:
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_TERMINAL",
+                        "message": "recovery trace is already terminal",
+                    }
+                ),
+            )
+        linked_intent_id = optional_string(current.get("linked_unwind_action_id"))
+        if not linked_intent_id:
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_UNWIND_INTENT_MISSING",
+                        "message": "recovery trace does not have a linked unwind intent",
+                    }
+                ),
+            )
+        existing_linked_order_id = optional_string(current.get("linked_unwind_order_id"))
+        if existing_linked_order_id:
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_UNWIND_ORDER_EXISTS",
+                        "message": "recovery trace already has a linked unwind order",
+                    }
+                ),
+            )
+
+        required_fields = {
+            "exchange_name": json_string(body.get("exchange_name")),
+            "market": json_string(body.get("market")),
+            "side": json_string(body.get("side")),
+            "requested_qty": json_number_text(body.get("requested_qty")),
+        }
+        invalid_fields = [
+            key for key, value in required_fields.items() if key in body and value is None
+        ]
+        exchange_order_id = json_string(body.get("exchange_order_id"))
+        if "exchange_order_id" in body and exchange_order_id is None:
+            invalid_fields.append("exchange_order_id")
+        requested_price = json_number_text(body.get("requested_price"))
+        if "requested_price" in body and requested_price is None:
+            invalid_fields.append("requested_price")
+        if "raw_payload" in body and optional_object(body.get("raw_payload")) is None:
+            invalid_fields.append("raw_payload")
+        status = json_string(body.get("status")) or "new"
+        if "status" in body and status not in {"new", "partially_filled", "filled", "cancelled", "rejected", "expired"}:
+            invalid_fields.append("status")
+        side_value = required_fields["side"]
+        if side_value is not None and side_value not in {"buy", "sell"}:
+            invalid_fields.append("side")
+        if invalid_fields:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "invalid fields: " + ", ".join(sorted(set(invalid_fields))),
+                    }
+                ),
+            )
+        missing = [key for key, value in required_fields.items() if not value]
+        if missing:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": f"missing required fields: {', '.join(missing)}",
+                    }
+                ),
+            )
+        if not is_positive_number_text(required_fields["requested_qty"]):
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "requested_qty must be a positive number",
+                    }
+                ),
+            )
+        if requested_price is not None and not is_positive_number_text(requested_price):
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "requested_price must be a positive number",
+                    }
+                ),
+            )
+
+        outcome, order = self.server.read_store.create_order(
+            order_intent_id=linked_intent_id,
+            exchange_name=required_fields["exchange_name"],
+            exchange_order_id=exchange_order_id,
+            market=required_fields["market"],
+            side=required_fields["side"],
+            requested_price=requested_price,
+            requested_qty=required_fields["requested_qty"],
+            status=status,
+            raw_payload=optional_object(body.get("raw_payload")),
+        )
+        if outcome == "not_found":
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "ORDER_INTENT_NOT_FOUND",
+                        "message": "linked unwind intent not found",
+                    }
+                ),
+            )
+        if outcome == "conflict":
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "ORDER_CONFLICT",
+                        "message": "exchange_name and exchange_order_id already exist",
+                    }
+                ),
+            )
+        if outcome == "invalid":
+            return (
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                self._response(
+                    error={
+                        "code": "ORDER_VALIDATION_FAILED",
+                        "message": "market or exchange_name does not match linked unwind intent",
+                    }
+                ),
+            )
+
+        trace = self.server.redis_runtime.transition_recovery_trace(
+            recovery_trace_id=recovery_trace_id,
+            status="active",
+            lifecycle_state="unwind_in_progress",
+            trace_id=self.headers.get("X-Trace-Id"),
+            patch={
+                "linked_unwind_order_id": order.get("order_id"),
+                "unwind_order_created_at": self.server.redis_runtime.now_iso(),
+            },
+            event_type="strategy.recovery_trace.unwind_order_created",
+        )
+        if trace is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_NOT_FOUND",
+                        "message": "recovery_trace_id not found",
+                    }
+                ),
+            )
+        self._publish_order_event(
+            "order.created",
+            {
+                "order_id": order.get("order_id"),
+                "order_intent_id": order.get("order_intent_id"),
+                "bot_id": order.get("bot_id"),
+                "exchange_name": order.get("exchange_name"),
+                "status": order.get("status"),
+            },
+        )
+        data = dict(trace)
+        data["created_unwind_order"] = order
+        return HTTPStatus.CREATED, self._response(data=data)

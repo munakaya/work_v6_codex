@@ -234,6 +234,46 @@ paths:
         '503':
           description: Redis runtime unavailable
 
+  /api/v1/recovery-traces/{recovery_trace_id}/submit-unwind-order:
+    post:
+      tags: [Recovery]
+      summary: Create unwind order under linked recovery unwind intent
+      operationId: submitRecoveryTraceUnwindOrder
+      parameters:
+        - in: path
+          name: recovery_trace_id
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: X-Trace-Id
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryTraceUnwindOrderRequest'
+      responses:
+        '201':
+          description: Unwind order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryTraceResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Recovery trace or linked unwind intent not found
+        '409':
+          description: Recovery trace already terminal or linked unwind order already exists
+        '422':
+          description: Linked unwind intent validation failed
+        '503':
+          description: Redis runtime unavailable
+
   /api/v1/market-data/orderbook-top:
     get:
       tags: [MarketData]
@@ -2511,6 +2551,10 @@ components:
           oneOf:
             - type: 'null'
             - type: string
+        linked_unwind_order_id:
+          oneOf:
+            - type: 'null'
+            - type: string
         residual_exposure_quote:
           oneOf:
             - type: 'null'
@@ -2561,6 +2605,10 @@ components:
               oneOf:
                 - type: 'null'
                 - $ref: '#/components/schemas/OrderIntentDetail'
+            created_unwind_order:
+              oneOf:
+                - type: 'null'
+                - $ref: '#/components/schemas/OrderDetail'
         error:
           oneOf:
             - type: 'null'
@@ -2611,6 +2659,26 @@ components:
         summary:
           type: string
         operator_context:
+          type: object
+
+    RecoveryTraceUnwindOrderRequest:
+      type: object
+      properties:
+        exchange_name:
+          type: string
+        exchange_order_id:
+          type: string
+        market:
+          type: string
+        side:
+          type: string
+        requested_price:
+          type: string
+        requested_qty:
+          type: string
+        status:
+          type: string
+        raw_payload:
           type: object
 
     MarketOrderbookTopResponse:

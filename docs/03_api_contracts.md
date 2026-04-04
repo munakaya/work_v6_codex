@@ -145,6 +145,27 @@
 - `linked_unwind_action_id`
 - `created_unwind_intent` (`create_unwind_intent=true`일 때)
 
+#### `POST /api/v1/recovery-traces/{recovery_trace_id}/submit-unwind-order`
+
+목적:
+
+- operator가 linked unwind intent 아래 실제 unwind order를 생성
+
+요청 핵심 필드:
+
+- `exchange_name`
+- `market`
+- `side`
+- `requested_qty`
+- `requested_price` (선택)
+- `exchange_order_id` (선택)
+
+응답 핵심 필드:
+
+- `lifecycle_state=unwind_in_progress`
+- `linked_unwind_order_id`
+- `created_unwind_order`
+
 #### `POST /api/v1/bots/register`
 
 목적:
