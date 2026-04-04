@@ -265,6 +265,11 @@ paths:
           schema:
             type: boolean
         - in: query
+          name: status
+          schema:
+            type: string
+            enum: [empty, fresh, stale]
+        - in: query
           name: stale_only
           schema:
             type: boolean
@@ -2139,6 +2144,9 @@ components:
                     oneOf:
                       - type: 'null'
                       - type: boolean
+                  status:
+                    type: string
+                    enum: [empty, fresh, stale]
                   newest_stream_id:
                     oneOf:
                       - type: 'null'
@@ -2169,6 +2177,10 @@ components:
               type: integer
             stale_only:
               type: boolean
+            status:
+              oneOf:
+                - type: 'null'
+                - type: string
             limit:
               oneOf:
                 - type: 'null'

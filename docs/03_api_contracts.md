@@ -595,6 +595,7 @@
 - `stream_name`: 선택. `market_events`, `bot_events`, `strategy_events`, `order_events`, `alert_events` 중 하나
 - `limit`: 선택. `1`~`5`, 정렬/필터 후 상위 N개만 반환
 - `include_empty`: 선택. 기본 `true`, `false`면 길이가 0인 stream은 제외
+- `status`: 선택. `empty`, `fresh`, `stale` 중 하나
 - `stale_only`: 선택. 기본 `false`, `true`면 stale stream만 반환
 - `sort_by`: 선택. `stream_name`, `length`, `newest_age_seconds` 중 하나, 기본 `stream_name`
 - `order`: 선택. `asc` 또는 `desc`, 기본 `asc`
@@ -609,6 +610,7 @@
 - `stale_after_seconds`
 - `stale_count`
 - `stale_only`
+- `status`
 - `limit`
 - `has_more`
 - `sort_by`
@@ -617,6 +619,7 @@
 - `length`
 - `newest_age_seconds`
 - `is_stale`
+- `status`
 - `newest_stream_id`
 - `newest_occurred_at`
 - `oldest_stream_id`

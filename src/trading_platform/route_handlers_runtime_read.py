@@ -45,6 +45,17 @@ class ControlPlaneRuntimeReadRouteMixin:
         include_empty = optional_bool(single_query_value(params, "include_empty"))
         if include_empty is None:
             include_empty = True
+        status = (single_query_value(params, "status") or "").strip().lower()
+        if status and status not in {"empty", "fresh", "stale"}:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "status must be empty, fresh, or stale",
+                    }
+                ),
+            )
         raw_stale_only = (single_query_value(params, "stale_only") or "").strip()
         stale_only = optional_bool(raw_stale_only)
         if raw_stale_only and stale_only is None:
@@ -123,6 +134,8 @@ class ControlPlaneRuntimeReadRouteMixin:
                 continue
             if stale_only is True and summary.get("is_stale") is not True:
                 continue
+            if status and summary.get("status") != status:
+                continue
             items.append(summary)
         reverse = order == "desc"
         if sort_by == "stream_name":
@@ -152,6 +165,7 @@ class ControlPlaneRuntimeReadRouteMixin:
                 "stale_after_seconds": stale_after_seconds,
                 "stale_count": stale_count,
                 "stale_only": stale_only is True,
+                "status": status or None,
                 "limit": limit,
                 "has_more": matched_count > len(items),
                 "sort_by": sort_by,
@@ -186,15 +200,18 @@ class ControlPlaneRuntimeReadRouteMixin:
     def _annotate_stream_summary(
         self, summary: dict[str, object], *, stale_after_seconds: int
     ) -> None:
+        length = int(summary.get("length") or 0)
         occurred_at = summary.get("newest_occurred_at")
         if not isinstance(occurred_at, str) or not occurred_at:
             summary["newest_age_seconds"] = None
             summary["is_stale"] = None
+            summary["status"] = "empty" if length == 0 else "fresh"
             return
         newest_at = self._parse_iso_datetime(occurred_at)
         if newest_at is None:
             summary["newest_age_seconds"] = None
             summary["is_stale"] = None
+            summary["status"] = "empty" if length == 0 else "fresh"
             return
         age_seconds = max(
             0,
@@ -202,6 +219,12 @@ class ControlPlaneRuntimeReadRouteMixin:
         )
         summary["newest_age_seconds"] = age_seconds
         summary["is_stale"] = age_seconds > stale_after_seconds
+        if length == 0:
+            summary["status"] = "empty"
+        elif summary["is_stale"] is True:
+            summary["status"] = "stale"
+        else:
+            summary["status"] = "fresh"
 
     def _newest_age_sort_key(
         self, item: dict[str, object], *, reverse: bool
