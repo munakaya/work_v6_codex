@@ -1999,6 +1999,43 @@ def main() -> None:
         "repeated mismatch latest evaluation should switch to manual_handoff",
     )
 
+    invalid_mismatch_streak_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=invalid_mismatch_streak_trace_id,
+        payload={
+            "recovery_trace_id": invalid_mismatch_streak_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "11",
+            "reconciliation_result": "mismatch",
+            "reconciliation_open_order_count": 1,
+            "reconciliation_residual_exposure_quote": "11",
+            "reconciliation_mismatch_streak": True,
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+    )
+    runtime.run_once()
+    invalid_mismatch_streak_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=invalid_mismatch_streak_trace_id
+    )
+    _assert(
+        invalid_mismatch_streak_trace is not None,
+        "invalid mismatch streak trace missing",
+    )
+    _assert(
+        invalid_mismatch_streak_trace.get("status") == "handoff_required",
+        "bool mismatch streak should trigger manual handoff",
+    )
+    _assert(
+        invalid_mismatch_streak_trace.get("handoff_reason")
+        == "reconciliation_result_invalid",
+        "invalid mismatch streak handoff reason mismatch",
+    )
+
     print("PASS recovery runtime resolves zero-exposure traces")
     print("PASS recovery runtime resolves terminal intents without active orders")
     print("PASS recovery runtime opens submit-timeout recovery traces")

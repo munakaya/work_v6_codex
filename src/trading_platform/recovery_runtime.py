@@ -667,6 +667,15 @@ class RecoveryRuntime:
             observed_at = _parse_iso_datetime(observed_at_raw)
             if observed_at is None or observed_at > datetime.now(UTC):
                 invalid_fields.append("observed_at")
+        if reconciliation_result == "mismatch" and "reconciliation_mismatch_streak" in trace:
+            mismatch_streak_raw = trace.get("reconciliation_mismatch_streak")
+            mismatch_streak = _parse_int(mismatch_streak_raw)
+            if (
+                isinstance(mismatch_streak_raw, bool)
+                or mismatch_streak is None
+                or mismatch_streak < 0
+            ):
+                invalid_fields.append("mismatch_streak")
         if not invalid_fields:
             return None
         return (
