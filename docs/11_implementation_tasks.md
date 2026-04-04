@@ -60,6 +60,7 @@
 5. 거래소 public market data connector
 6. config compiler + risk evaluator
 7. strategy runtime + dry-run
+7a. arbitrage executable edge / reservation
 8. order execution + reconciliation
 9. unwind + alert 강화
 10. shadow 운영 검증
@@ -69,5 +70,6 @@
 - 백엔드 코어: `01_architecture.md`, `02_data_model.md`, `03_api_contracts.md`
 - 운영/인프라: `04_operations.md`, `08_execution_risk_matrix.md`
 - 전략/리스크: `05_strategy_records.md`, `05_trade_recovery.md`, `05_risk_and_config.md`
+- 재정거래 구현 세부: `05_arbitrage_algorithm_review.md`, `05_arbitrage_algorithm_execution_spec.md`
 - 거래소 어댑터: `06_exchange_adapter_core.md`, `06_exchange_protocol_reference.md`, `06_exchange_validation.md`
 - UI/프론트엔드: `07_ui_design.md`, `07_frontend_query_contract.md`

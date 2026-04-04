@@ -10,7 +10,7 @@
 - `03_api_contracts.md`: API 명세와 OpenAPI 초안
 - `04_operations.md`: observability, deployment, auth/RBAC, 장애 대응
 - `05_strategy_and_risk.md`: 전략/리스크 설계 인덱스
-  관련 상세 문서: `05_strategy_records.md`, `05_arbitrage_algorithm_review.md`, `05_trade_recovery.md`, `05_risk_and_config.md`
+  관련 상세 문서: `05_strategy_records.md`, `05_arbitrage_algorithm_review.md`, `05_arbitrage_algorithm_execution_spec.md`, `05_trade_recovery.md`, `05_risk_and_config.md`
 - `06_exchange_adapters.md`: 거래소 설계 인덱스
   관련 상세 문서: `06_exchange_adapter_core.md`, `06_exchange_protocol_reference.md`, `06_exchange_validation.md`
 - `07_ui_and_control_plane.md`: UI 설계 인덱스
