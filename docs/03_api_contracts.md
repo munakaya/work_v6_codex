@@ -242,6 +242,7 @@
 - `bot_id`
 - `accepted`
 - `lifecycle_preview`
+- `reason_code`
 
 응답 핵심 필드:
 

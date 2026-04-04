@@ -258,12 +258,14 @@ class RedisRuntime:
         bot_id: str | None = None,
         accepted: bool | None = None,
         lifecycle_preview: str | None = None,
+        reason_code: str | None = None,
     ) -> list[dict[str, Any]] | None:
         key_prefix = self._key("strategy_run") + ":"
         keys = self._scan_keys(self._key("strategy_run", "*", "latest_evaluation"))
         if keys is None:
             return None
         normalized_lifecycle = (lifecycle_preview or "").strip()
+        normalized_reason = (reason_code or "").strip()
         evaluations: list[dict[str, Any]] = []
         for key in keys:
             if not key.startswith(key_prefix):
@@ -280,6 +282,8 @@ class RedisRuntime:
                 if payload_accepted is not accepted:
                     continue
             if normalized_lifecycle and str(payload.get("lifecycle_preview") or "") != normalized_lifecycle:
+                continue
+            if normalized_reason and str(payload.get("reason_code") or "") != normalized_reason:
                 continue
             evaluations.append(payload)
         evaluations.sort(

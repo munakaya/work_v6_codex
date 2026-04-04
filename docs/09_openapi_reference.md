@@ -636,6 +636,10 @@ paths:
           name: lifecycle_preview
           schema:
             type: string
+        - in: query
+          name: reason_code
+          schema:
+            type: string
       responses:
         '200':
           description: Latest cached evaluations by strategy run

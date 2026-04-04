@@ -105,6 +105,7 @@ class ControlPlaneReadRouteMixin:
             bot_id=single_query_value(params, "bot_id"),
             accepted=accepted,
             lifecycle_preview=single_query_value(params, "lifecycle_preview"),
+            reason_code=single_query_value(params, "reason_code"),
         )
         if evaluations is None:
             return (
