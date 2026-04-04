@@ -576,7 +576,9 @@
     ],
     "count": 1,
     "has_more": false,
-    "next_before_stream_id": null
+    "next_before_stream_id": null,
+    "newest_stream_id": "1775266477835-0",
+    "oldest_stream_id": "1775266477835-0"
   },
   "error": null
 }
@@ -652,7 +654,9 @@
     ],
     "count": 1,
     "has_more": false,
-    "next_before_stream_id": null
+    "next_before_stream_id": null,
+    "newest_stream_id": "1775266477835-0",
+    "oldest_stream_id": "1775266477835-0"
   },
   "error": null
 }

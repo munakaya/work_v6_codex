@@ -1471,12 +1471,6 @@ components:
                 $ref: '#/components/schemas/FillSummary'
             count:
               type: integer
-            has_more:
-              type: boolean
-            next_before_stream_id:
-              oneOf:
-                - type: 'null'
-                - type: string
         error:
           oneOf:
             - type: 'null'
@@ -1545,12 +1539,6 @@ components:
                 $ref: '#/components/schemas/ConfigVersionSummary'
             count:
               type: integer
-            has_more:
-              type: boolean
-            next_before_stream_id:
-              oneOf:
-                - type: 'null'
-                - type: string
         error:
           oneOf:
             - type: 'null'
@@ -1878,6 +1866,20 @@ components:
                     type: string
             count:
               type: integer
+            has_more:
+              type: boolean
+            next_before_stream_id:
+              oneOf:
+                - type: 'null'
+                - type: string
+            newest_stream_id:
+              oneOf:
+                - type: 'null'
+                - type: string
+            oldest_stream_id:
+              oneOf:
+                - type: 'null'
+                - type: string
         error:
           oneOf:
             - type: 'null'
@@ -2004,6 +2006,20 @@ components:
                         type: integer
             count:
               type: integer
+            has_more:
+              type: boolean
+            next_before_stream_id:
+              oneOf:
+                - type: 'null'
+                - type: string
+            newest_stream_id:
+              oneOf:
+                - type: 'null'
+                - type: string
+            oldest_stream_id:
+              oneOf:
+                - type: 'null'
+                - type: string
         error:
           oneOf:
             - type: 'null'

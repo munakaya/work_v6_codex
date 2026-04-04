@@ -209,12 +209,23 @@ class ControlPlaneStreamReadRouteMixin:
                 for event in events
                 if event_filter["normalizer"](str(extractor(event) or "")) == normalized_value
             ]
+        newest_stream_id: str | None = None
+        oldest_stream_id: str | None = None
+        if events:
+            newest_value = events[0].get("stream_id")
+            oldest_value = events[-1].get("stream_id")
+            if isinstance(newest_value, str) and newest_value:
+                newest_stream_id = newest_value
+            if isinstance(oldest_value, str) and oldest_value:
+                oldest_stream_id = oldest_value
         return HTTPStatus.OK, self._response(
             data={
                 "items": events,
                 "count": len(events),
                 "has_more": has_more,
                 "next_before_stream_id": next_before_stream_id,
+                "newest_stream_id": newest_stream_id,
+                "oldest_stream_id": oldest_stream_id,
             }
         )
 
