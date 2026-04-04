@@ -5,6 +5,12 @@ from datetime import UTC, datetime
 import json
 from urllib import error, request
 
+from ..request_utils import (
+    is_nonnegative_number_text,
+    is_positive_number_text,
+    json_datetime_text,
+    json_number_text,
+)
 from ..storage.store_protocol import ControlPlaneStoreProtocol
 from .arbitrage_execution import ArbitrageSubmitResult
 from .arbitrage_models import ArbitrageDecision
@@ -166,10 +172,10 @@ def _create_orders_from_response(
         exchange_name = _json_text(item.get("exchange_name"))
         side = (_json_text(item.get("side")) or "").lower()
         market = _json_text(item.get("market")) or str(intent.get("market") or "")
-        requested_qty = _json_text(item.get("requested_qty")) or str(
+        requested_qty = json_number_text(item.get("requested_qty")) or str(
             intent.get("target_qty") or ""
         )
-        requested_price = _json_text(item.get("requested_price"))
+        requested_price = json_number_text(item.get("requested_price"))
         exchange_order_id = _json_text(item.get("exchange_order_id"))
         status = (_json_text(item.get("status")) or "submitted").lower()
         if not exchange_name or side not in {"buy", "sell"} or not requested_qty:
@@ -177,6 +183,18 @@ def _create_orders_from_response(
                 tuple(created_orders),
                 order_index,
                 "private execution order item missing exchange_name, side, or requested_qty",
+            )
+        if not is_positive_number_text(requested_qty):
+            return (
+                tuple(created_orders),
+                order_index,
+                "private execution order requested_qty must be a positive number",
+            )
+        if requested_price is not None and not is_positive_number_text(requested_price):
+            return (
+                tuple(created_orders),
+                order_index,
+                "private execution order requested_price must be a positive number",
             )
         if status not in ALLOWED_ORDER_STATUSES:
             return (
@@ -313,18 +331,26 @@ def _create_fills_from_response(
         )
         if order is None:
             return tuple(created_fills), "private execution fill could not be matched to order"
-        fill_price = _json_text(item.get("fill_price"))
-        fill_qty = _json_text(item.get("fill_qty"))
+        fill_price = json_number_text(item.get("fill_price"))
+        fill_qty = json_number_text(item.get("fill_qty"))
         if not fill_price or not fill_qty:
             return tuple(created_fills), "private execution fill missing fill_price or fill_qty"
+        if not is_positive_number_text(fill_price):
+            return tuple(created_fills), "private execution fill_price must be a positive number"
+        if not is_positive_number_text(fill_qty):
+            return tuple(created_fills), "private execution fill_qty must be a positive number"
+        fee_amount = json_number_text(item.get("fee_amount")) or "0"
+        if not is_nonnegative_number_text(fee_amount):
+            return tuple(created_fills), "private execution fee_amount must be nonnegative"
+        filled_at = json_datetime_text(item.get("filled_at")) or _iso_now()
         outcome, fill = store.create_fill(
             order_id=str(order["order_id"]),
             exchange_trade_id=_json_text(item.get("exchange_trade_id")),
             fill_price=fill_price,
             fill_qty=fill_qty,
             fee_asset=_json_text(item.get("fee_asset")),
-            fee_amount=_json_text(item.get("fee_amount")) or "0",
-            filled_at=_json_text(item.get("filled_at")) or _iso_now(),
+            fee_amount=fee_amount,
+            filled_at=filled_at,
         )
         if outcome != "created" or fill is None:
             return tuple(created_fills), f"private execution fill create failed: {outcome}"
