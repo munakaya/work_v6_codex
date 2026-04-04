@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 import json
 from urllib import error, request
 
@@ -454,6 +455,9 @@ def _create_fills_from_response(
         return (), "private execution fills must be a list"
 
     validated_items: list[dict[str, object]] = []
+    current_filled_qty_by_order: dict[str, Decimal] = {}
+    requested_qty_by_order: dict[str, Decimal] = {}
+    seen_trade_ids: set[tuple[str, str]] = set()
     for item in fills_payload:
         if not isinstance(item, dict):
             return (), "private execution fill item must be an object"
@@ -466,6 +470,7 @@ def _create_fills_from_response(
         )
         if order is None:
             return (), "private execution fill could not be matched to order"
+        order_id = str(order["order_id"])
         fill_price = json_number_text(item.get("fill_price"))
         fill_qty = json_number_text(item.get("fill_qty"))
         if not fill_price or not fill_qty:
@@ -478,10 +483,35 @@ def _create_fills_from_response(
         if not is_nonnegative_number_text(fee_amount):
             return (), "private execution fee_amount must be nonnegative"
         filled_at = json_datetime_text(item.get("filled_at")) or _iso_now()
+        exchange_trade_id = _json_text(item.get("exchange_trade_id"))
+        if exchange_trade_id is not None:
+            trade_key = (order_id, exchange_trade_id)
+            if trade_key in seen_trade_ids:
+                return (), "private execution response duplicated fill exchange_trade_id"
+            seen_trade_ids.add(trade_key)
+            existing_fill_ids = {
+                str(existing_fill.get("exchange_trade_id") or "")
+                for existing_fill in store.list_fills(order_id=order_id)
+                if existing_fill.get("exchange_trade_id") is not None
+            }
+            if exchange_trade_id in existing_fill_ids:
+                return (), "private execution fill exchange_trade_id conflicts with existing fill"
+
+        if order_id not in current_filled_qty_by_order:
+            current_filled_qty_by_order[order_id] = sum(
+                Decimal(str(existing_fill.get("fill_qty") or "0"))
+                for existing_fill in store.list_fills(order_id=order_id)
+            )
+            requested_qty_by_order[order_id] = Decimal(str(order.get("requested_qty") or "0"))
+        next_filled_qty = current_filled_qty_by_order[order_id] + Decimal(fill_qty)
+        if next_filled_qty > requested_qty_by_order[order_id]:
+            return (), "private execution fills exceed requested_qty"
+        current_filled_qty_by_order[order_id] = next_filled_qty
+
         validated_items.append(
             {
-                "order_id": str(order["order_id"]),
-                "exchange_trade_id": _json_text(item.get("exchange_trade_id")),
+                "order_id": order_id,
+                "exchange_trade_id": exchange_trade_id,
                 "fill_price": fill_price,
                 "fill_qty": fill_qty,
                 "fee_asset": _json_text(item.get("fee_asset")),
