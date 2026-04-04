@@ -165,6 +165,7 @@
 - recovery_required / unwind_in_progress 사례 수
 - stale alert / connector degraded / reconciliation mismatch 건수와 `top_reason`
 - stop command 반영 시간
+  - `stop_requested_at` 이후 `accept_after_stop_count`, `order_intent_after_stop_count`
 - `accept_mismatch`, `reason_code_mismatch` 건수
 
 

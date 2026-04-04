@@ -100,6 +100,12 @@
   - `reservation_mismatch`, `target_qty_bucket_mismatch`가 있으면 `time_window`, `top_reason`, `affected_bot_ids`, `suggested_action` 포함
 - recovery/unwind 사례 요약
 - stop command 확인 결과
+  - `bot_id`
+  - `stop_requested_at`
+  - `last_accept_before_stop_at`
+  - `accept_after_stop_count`
+  - `order_intent_after_stop_count`
+  - `verified_by`
 - 승인자와 승인 시각
 
 
