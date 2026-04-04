@@ -244,6 +244,7 @@
 - `lifecycle_preview`
 - `reason_code`
 - `stale_after_seconds`
+- `stale_only`
 
 응답 핵심 필드:
 
@@ -273,6 +274,7 @@
 - Redis read 실패 시 `REDIS_RUNTIME_READ_FAILED`
 - `accepted`는 `true|false`만 허용
 - `stale_after_seconds`는 0 이상 정수만 허용
+- `stale_only=true`면 `stale_after_seconds`를 같이 줘야 함
 
 #### `GET /api/v1/strategy-runs/{run_id}/latest-evaluation`
 

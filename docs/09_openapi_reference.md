@@ -645,6 +645,10 @@ paths:
           schema:
             type: integer
             minimum: 0
+        - in: query
+          name: stale_only
+          schema:
+            type: boolean
       responses:
         '200':
           description: Latest cached evaluations by strategy run

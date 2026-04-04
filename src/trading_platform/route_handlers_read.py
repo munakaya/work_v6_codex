@@ -208,6 +208,28 @@ class ControlPlaneReadRouteMixin:
                         }
                     ),
                 )
+        stale_only_param = single_query_value(params, "stale_only")
+        stale_only = optional_bool(stale_only_param)
+        if stale_only_param is not None and stale_only is None:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "stale_only must be true or false",
+                    }
+                ),
+            )
+        if stale_only and stale_after_seconds is None:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "stale_after_seconds is required when stale_only=true",
+                    }
+                ),
+            )
         evaluations = self.server.redis_runtime.list_arbitrage_evaluations(
             limit=100,
             bot_id=single_query_value(params, "bot_id"),
@@ -231,14 +253,19 @@ class ControlPlaneReadRouteMixin:
             now=now,
             stale_after_seconds=stale_after_seconds,
         )
-        limited = annotated[: query_limit(params)]
+        filtered = (
+            [item for item in annotated if item.get("is_stale") is True]
+            if stale_only
+            else annotated
+        )
+        limited = filtered[: query_limit(params)]
         return HTTPStatus.OK, self._response(
             data={
                 "items": limited,
                 "count": len(limited),
-                "matched_count": len(annotated),
+                "matched_count": len(filtered),
                 **self._latest_strategy_evaluation_summary(
-                    annotated,
+                    filtered,
                     now=now,
                     stale_after_seconds=stale_after_seconds,
                 ),
