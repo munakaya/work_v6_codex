@@ -259,6 +259,48 @@ def main() -> None:
         "locked balance handoff reason mismatch",
     )
 
+    balance_incomplete_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=balance_incomplete_trace_id,
+        payload={
+            "recovery_trace_id": balance_incomplete_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": str(intent_balance["intent_id"]),
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_balances": [
+                {
+                    "exchange_name": "upbit",
+                    "asset": "KRW",
+                    "free": "1000000",
+                    "locked": "0",
+                }
+            ],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+        },
+    )
+    runtime.run_once()
+    balance_incomplete_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=balance_incomplete_trace_id
+    )
+    _assert(balance_incomplete_trace is not None, "balance incomplete trace missing")
+    _assert(
+        balance_incomplete_trace.get("status") == "handoff_required",
+        "matched reconciliation with incomplete balances should hand off",
+    )
+    _assert(
+        balance_incomplete_trace.get("handoff_reason")
+        == "reconciliation_balance_evidence_incomplete",
+        "incomplete balance handoff reason mismatch",
+    )
+
     outcome, intent = store.create_order_intent(
         strategy_run_id=run_id,
         market="KRW-BTC",
@@ -1060,6 +1102,7 @@ def main() -> None:
     print("PASS recovery runtime escalates failed unwind orders to manual handoff")
     print("PASS recovery runtime escalates stale unwind orders to manual handoff")
     print("PASS recovery runtime hands off matched reconciliation with locked balances")
+    print("PASS recovery runtime hands off matched reconciliation with incomplete balances")
     print("PASS recovery runtime resolves matched reconciliation traces")
     print("PASS recovery runtime hands off unresolved reconciliation mismatch")
     print("PASS recovery runtime hands off repeated reconciliation mismatches")

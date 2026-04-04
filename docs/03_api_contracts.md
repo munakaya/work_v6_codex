@@ -201,6 +201,7 @@
 - `mismatch + open_order_count=0 + residual_exposure_quote>0`이면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `mismatch`가 같은 trace에서 반복되면 threshold 이후 `manual_handoff`로 승격될 수 있음
 - `mismatch + open_order_count>0`이어도 `observed_order_statuses`가 전부 실패 terminal이면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
+- `matched + open_order_count=0 + residual_exposure_quote=0`인데 `observed_balances`가 관련 거래소를 전부 덮지 못하면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `matched + open_order_count=0 + residual_exposure_quote=0`이어도 `observed_balances`에 관련 거래소 locked 잔고가 남아 있으면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 
 요청 핵심 필드:

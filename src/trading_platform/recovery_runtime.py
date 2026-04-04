@@ -582,6 +582,16 @@ class RecoveryRuntime:
         )
         if not observed_balances:
             return None
+        observed_exchanges = {
+            str(balance["exchange_name"]).strip() for balance in observed_balances
+        }
+        missing_exchanges = sorted(relevant_exchanges - observed_exchanges)
+        if missing_exchanges:
+            return (
+                "reconciliation_balance_evidence_incomplete",
+                "reconciliation matched result is missing observed balances for exchanges: "
+                + ", ".join(missing_exchanges),
+            )
         locked_entries = [
             balance
             for balance in observed_balances
