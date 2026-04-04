@@ -159,6 +159,43 @@ def main() -> None:
         "stale matched reconciliation handoff reason mismatch",
     )
 
+    missing_evidence_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=missing_evidence_trace_id,
+        payload={
+            "recovery_trace_id": missing_evidence_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+        },
+    )
+    runtime.run_once()
+    missing_evidence_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=missing_evidence_trace_id
+    )
+    _assert(
+        missing_evidence_trace is not None,
+        "missing evidence reconciliation trace missing",
+    )
+    _assert(
+        missing_evidence_trace.get("status") == "handoff_required",
+        "matched reconciliation without evidence should hand off",
+    )
+    _assert(
+        missing_evidence_trace.get("handoff_reason")
+        == "reconciliation_evidence_missing",
+        "missing evidence handoff reason mismatch",
+    )
+
     failed_open_order_trace_id = f"rt_{uuid4().hex}"
     redis_runtime.sync_recovery_trace(
         recovery_trace_id=failed_open_order_trace_id,
@@ -1032,6 +1069,7 @@ def main() -> None:
             "reconciliation_open_order_count": 0,
             "reconciliation_residual_exposure_quote": "0",
             "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_order_ids": ["ord-recon-1"],
             "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
             "updated_at": _iso(datetime.now(UTC)),
         },
@@ -1250,6 +1288,7 @@ def main() -> None:
     print("PASS recovery runtime resolves terminal intents without active orders")
     print("PASS recovery runtime opens submit-timeout recovery traces")
     print("PASS recovery runtime closes terminal latest evaluations")
+    print("PASS recovery runtime hands off matched reconciliation without evidence")
     print("PASS recovery runtime resolves linked unwind actions after terminal fills")
     print("PASS recovery runtime escalates failed unwind orders to manual handoff")
     print("PASS recovery runtime ignores duplicate observed order statuses")

@@ -414,6 +414,15 @@ class RecoveryRuntime:
                 summary=summary,
             )
             return
+        reconciliation_evidence_handoff = self._reconciliation_evidence_handoff_reason(trace)
+        if reconciliation_evidence_handoff is not None:
+            handoff_reason, summary = reconciliation_evidence_handoff
+            self._mark_handoff_required(
+                trace,
+                handoff_reason=handoff_reason,
+                summary=summary,
+            )
+            return
         reconciliation_status_handoff = self._reconciliation_status_handoff_reason(trace)
         if reconciliation_status_handoff is not None:
             handoff_reason, summary = reconciliation_status_handoff
@@ -744,6 +753,42 @@ class RecoveryRuntime:
                 "reconciliation reports no open orders while residual exposure remains",
             )
         return None
+
+    def _reconciliation_evidence_handoff_reason(
+        self, trace: dict[str, object]
+    ) -> tuple[str, str] | None:
+        reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
+        if reconciliation_result != "matched":
+            return None
+        reconciliation_open_order_count = _parse_int(
+            trace.get("reconciliation_open_order_count")
+        )
+        reconciliation_residual = _parse_decimal(
+            trace.get("reconciliation_residual_exposure_quote")
+        )
+        if (
+            reconciliation_open_order_count is None
+            or reconciliation_open_order_count != 0
+            or reconciliation_residual is None
+            or reconciliation_residual != Decimal("0")
+        ):
+            return None
+        has_order_ids = isinstance(trace.get("reconciliation_observed_order_ids"), list) and bool(
+            trace.get("reconciliation_observed_order_ids")
+        )
+        has_fill_ids = isinstance(trace.get("reconciliation_observed_fill_ids"), list) and bool(
+            trace.get("reconciliation_observed_fill_ids")
+        )
+        has_order_statuses = bool(
+            _observed_order_statuses(trace.get("reconciliation_observed_order_statuses"))
+        )
+        has_balances = bool(_observed_balances(trace.get("reconciliation_observed_balances")))
+        if has_order_ids or has_fill_ids or has_order_statuses or has_balances:
+            return None
+        return (
+            "reconciliation_evidence_missing",
+            "reconciliation matched result is missing order, fill, status, and balance evidence",
+        )
 
     def _reconciliation_status_handoff_reason(
         self, trace: dict[str, object]
