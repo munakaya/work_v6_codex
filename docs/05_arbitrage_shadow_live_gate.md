@@ -71,6 +71,16 @@
 - operator가 `bot stop`, `config rollback`, `alert ack`, `manual handoff`를 수행할 수 있어야 한다.
 - 장애 플레이북에서 A~E 유형을 따라가며 필요한 정보가 실제로 조회돼야 한다.
 
+운영자 drill 결과 최소 필드:
+
+- `drill_type`
+- `started_at`
+- `completed_at`
+- `bot_id`
+- `incident_code`
+- `result`
+- `verified_by`
+
 
 ## live 금지 조건
 
@@ -105,6 +115,14 @@
   - `last_accept_before_stop_at`
   - `accept_after_stop_count`
   - `order_intent_after_stop_count`
+  - `verified_by`
+- 운영자 drill 결과
+  - `drill_type`
+  - `started_at`
+  - `completed_at`
+  - `bot_id`
+  - `incident_code`
+  - `result`
   - `verified_by`
 - 승인자와 승인 시각
 

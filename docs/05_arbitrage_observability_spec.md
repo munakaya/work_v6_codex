@@ -166,6 +166,8 @@
 - stale alert / connector degraded / reconciliation mismatch 건수와 `top_reason`
 - stop command 반영 시간
   - `stop_requested_at` 이후 `accept_after_stop_count`, `order_intent_after_stop_count`
+- 최근 operator drill 결과
+  - `drill_type`, `incident_code`, `result`
 - `accept_mismatch`, `reason_code_mismatch` 건수
 
 
