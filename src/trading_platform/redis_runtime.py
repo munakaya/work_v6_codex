@@ -210,6 +210,38 @@ class RedisRuntime:
     ) -> dict[str, Any] | None:
         return self.get_json(["market", "orderbook_top", exchange, market])
 
+    def list_market_orderbook_tops(
+        self,
+        *,
+        exchange: str | None = None,
+        market: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]] | None:
+        key_prefix = self._key("market", "orderbook_top") + ":"
+        keys = self._scan_keys(self._key("market", "orderbook_top", "*"))
+        if keys is None:
+            return None
+        normalized_exchange = (exchange or "").strip().lower()
+        normalized_market = (market or "").strip().upper()
+        snapshots: list[dict[str, Any]] = []
+        for key in keys:
+            if not key.startswith(key_prefix):
+                continue
+            suffix = key[len(key_prefix) :]
+            if ":" not in suffix:
+                continue
+            key_exchange, key_market = suffix.split(":", 1)
+            if normalized_exchange and key_exchange.strip().lower() != normalized_exchange:
+                continue
+            if normalized_market and key_market.strip().upper() != normalized_market:
+                continue
+            payload = self._get_json_by_full_key(key)
+            if payload is None:
+                continue
+            snapshots.append(payload)
+        snapshots.sort(key=lambda item: str(item.get("received_at") or ""), reverse=True)
+        return snapshots[: max(1, min(limit, 100))]
+
     def list_stream_events(
         self, *, stream_name: str, limit: int = 20
     ) -> list[dict[str, Any]] | None:
@@ -245,6 +277,21 @@ class RedisRuntime:
     def _key(self, *parts: str) -> str:
         return ":".join([self.key_prefix, *parts])
 
+    def _get_json_by_full_key(self, key: str) -> dict[str, Any] | None:
+        raw = self._run_command_output(["GET", key])
+        if raw is None:
+            return None
+        stripped = raw.strip()
+        if not stripped:
+            return None
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        return payload
+
     def _parse_stream_entry(self, entry: object) -> dict[str, Any] | None:
         if not isinstance(entry, list) or len(entry) != 2:
             return None
@@ -266,6 +313,12 @@ class RedisRuntime:
 
     def _run_command(self, command: list[str]) -> bool:
         return self._run_command_output(command) is not None
+
+    def _scan_keys(self, pattern: str) -> list[str] | None:
+        output = self._run_command_output(["--scan", "--pattern", pattern])
+        if output is None:
+            return None
+        return [line.strip() for line in output.splitlines() if line.strip()]
 
     def _run_command_output(self, command: list[str]) -> str | None:
         if not self.info.enabled or not self.redis_url or not self.redis_cli_path:

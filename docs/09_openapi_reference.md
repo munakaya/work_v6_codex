@@ -139,6 +139,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/MarketDataRuntimeResponse'
 
+  /api/v1/market-data/snapshots:
+    get:
+      tags: [MarketData]
+      summary: List cached market snapshots
+      operationId: listMarketSnapshots
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: exchange
+          schema:
+            type: string
+        - in: query
+          name: market
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cached market snapshots
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketSnapshotListResponse'
+        '502':
+          description: Redis runtime read failed
+        '503':
+          description: Redis runtime unavailable
+
   /api/v1/market-data/events:
     get:
       tags: [MarketData]
@@ -1718,6 +1748,50 @@ components:
                   source_type:
                     type: string
             snapshot_count:
+              type: integer
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    MarketSnapshotListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  exchange:
+                    type: string
+                  market:
+                    type: string
+                  best_bid:
+                    type: string
+                  best_ask:
+                    type: string
+                  bid_volume:
+                    type: string
+                  ask_volume:
+                    type: string
+                  exchange_timestamp:
+                    type: string
+                    format: date-time
+                  received_at:
+                    type: string
+                    format: date-time
+                  exchange_age_ms:
+                    type: integer
+                  stale:
+                    type: boolean
+                  source_type:
+                    type: string
+            count:
               type: integer
         error:
           oneOf:

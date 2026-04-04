@@ -4,7 +4,7 @@ from http import HTTPStatus
 from urllib.parse import parse_qs
 
 from .market_data_connector import MarketDataError
-from .request_utils import single_query_value
+from .request_utils import query_limit, single_query_value
 
 
 class ControlPlaneMarketReadRouteMixin:
@@ -81,15 +81,10 @@ class ControlPlaneMarketReadRouteMixin:
 
     def _market_runtime_response(self) -> tuple[HTTPStatus, dict[str, object]]:
         runtime = self.server.market_data_runtime.info
-        snapshots: list[dict[str, object]] = []
-        if self.server.redis_runtime.info.enabled and runtime.exchange:
-            for market in runtime.markets:
-                snapshot = self.server.redis_runtime.get_market_orderbook_top(
-                    exchange=runtime.exchange,
-                    market=market,
-                )
-                if snapshot is not None:
-                    snapshots.append(snapshot)
+        snapshots = self._list_market_snapshots(
+            exchange=runtime.exchange or None,
+            limit=max(len(runtime.markets), 1),
+        )
         return HTTPStatus.OK, self._response(
             data={
                 "runtime": runtime.as_dict(),
@@ -98,3 +93,54 @@ class ControlPlaneMarketReadRouteMixin:
                 "snapshot_count": len(snapshots),
             }
         )
+
+    def _market_snapshots_response(
+        self, query: str
+    ) -> tuple[HTTPStatus, dict[str, object]]:
+        params = parse_qs(query)
+        if not self.server.redis_runtime.info.enabled:
+            return (
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                self._response(
+                    error={
+                        "code": "REDIS_RUNTIME_UNAVAILABLE",
+                        "message": "redis runtime is not enabled",
+                    }
+                ),
+            )
+        snapshots = self.server.redis_runtime.list_market_orderbook_tops(
+            exchange=single_query_value(params, "exchange"),
+            market=single_query_value(params, "market"),
+            limit=query_limit(params),
+        )
+        if snapshots is None:
+            return (
+                HTTPStatus.BAD_GATEWAY,
+                self._response(
+                    error={
+                        "code": "REDIS_RUNTIME_READ_FAILED",
+                        "message": "failed to read cached market snapshots",
+                    }
+                ),
+            )
+        return HTTPStatus.OK, self._response(
+            data={"items": snapshots, "count": len(snapshots)}
+        )
+
+    def _list_market_snapshots(
+        self,
+        *,
+        exchange: str | None = None,
+        market: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, object]]:
+        if not self.server.redis_runtime.info.enabled:
+            return []
+        snapshots = self.server.redis_runtime.list_market_orderbook_tops(
+            exchange=exchange,
+            market=market,
+            limit=limit,
+        )
+        if snapshots is None:
+            return []
+        return snapshots

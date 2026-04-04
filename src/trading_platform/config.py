@@ -64,7 +64,7 @@ def load_config() -> AppConfig:
         service_name=os.getenv("TP_SERVICE_NAME", "control-plane"),
         service_version=os.getenv("TP_SERVICE_VERSION", "0.1.0"),
         host=os.getenv("TP_HOST", "127.0.0.1"),
-        port=_env_int("TP_PORT", 8080),
+        port=_env_int("TP_PORT", 38765),
         log_level=os.getenv("TP_LOG_LEVEL", "INFO").upper(),
         log_dir=root_dir / "logs",
         tmp_dir=root_dir / ".tmp",

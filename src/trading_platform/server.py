@@ -148,6 +148,10 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
             status, payload = self._market_runtime_response()
             return status, payload, False
 
+        if path == "/api/v1/market-data/snapshots":
+            status, payload = self._market_snapshots_response(query)
+            return status, payload, False
+
         if path == "/api/v1/market-data/events":
             status, payload = self._market_events_response(query)
             return status, payload, False

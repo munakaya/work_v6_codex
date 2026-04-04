@@ -339,6 +339,7 @@
 - `GET /api/v1/market-data/orderbook-top`
 - `GET /api/v1/market-data/orderbook-top/cached`
 - `GET /api/v1/market-data/runtime`
+- `GET /api/v1/market-data/snapshots`
 - `GET /api/v1/market-data/events`
 
 #### Bots
@@ -509,6 +510,18 @@
 - `runtime.last_error_message`
 - `snapshots`
 - `snapshot_count`
+
+#### `GET /api/v1/market-data/snapshots`
+
+목적:
+
+- Redis에 남아 있는 cached market snapshot 목록 조회
+
+쿼리:
+
+- `limit`: 기본 20, 최대 100
+- `exchange`: 선택
+- `market`: 선택
 
 #### `GET /api/v1/market-data/events`
 
