@@ -85,6 +85,7 @@
 | M23 | config immutability during active entry | 기존 entry/새 entry 분리 | L3 | `05_arbitrage_runtime_invariants.md` I10 |
 | M24 | shadow-live decision diff | `accept_mismatch=0`, `reason_code_mismatch=0`, 나머지 diff는 분석 가능 | L4 | `05_arbitrage_observability_spec.md`, `05_arbitrage_shadow_live_gate.md` |
 | M25 | live gate bypass 시도 | `ARB-501` 분류 | L5 | `05_arbitrage_shadow_live_gate.md`, `05_arbitrage_incident_taxonomy.md` |
+| M26 | replay restored accounting | `submitted/filled/unwind_started` 역전이 보정 규칙과 일치 | L4 | `05_arbitrage_replay_restore_accounting.md`, `05_arbitrage_runtime_invariants.md` |
 
 
 ## 최소 live 전 체크 세트

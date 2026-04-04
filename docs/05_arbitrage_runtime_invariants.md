@@ -158,9 +158,12 @@
 - `ARB_INV_METRIC_ACCOUNTING_CONFLICT`
 
 - accept count, submit count, filled count, unwind count는 같은 run/window에서 역전되면 안 된다.
+- `replay restored`의 뜻은 `05_arbitrage_replay_restore_accounting.md`를 따른다.
 - 예:
   - filled > submitted
-  - submitted > accepted + replay restored TODO(verify)
+  - submitted > accepted + `replay_restored_total{stage=submitted}`
+  - filled > submitted + `replay_restored_total{stage=filled}`
+  - unwind_started > recovery_required + `replay_restored_total{stage=unwind_started}`
 
 
 ## 권장 감지 방식
