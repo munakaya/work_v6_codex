@@ -656,8 +656,10 @@ class RecoveryRuntime:
         if reconciliation_residual is None:
             invalid_fields.append("residual_exposure_quote")
         observed_at_raw = trace.get("reconciliation_observed_at")
-        if observed_at_raw is not None and _parse_iso_datetime(observed_at_raw) is None:
-            invalid_fields.append("observed_at")
+        if observed_at_raw is not None:
+            observed_at = _parse_iso_datetime(observed_at_raw)
+            if observed_at is None or observed_at > datetime.now(UTC):
+                invalid_fields.append("observed_at")
         if not invalid_fields:
             return None
         return (

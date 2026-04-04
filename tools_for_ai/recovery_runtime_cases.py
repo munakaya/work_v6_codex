@@ -256,6 +256,39 @@ def main() -> None:
         "invalid reconciliation result handoff reason mismatch",
     )
 
+    future_observed_at_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=future_observed_at_trace_id,
+        payload={
+            "recovery_trace_id": future_observed_at_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC) + timedelta(seconds=30)),
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+        },
+    )
+    runtime.run_once()
+    future_observed_at_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=future_observed_at_trace_id
+    )
+    _assert(future_observed_at_trace is not None, "future observed_at trace missing")
+    _assert(
+        future_observed_at_trace.get("status") == "handoff_required",
+        "future observed_at should trigger manual handoff",
+    )
+    _assert(
+        future_observed_at_trace.get("handoff_reason") == "reconciliation_result_invalid",
+        "future observed_at handoff reason mismatch",
+    )
+
     stale_reconciliation_trace_id = f"rt_{uuid4().hex}"
     redis_runtime.sync_recovery_trace(
         recovery_trace_id=stale_reconciliation_trace_id,

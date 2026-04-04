@@ -196,7 +196,7 @@
 - operator 또는 reconciliation job이 recovery trace에 정합성 결과를 기록
 - `matched + open_order_count=0 + residual_exposure_quote=0`이면 recovery runtime이 즉시 `resolved / closed`까지 반영할 수 있음
 - 단, 위 자동 종료 후보는 `observed_at`이 있어야 함
-- `matched` 또는 `mismatch` reconciliation인데 `open_order_count`, `residual_exposure_quote`, `observed_at` 핵심 필드가 깨져 있으면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
+- `matched` 또는 `mismatch` reconciliation인데 `open_order_count`, `residual_exposure_quote`, `observed_at` 핵심 필드가 깨져 있거나 `observed_at`이 미래 시각이면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `reconciliation_result` 값 자체가 `matched` 또는 `mismatch`가 아니면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `reconciliation_result`가 없는데 다른 `reconciliation_*` 필드만 있으면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - 단, 위 `matched` 결과라도 `observed_at`이 너무 오래됐으면 recovery runtime이 `manual_handoff`로 올릴 수 있음
