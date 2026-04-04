@@ -10,6 +10,7 @@ from .market_data_connector import PublicMarketDataConnector
 from .redis_runtime import RedisRuntime
 from .storage.store_protocol import ControlPlaneStoreProtocol
 from .strategy import (
+    build_arbitrage_execution_adapter,
     evaluate_arbitrage,
     load_strategy_inputs,
     persist_order_intent_plan,
@@ -34,6 +35,7 @@ class StrategyRuntimeInfo:
     persist_intent: bool
     execution_enabled: bool
     execution_mode: str
+    execution_adapter: str
     auto_unwind_on_failure: bool
     running: bool
     state: str
@@ -59,6 +61,7 @@ class StrategyRuntimeInfo:
             "persist_intent": self.persist_intent,
             "execution_enabled": self.execution_enabled,
             "execution_mode": self.execution_mode,
+            "execution_adapter": self.execution_adapter,
             "auto_unwind_on_failure": self.auto_unwind_on_failure,
             "running": self.running,
             "state": self.state,
@@ -92,6 +95,7 @@ class StrategyRuntime:
         read_store: ControlPlaneStoreProtocol,
         connector: PublicMarketDataConnector,
         redis_runtime: RedisRuntime,
+        execution_adapter=None,
     ) -> None:
         self.enabled = enabled
         self.interval_ms = max(interval_ms, 250)
@@ -107,6 +111,9 @@ class StrategyRuntime:
         self.read_store = read_store
         self.connector = connector
         self.redis_runtime = redis_runtime
+        self.execution_adapter = execution_adapter or build_arbitrage_execution_adapter(
+            self.execution_mode
+        )
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -135,6 +142,7 @@ class StrategyRuntime:
                 persist_intent=self.persist_intent,
                 execution_enabled=self.execution_enabled,
                 execution_mode=self.execution_mode,
+                execution_adapter=self.execution_adapter.name,
                 auto_unwind_on_failure=self.auto_unwind_on_failure,
                 running=self._running,
                 state=self._state_name(),
@@ -361,7 +369,7 @@ class StrategyRuntime:
             run_id=run_id,
             bot_id=bot_id,
             trace_id=trace_id,
-            execution_mode=self.execution_mode,
+            execution_adapter=self.execution_adapter,
             auto_unwind_on_failure=self.auto_unwind_on_failure,
             payload_builder=build_arbitrage_evaluation_payload,
         )

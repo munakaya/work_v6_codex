@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from .redis_runtime import RedisRuntime
 from .storage.store_protocol import ControlPlaneStoreProtocol
-from .strategy import submit_arbitrage_orders
+from .strategy import ArbitrageExecutionAdapterProtocol
 from .strategy.arbitrage_models import ArbitrageDecision
 
 
@@ -66,15 +66,14 @@ def execute_persisted_arbitrage_intent(
     run_id: str,
     bot_id: str,
     trace_id: str,
-    execution_mode: str,
+    execution_adapter: ArbitrageExecutionAdapterProtocol,
     auto_unwind_on_failure: bool,
     payload_builder,
 ) -> StrategyRuntimeExecutionOutcome:
-    submit_result = submit_arbitrage_orders(
+    submit_result = execution_adapter.submit(
         store=store,
         decision=decision,
         intent=intent,
-        execution_mode=execution_mode,
         auto_unwind_on_failure=auto_unwind_on_failure,
     )
     for order in submit_result.created_orders:
