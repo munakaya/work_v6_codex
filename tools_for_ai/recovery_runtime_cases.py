@@ -527,6 +527,59 @@ def main() -> None:
         "malformed market handoff reason mismatch",
     )
 
+    incomplete_exchange_outcome, incomplete_exchange_intent = store.create_order_intent(
+        strategy_run_id=run_id,
+        market="KRW-BTC",
+        buy_exchange="upbit",
+        sell_exchange="bithumb",
+        side_pair="buy_then_sell",
+        target_qty="0.1",
+        expected_profit="850",
+        expected_profit_ratio="0.0085",
+        status="submitted",
+        decision_context={"source": "recovery_exchange_context_case"},
+    )
+    _assert(
+        incomplete_exchange_outcome == "created" and incomplete_exchange_intent is not None,
+        "incomplete exchange intent create failed",
+    )
+    store.order_intents[str(incomplete_exchange_intent["intent_id"])]["sell_exchange"] = ""
+    incomplete_exchange_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=incomplete_exchange_trace_id,
+        payload={
+            "recovery_trace_id": incomplete_exchange_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": str(incomplete_exchange_intent["intent_id"]),
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_fill_ids": ["fill-exchange-context-1"],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+        },
+        trace_id=None,
+    )
+    runtime.run_once()
+    incomplete_exchange_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=incomplete_exchange_trace_id
+    )
+    _assert(incomplete_exchange_trace is not None, "incomplete exchange trace missing")
+    _assert(
+        incomplete_exchange_trace.get("status") == "handoff_required",
+        "matched reconciliation with incomplete exchange context should hand off",
+    )
+    _assert(
+        incomplete_exchange_trace.get("handoff_reason")
+        == "reconciliation_context_missing",
+        "incomplete exchange handoff reason mismatch",
+    )
+
     balance_irrelevant_locked_trace_id = f"rt_{uuid4().hex}"
     redis_runtime.sync_recovery_trace(
         recovery_trace_id=balance_irrelevant_locked_trace_id,

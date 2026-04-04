@@ -624,10 +624,10 @@ class RecoveryRuntime:
         ):
             return None
         relevant_exchanges = self._trace_relevant_exchanges(trace)
-        if not relevant_exchanges:
+        if len(relevant_exchanges) < 2:
             return (
                 "reconciliation_context_missing",
-                "reconciliation matched result is missing intent exchange context",
+                "reconciliation matched result is missing complete intent exchange context",
             )
         relevant_assets = self._trace_relevant_assets(trace)
         if not relevant_assets:
