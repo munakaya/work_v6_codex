@@ -174,14 +174,19 @@ def _create_orders_from_response(
     if not isinstance(orders_payload, list) or not orders_payload:
         return (), {}, "private execution response missing orders"
 
-    created_orders: list[dict[str, object]] = []
-    order_index: dict[tuple[str, str], dict[str, object]] = {}
+    validated_items: list[dict[str, object]] = []
+    expected_market = str(intent.get("market") or "")
+    expected_legs = {
+        ("buy", str(intent.get("buy_exchange") or "")),
+        ("sell", str(intent.get("sell_exchange") or "")),
+    }
+    seen_order_keys: set[tuple[str, str]] = set()
     for index, item in enumerate(orders_payload, start=1):
         if not isinstance(item, dict):
-            return tuple(created_orders), order_index, "private execution order item must be an object"
+            return (), {}, "private execution order item must be an object"
         exchange_name = _json_text(item.get("exchange_name"))
         side = (_json_text(item.get("side")) or "").lower()
-        market = _json_text(item.get("market")) or str(intent.get("market") or "")
+        market = _json_text(item.get("market")) or expected_market
         requested_qty = json_number_text(item.get("requested_qty")) or str(
             intent.get("target_qty") or ""
         )
@@ -189,54 +194,57 @@ def _create_orders_from_response(
         exchange_order_id = _json_text(item.get("exchange_order_id"))
         status = (_json_text(item.get("status")) or "submitted").lower()
         if not exchange_name or side not in {"buy", "sell"} or not requested_qty:
-            return (
-                tuple(created_orders),
-                order_index,
-                "private execution order item missing exchange_name, side, or requested_qty",
+            return (), {}, "private execution order item missing exchange_name, side, or requested_qty"
+        if expected_market and market != expected_market:
+            return (), {}, "private execution order market mismatches intent market"
+        if (side, exchange_name) not in expected_legs:
+            return (), {}, (
+                "private execution response returned unexpected arbitrage order legs: "
+                f"{side}:{exchange_name}"
             )
         if not is_positive_number_text(requested_qty):
-            return (
-                tuple(created_orders),
-                order_index,
-                "private execution order requested_qty must be a positive number",
-            )
+            return (), {}, "private execution order requested_qty must be a positive number"
         if requested_price is not None and not is_positive_number_text(requested_price):
-            return (
-                tuple(created_orders),
-                order_index,
-                "private execution order requested_price must be a positive number",
-            )
+            return (), {}, "private execution order requested_price must be a positive number"
         if status not in ALLOWED_ORDER_STATUSES:
-            return (
-                tuple(created_orders),
-                order_index,
-                f"private execution order status not allowed: {status}",
-            )
+            return (), {}, f"private execution order status not allowed: {status}"
         order_key = (side, exchange_name)
-        if order_key in order_index:
-            return (
-                tuple(created_orders),
-                order_index,
-                "private execution response duplicated arbitrage order leg",
-            )
+        if order_key in seen_order_keys:
+            return (), {}, "private execution response duplicated arbitrage order leg"
+        seen_order_keys.add(order_key)
         raw_payload = item.get("raw_payload")
         if not isinstance(raw_payload, dict):
             raw_payload = {}
-        raw_payload = {
-            **raw_payload,
-            "submission_mode": "private_http",
-            "adapter_response_order_index": index,
-        }
+        validated_items.append(
+            {
+                "exchange_name": exchange_name,
+                "side": side,
+                "market": market,
+                "requested_qty": requested_qty,
+                "requested_price": requested_price,
+                "exchange_order_id": exchange_order_id,
+                "status": status,
+                "raw_payload": {
+                    **raw_payload,
+                    "submission_mode": "private_http",
+                    "adapter_response_order_index": index,
+                },
+            }
+        )
+
+    created_orders: list[dict[str, object]] = []
+    order_index: dict[tuple[str, str], dict[str, object]] = {}
+    for item in validated_items:
         outcome, order = store.create_order(
             order_intent_id=str(intent["intent_id"]),
-            exchange_name=exchange_name,
-            exchange_order_id=exchange_order_id,
-            market=market,
-            side=side,
-            requested_price=requested_price,
-            requested_qty=requested_qty,
-            status=status,
-            raw_payload=raw_payload,
+            exchange_name=str(item["exchange_name"]),
+            exchange_order_id=_json_text(item["exchange_order_id"]),
+            market=str(item["market"]),
+            side=str(item["side"]),
+            requested_price=_json_text(item["requested_price"]),
+            requested_qty=str(item["requested_qty"]),
+            status=str(item["status"]),
+            raw_payload=item["raw_payload"] if isinstance(item["raw_payload"], dict) else {},
         )
         if outcome != "created" or order is None:
             return (
@@ -245,7 +253,7 @@ def _create_orders_from_response(
                 f"private execution order create failed: {outcome}",
             )
         created_orders.append(order)
-        order_index[order_key] = order
+        order_index[(str(item["side"]), str(item["exchange_name"]))] = order
     return tuple(created_orders), order_index, None
 
 
