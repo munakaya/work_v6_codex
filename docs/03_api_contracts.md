@@ -67,7 +67,7 @@
 
 목적:
 
-- PostgreSQL, Redis 연결과 market data runtime 상태 포함 준비 상태 확인
+- PostgreSQL, Redis 연결과 market data / strategy runtime 상태 포함 준비 상태 확인
 
 ### 18.3 Bot API
 
@@ -194,6 +194,7 @@
 
 - arbitrage strategy run에 대해 실행 가능 수익, gate, reservation을 평가
 - `persist_intent=true`일 때만 accept 결과를 `order_intent`로 저장
+- background strategy runtime이 켜져 있으면 같은 평가 결과가 Redis latest evaluation cache에도 주기적으로 반영될 수 있음
 
 요청 핵심 필드:
 

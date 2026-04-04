@@ -48,6 +48,9 @@ class AppConfig:
     market_data_poll_exchange: str
     market_data_poll_markets: tuple[str, ...]
     market_data_poll_interval_ms: int
+    strategy_runtime_enabled: bool
+    strategy_runtime_interval_ms: int
+    strategy_runtime_persist_intent: bool
     use_sample_read_model: bool
     enable_postgres_mutation: bool
 
@@ -82,6 +85,11 @@ def load_config() -> AppConfig:
         market_data_poll_exchange=os.getenv("TP_MARKET_DATA_POLL_EXCHANGE", "upbit"),
         market_data_poll_markets=_env_csv("TP_MARKET_DATA_POLL_MARKETS"),
         market_data_poll_interval_ms=_env_int("TP_MARKET_DATA_POLL_INTERVAL_MS", 1000),
+        strategy_runtime_enabled=_env_bool("TP_STRATEGY_RUNTIME_ENABLED", False),
+        strategy_runtime_interval_ms=_env_int("TP_STRATEGY_RUNTIME_INTERVAL_MS", 3000),
+        strategy_runtime_persist_intent=_env_bool(
+            "TP_STRATEGY_RUNTIME_PERSIST_INTENT", False
+        ),
         use_sample_read_model=_env_bool("TP_USE_SAMPLE_READ_MODEL", True),
         enable_postgres_mutation=_env_bool("TP_ENABLE_POSTGRES_MUTATION", False),
     )

@@ -185,6 +185,7 @@ class RedisRuntime:
         run_id: str,
         payload: dict[str, Any],
         trace_id: str | None = None,
+        publish_event: bool = True,
     ) -> None:
         payload_to_store = {
             **payload,
@@ -192,6 +193,8 @@ class RedisRuntime:
             "cached_at": _iso_now(),
         }
         if not self.set_json(["strategy_run", run_id, "latest_evaluation"], payload_to_store):
+            return
+        if not publish_event:
             return
         self.append_event(
             "strategy_events",
@@ -462,6 +465,11 @@ class RedisRuntime:
             )
             return completed.stdout
         except (OSError, subprocess.SubprocessError) as exc:
+            if (
+                isinstance(exc, subprocess.CalledProcessError)
+                and exc.returncode == 130
+            ):
+                return None
             LOGGER.warning(
                 "redis runtime command failed: %s",
                 exc.__class__.__name__,

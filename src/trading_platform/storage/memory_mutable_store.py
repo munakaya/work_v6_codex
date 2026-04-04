@@ -274,6 +274,18 @@ class MemoryMutableStore(MemoryReadStore):
         mode: str,
         hostname: str | None,
     ) -> dict[str, object]:
+        default_versions = self.config_versions.get("default", [])
+        latest_default = default_versions[0] if default_versions else None
+        assigned_config_version = (
+            {
+                "config_scope": "default",
+                "version_no": latest_default["version_no"],
+                "config_version_id": latest_default["config_version_id"],
+            }
+            if latest_default is not None
+            else {"config_scope": "default", "version_no": 1}
+        )
+
         existing = next((bot for bot in self.bots if bot["bot_key"] == bot_key), None)
         if existing is not None:
             existing["strategy_name"] = strategy_name
@@ -290,7 +302,6 @@ class MemoryMutableStore(MemoryReadStore):
             }
 
         bot_id = str(uuid4())
-        assigned_config_version = {"config_scope": "default", "version_no": 1}
         bot = {
             "bot_id": bot_id,
             "bot_key": bot_key,

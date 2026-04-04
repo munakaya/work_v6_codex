@@ -2083,6 +2083,54 @@ components:
                   type: integer
                 failure_count:
                   type: integer
+            strategy_runtime:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                interval_ms:
+                  type: integer
+                persist_intent:
+                  type: boolean
+                running:
+                  type: boolean
+                state:
+                  type: string
+                last_success_at:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                      format: date-time
+                last_error_at:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                      format: date-time
+                last_error_message:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                last_skip_at:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                      format: date-time
+                last_skip_reason:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                evaluated_count:
+                  type: integer
+                accepted_count:
+                  type: integer
+                rejected_count:
+                  type: integer
+                persisted_intent_count:
+                  type: integer
+                skipped_count:
+                  type: integer
+                failure_count:
+                  type: integer
             read_store:
               type: object
               properties:

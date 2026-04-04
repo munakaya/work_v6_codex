@@ -15,9 +15,10 @@ def main() -> None:
     log_path = configure_logging(config)
     server = build_server(config)
     server.market_data_runtime.start()
+    server.strategy_runtime.start()
 
     LOGGER.info(
-        "starting %s on %s:%s log=%s store=%s mode=%s redis=%s market_data=%s",
+        "starting %s on %s:%s log=%s store=%s mode=%s redis=%s market_data=%s strategy_runtime=%s",
         config.service_name,
         config.host,
         config.port,
@@ -26,6 +27,7 @@ def main() -> None:
         server.store_bootstrap.mode,
         server.redis_runtime.info.state,
         server.market_data_runtime.info.state,
+        server.strategy_runtime.info.state,
     )
     try:
         server.serve_forever()
@@ -33,6 +35,7 @@ def main() -> None:
         LOGGER.info("shutdown requested by keyboard interrupt")
     finally:
         server.market_data_runtime.stop()
+        server.strategy_runtime.stop()
         server.server_close()
         LOGGER.info("server stopped")
 

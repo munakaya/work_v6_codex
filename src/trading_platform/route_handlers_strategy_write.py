@@ -4,8 +4,7 @@ from http import HTTPStatus
 
 from .request_utils import json_bool, json_string, optional_object
 from .strategy import (
-    classify_submit_failure_transition,
-    derive_arbitrage_lifecycle_state,
+    build_arbitrage_evaluation_payload,
     evaluate_arbitrage,
     load_strategy_inputs,
     persist_order_intent_plan,
@@ -116,85 +115,11 @@ class ControlPlaneStrategyWriteRouteMixin:
             },
         }
         decision = evaluate_arbitrage(load_strategy_inputs(payload))
-        lifecycle_preview = derive_arbitrage_lifecycle_state(
-            decision_accepted=decision.accepted,
-            has_order_intents=False,
-            has_submitted_orders=False,
-            has_open_orders=False,
-            hedge_balanced=False,
-            recovery_required=False,
-            unwind_in_progress=False,
-            manual_handoff=False,
+        response_data = build_arbitrage_evaluation_payload(
+            decision=decision,
+            bot_id=str(run.get("bot_id")),
+            strategy_run_id=run_id,
         )
-        response_data = {
-            "bot_id": str(run.get("bot_id")),
-            "strategy_run_id": run_id,
-            "accepted": decision.accepted,
-            "reason_code": decision.reason_code,
-            "lifecycle_preview": lifecycle_preview,
-            "decision_context": decision.decision_context,
-            "candidate_size": (
-                {
-                    "target_qty": str(decision.candidate_size.target_qty),
-                    "components": decision.candidate_size.components,
-                }
-                if decision.candidate_size is not None
-                else None
-            ),
-            "executable_edge": (
-                {
-                    "executable_buy_cost_quote": str(
-                        decision.executable_edge.executable_buy_cost_quote
-                    ),
-                    "executable_sell_proceeds_quote": str(
-                        decision.executable_edge.executable_sell_proceeds_quote
-                    ),
-                    "executable_profit_quote": str(
-                        decision.executable_edge.executable_profit_quote
-                    ),
-                    "executable_profit_bps": str(
-                        decision.executable_edge.executable_profit_bps
-                    ),
-                }
-                if decision.executable_edge is not None
-                else None
-            ),
-            "reservation_plan": (
-                {
-                    "reservation_passed": decision.reservation_plan.reservation_passed,
-                    "reason_code": decision.reservation_plan.reason_code,
-                    "quote_required": str(decision.reservation_plan.quote_required),
-                    "base_required": str(decision.reservation_plan.base_required),
-                    "reserved_notional": str(decision.reservation_plan.reserved_notional),
-                    "details": decision.reservation_plan.details,
-                }
-                if decision.reservation_plan is not None
-                else None
-            ),
-        }
-        if decision.accepted:
-            without_auto_unwind = classify_submit_failure_transition(
-                decision_accepted=True,
-                reservation_passed=bool(
-                    decision.reservation_plan
-                    and decision.reservation_plan.reservation_passed
-                ),
-                submit_failed=True,
-                auto_unwind_allowed=False,
-            )
-            with_auto_unwind = classify_submit_failure_transition(
-                decision_accepted=True,
-                reservation_passed=bool(
-                    decision.reservation_plan
-                    and decision.reservation_plan.reservation_passed
-                ),
-                submit_failed=True,
-                auto_unwind_allowed=True,
-            )
-            response_data["submit_failure_preview"] = {
-                "without_auto_unwind": without_auto_unwind["next_state"],
-                "with_auto_unwind": with_auto_unwind["next_state"],
-            }
 
         self._sync_arbitrage_evaluation(run_id, response_data)
         self._publish_strategy_event(
@@ -204,7 +129,7 @@ class ControlPlaneStrategyWriteRouteMixin:
                 "bot_id": run.get("bot_id"),
                 "accepted": decision.accepted,
                 "reason_code": decision.reason_code,
-                "lifecycle_preview": lifecycle_preview,
+                "lifecycle_preview": response_data.get("lifecycle_preview"),
                 "persist_intent": persist_intent,
             },
         )
@@ -248,16 +173,11 @@ class ControlPlaneStrategyWriteRouteMixin:
                 "market": intent.get("market"),
             },
         )
-        response_data["lifecycle_preview"] = derive_arbitrage_lifecycle_state(
-            decision_accepted=True,
-            has_order_intents=True,
-            has_submitted_orders=False,
-            has_open_orders=False,
-            hedge_balanced=False,
-            recovery_required=False,
-            unwind_in_progress=False,
-            manual_handoff=False,
+        response_data = build_arbitrage_evaluation_payload(
+            decision=decision,
+            bot_id=str(run.get("bot_id")),
+            strategy_run_id=run_id,
+            persisted_intent=intent,
         )
-        response_data["persisted_intent"] = intent
         self._sync_arbitrage_evaluation(run_id, response_data)
         return HTTPStatus.CREATED, self._response(data=response_data)

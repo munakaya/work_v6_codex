@@ -16,6 +16,7 @@ from .redis_runtime import RedisRuntime
 from .route_handlers import ControlPlaneRouteMixin
 from .storage.store_factory import StoreBootstrapInfo, build_read_store_bundle
 from .storage.store_protocol import ControlPlaneStoreProtocol
+from .strategy_runtime import StrategyRuntime
 
 
 LOGGER = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class ControlPlaneServer(ThreadingHTTPServer):
         redis_runtime: RedisRuntime,
         market_data_connector: PublicMarketDataConnector,
         market_data_runtime: MarketDataRuntime,
+        strategy_runtime: StrategyRuntime,
     ):
         super().__init__(server_address, ControlPlaneRequestHandler)
         self.config = config
@@ -45,6 +47,7 @@ class ControlPlaneServer(ThreadingHTTPServer):
         self.redis_runtime = redis_runtime
         self.market_data_connector = market_data_connector
         self.market_data_runtime = market_data_runtime
+        self.strategy_runtime = strategy_runtime
 
 
 class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler):
@@ -245,6 +248,14 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         metrics=metrics,
         redis_runtime=redis_runtime,
     )
+    strategy_runtime = StrategyRuntime(
+        enabled=config.strategy_runtime_enabled,
+        interval_ms=config.strategy_runtime_interval_ms,
+        persist_intent=config.strategy_runtime_persist_intent,
+        read_store=bootstrap.store,
+        connector=market_data_connector,
+        redis_runtime=redis_runtime,
+    )
     return ControlPlaneServer(
         (config.host, config.port),
         config,
@@ -255,4 +266,5 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         redis_runtime,
         market_data_connector,
         market_data_runtime,
+        strategy_runtime,
     )
