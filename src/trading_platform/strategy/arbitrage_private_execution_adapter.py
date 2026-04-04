@@ -542,6 +542,65 @@ def _validate_response_filled_payload(
     return None
 
 
+def _validate_response_submit_failed_payload(
+    *,
+    orders_payload: object,
+    fills_payload: object,
+) -> str | None:
+    if fills_payload is None:
+        return None
+    if not isinstance(orders_payload, list) or not orders_payload:
+        return (
+            "private execution submit_failed outcome must not include "
+            "fills without orders"
+        )
+    if not isinstance(fills_payload, list):
+        return "private execution fills must be a list"
+
+    requested_qty_by_leg: dict[tuple[str, str], Decimal] = {}
+    for item in orders_payload:
+        if not isinstance(item, dict):
+            continue
+        side = (_json_text(item.get("side")) or "").lower()
+        exchange_name = _json_text(item.get("exchange_name")) or ""
+        requested_qty = json_number_text(item.get("requested_qty"))
+        if side not in {"buy", "sell"} or not exchange_name:
+            continue
+        if requested_qty is None or not is_positive_number_text(requested_qty):
+            continue
+        requested_qty_by_leg[(side, exchange_name)] = Decimal(requested_qty)
+
+    fill_qty_by_leg: dict[tuple[str, str], Decimal] = {}
+    seen_trade_ids: set[tuple[str, str, str]] = set()
+    for item in fills_payload:
+        if not isinstance(item, dict):
+            return "private execution fill item must be an object"
+        side = (_json_text(item.get("side")) or "").lower()
+        exchange_name = _json_text(item.get("exchange_name")) or ""
+        fill_qty = json_number_text(item.get("fill_qty"))
+        fill_price = json_number_text(item.get("fill_price"))
+        exchange_trade_id = _json_text(item.get("exchange_trade_id"))
+        if (side, exchange_name) not in requested_qty_by_leg:
+            return "private execution fill could not be matched to order"
+        if not fill_price or not fill_qty:
+            return "private execution fill missing fill_price or fill_qty"
+        if not is_positive_number_text(fill_price):
+            return "private execution fill_price must be a positive number"
+        if not is_positive_number_text(fill_qty):
+            return "private execution fill_qty must be a positive number"
+        leg_key = (side, exchange_name)
+        if exchange_trade_id is not None:
+            trade_key = (side, exchange_name, exchange_trade_id)
+            if trade_key in seen_trade_ids:
+                return "private execution response duplicated fill exchange_trade_id"
+            seen_trade_ids.add(trade_key)
+        next_fill_qty = fill_qty_by_leg.get(leg_key, Decimal("0")) + Decimal(fill_qty)
+        if next_fill_qty > requested_qty_by_leg[leg_key]:
+            return "private execution fills exceed requested_qty"
+        fill_qty_by_leg[leg_key] = next_fill_qty
+    return None
+
+
 def _validate_lifecycle_preview(
     *,
     outcome: str,
@@ -729,6 +788,16 @@ class PrivateHttpArbitrageExecutionAdapter:
         if outcome == "submit_failed":
             orders_payload = response_payload.get("orders")
             fills_payload = response_payload.get("fills")
+            failed_payload_error = _validate_response_submit_failed_payload(
+                orders_payload=orders_payload,
+                fills_payload=fills_payload,
+            )
+            if failed_payload_error is not None:
+                return _failure_result(
+                    auto_unwind_on_failure=auto_unwind_on_failure,
+                    reason=failed_payload_error,
+                    details=_response_details(response_payload),
+                )
             if isinstance(orders_payload, list) and orders_payload:
                 created_orders, order_index, order_error = _create_orders_from_response(
                     store=store,
@@ -773,15 +842,6 @@ class PrivateHttpArbitrageExecutionAdapter:
                         created_fills=created_fills,
                     )
             else:
-                if fills_payload is not None:
-                    return _failure_result(
-                        auto_unwind_on_failure=auto_unwind_on_failure,
-                        reason=(
-                            "private execution submit_failed outcome must not include "
-                            "fills without orders"
-                        ),
-                        details=_response_details(response_payload),
-                    )
                 created_orders = ()
                 created_fills = ()
                 refreshed_orders = ()
