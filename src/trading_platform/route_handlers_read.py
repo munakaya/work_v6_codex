@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import UTC, datetime
 from http import HTTPStatus
 from urllib.parse import parse_qs
 
@@ -9,14 +10,57 @@ from .storage.dependencies import postgres_status, redis_status
 
 
 class ControlPlaneReadRouteMixin:
+    def _parse_iso_datetime(self, value: object) -> datetime | None:
+        if not isinstance(value, str) or not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
+
+    def _cached_age_seconds(self, item: dict[str, object], now: datetime) -> int | None:
+        cached_at = self._parse_iso_datetime(item.get("cached_at"))
+        if cached_at is None:
+            return None
+        age_seconds = int((now - cached_at).total_seconds())
+        return max(0, age_seconds)
+
+    def _annotate_latest_strategy_evaluations(
+        self,
+        evaluations: list[dict[str, object]],
+        *,
+        now: datetime,
+        stale_after_seconds: int | None,
+    ) -> list[dict[str, object]]:
+        annotated: list[dict[str, object]] = []
+        for item in evaluations:
+            enriched = dict(item)
+            cached_age_seconds = self._cached_age_seconds(item, now)
+            enriched["cached_age_seconds"] = cached_age_seconds
+            enriched["is_stale"] = (
+                None
+                if stale_after_seconds is None or cached_age_seconds is None
+                else cached_age_seconds > stale_after_seconds
+            )
+            annotated.append(enriched)
+        return annotated
+
     def _latest_strategy_evaluation_summary(
-        self, evaluations: list[dict[str, object]]
+        self,
+        evaluations: list[dict[str, object]],
+        *,
+        now: datetime,
+        stale_after_seconds: int | None,
     ) -> dict[str, object]:
         accepted_count = 0
         rejected_count = 0
         reason_counts: Counter[str] = Counter()
         lifecycle_counts: Counter[str] = Counter()
         bot_ids: set[str] = set()
+        stale_count = 0
         for item in evaluations:
             accepted = item.get("accepted")
             if accepted is True:
@@ -32,6 +76,13 @@ class ControlPlaneReadRouteMixin:
             lifecycle_preview = str(item.get("lifecycle_preview") or "").strip()
             if lifecycle_preview:
                 lifecycle_counts[lifecycle_preview] += 1
+            cached_age_seconds = self._cached_age_seconds(item, now)
+            if (
+                stale_after_seconds is not None
+                and cached_age_seconds is not None
+                and cached_age_seconds > stale_after_seconds
+            ):
+                stale_count += 1
         return {
             "accepted_count": accepted_count,
             "rejected_count": rejected_count,
@@ -42,6 +93,8 @@ class ControlPlaneReadRouteMixin:
             "oldest_cached_at": (
                 str(evaluations[-1].get("cached_at")) if evaluations else None
             ),
+            "stale_after_seconds": stale_after_seconds,
+            "stale_count": stale_count if stale_after_seconds is not None else None,
             "reason_code_counts": dict(reason_counts),
             "lifecycle_preview_counts": dict(lifecycle_counts),
         }
@@ -138,6 +191,23 @@ class ControlPlaneReadRouteMixin:
                     }
                 ),
             )
+        stale_after_param = single_query_value(params, "stale_after_seconds")
+        stale_after_seconds: int | None = None
+        if stale_after_param is not None:
+            try:
+                stale_after_seconds = int(stale_after_param)
+            except ValueError:
+                stale_after_seconds = None
+            if stale_after_seconds is None or stale_after_seconds < 0:
+                return (
+                    HTTPStatus.BAD_REQUEST,
+                    self._response(
+                        error={
+                            "code": "INVALID_REQUEST",
+                            "message": "stale_after_seconds must be a non-negative integer",
+                        }
+                    ),
+                )
         evaluations = self.server.redis_runtime.list_arbitrage_evaluations(
             limit=100,
             bot_id=single_query_value(params, "bot_id"),
@@ -155,13 +225,23 @@ class ControlPlaneReadRouteMixin:
                     }
                 ),
             )
-        limited = evaluations[: query_limit(params)]
+        now = datetime.now(UTC)
+        annotated = self._annotate_latest_strategy_evaluations(
+            evaluations,
+            now=now,
+            stale_after_seconds=stale_after_seconds,
+        )
+        limited = annotated[: query_limit(params)]
         return HTTPStatus.OK, self._response(
             data={
                 "items": limited,
                 "count": len(limited),
-                "matched_count": len(evaluations),
-                **self._latest_strategy_evaluation_summary(evaluations),
+                "matched_count": len(annotated),
+                **self._latest_strategy_evaluation_summary(
+                    annotated,
+                    now=now,
+                    stale_after_seconds=stale_after_seconds,
+                ),
             }
         )
 

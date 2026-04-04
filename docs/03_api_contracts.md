@@ -243,6 +243,7 @@
 - `accepted`
 - `lifecycle_preview`
 - `reason_code`
+- `stale_after_seconds`
 
 응답 핵심 필드:
 
@@ -259,14 +260,19 @@
 - `unique_bot_count`
 - `newest_cached_at`
 - `oldest_cached_at`
+- `stale_after_seconds`
+- `stale_count`
 - `reason_code_counts`
 - `lifecycle_preview_counts`
+- item별 `cached_age_seconds`
+- item별 `is_stale`
 
 주의:
 
 - Redis runtime이 꺼져 있으면 `REDIS_RUNTIME_UNAVAILABLE`
 - Redis read 실패 시 `REDIS_RUNTIME_READ_FAILED`
 - `accepted`는 `true|false`만 허용
+- `stale_after_seconds`는 0 이상 정수만 허용
 
 #### `GET /api/v1/strategy-runs/{run_id}/latest-evaluation`
 

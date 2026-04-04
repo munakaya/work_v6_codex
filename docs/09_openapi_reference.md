@@ -640,6 +640,11 @@ paths:
           name: reason_code
           schema:
             type: string
+        - in: query
+          name: stale_after_seconds
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
           description: Latest cached evaluations by strategy run
@@ -1504,6 +1509,14 @@ components:
                   cached_at:
                     type: string
                     format: date-time
+                  cached_age_seconds:
+                    oneOf:
+                      - type: 'null'
+                      - type: integer
+                  is_stale:
+                    oneOf:
+                      - type: 'null'
+                      - type: boolean
                   decision_context:
                     $ref: '#/components/schemas/StrategyDecisionContext'
                   candidate_size:
@@ -1546,6 +1559,14 @@ components:
                 - type: 'null'
                 - type: string
                   format: date-time
+            stale_after_seconds:
+              oneOf:
+                - type: 'null'
+                - type: integer
+            stale_count:
+              oneOf:
+                - type: 'null'
+                - type: integer
             reason_code_counts:
               type: object
               additionalProperties:
