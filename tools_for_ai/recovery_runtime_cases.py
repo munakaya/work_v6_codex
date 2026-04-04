@@ -89,6 +89,42 @@ def main() -> None:
         "handoff incident mismatch",
     )
 
+    missing_observed_at_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=missing_observed_at_trace_id,
+        payload={
+            "recovery_trace_id": missing_observed_at_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+        },
+    )
+    runtime.run_once()
+    missing_observed_at_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=missing_observed_at_trace_id
+    )
+    _assert(
+        missing_observed_at_trace is not None,
+        "missing observed_at reconciliation trace missing",
+    )
+    _assert(
+        missing_observed_at_trace.get("status") == "handoff_required",
+        "matched reconciliation without observed_at should hand off",
+    )
+    _assert(
+        missing_observed_at_trace.get("handoff_reason")
+        == "reconciliation_observation_missing",
+        "missing observed_at handoff reason mismatch",
+    )
+
     stale_reconciliation_trace_id = f"rt_{uuid4().hex}"
     redis_runtime.sync_recovery_trace(
         recovery_trace_id=stale_reconciliation_trace_id,
@@ -738,6 +774,7 @@ def main() -> None:
             "reconciliation_result": "matched",
             "reconciliation_open_order_count": 0,
             "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
             "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
             "updated_at": _iso(datetime.now(UTC)),
         },

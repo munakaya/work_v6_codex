@@ -519,9 +519,25 @@ class RecoveryRuntime:
         reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
         if reconciliation_result != "matched":
             return None
+        reconciliation_open_order_count = _parse_int(
+            trace.get("reconciliation_open_order_count")
+        )
+        reconciliation_residual = _parse_decimal(
+            trace.get("reconciliation_residual_exposure_quote")
+        )
+        if (
+            reconciliation_open_order_count is None
+            or reconciliation_open_order_count != 0
+            or reconciliation_residual is None
+            or reconciliation_residual != Decimal("0")
+        ):
+            return None
         observed_at = _parse_iso_datetime(trace.get("reconciliation_observed_at"))
         if observed_at is None:
-            return None
+            return (
+                "reconciliation_observation_missing",
+                "reconciliation matched result is missing observation timestamp",
+            )
         age_seconds = max(0, int((datetime.now(UTC) - observed_at).total_seconds()))
         if age_seconds < self.reconciliation_stale_after_seconds:
             return None
