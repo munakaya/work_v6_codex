@@ -35,6 +35,7 @@ def main() -> None:
         handoff_after_seconds=1,
         submit_timeout_seconds=1,
         reconciliation_mismatch_handoff_count=2,
+        reconciliation_stale_after_seconds=1,
         read_store=store,
         redis_runtime=redis_runtime,
     )
@@ -86,6 +87,40 @@ def main() -> None:
     _assert(
         handoff.get("incident_code") == "ARB-302 MANUAL_HANDOFF_REQUIRED",
         "handoff incident mismatch",
+    )
+
+    stale_reconciliation_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=stale_reconciliation_trace_id,
+        payload={
+            "recovery_trace_id": stale_reconciliation_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC) - timedelta(seconds=5)),
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+        },
+    )
+    runtime.run_once()
+    stale_reconciliation_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=stale_reconciliation_trace_id
+    )
+    _assert(stale_reconciliation_trace is not None, "stale reconciliation trace missing")
+    _assert(
+        stale_reconciliation_trace.get("status") == "handoff_required",
+        "stale matched reconciliation should hand off",
+    )
+    _assert(
+        stale_reconciliation_trace.get("handoff_reason")
+        == "reconciliation_observation_stale",
+        "stale matched reconciliation handoff reason mismatch",
     )
 
     failed_open_order_trace_id = f"rt_{uuid4().hex}"

@@ -904,6 +904,19 @@ class ControlPlaneRecoveryWriteRouteMixin:
                     }
                 ),
             )
+        reconciliation_observed_at = None
+        if "observed_at" in body:
+            reconciliation_observed_at = json_datetime_text(body.get("observed_at"))
+            if reconciliation_observed_at is None:
+                return (
+                    HTTPStatus.BAD_REQUEST,
+                    self._response(
+                        error={
+                            "code": "INVALID_REQUEST",
+                            "message": "observed_at must be an ISO datetime string",
+                        }
+                    ),
+                )
         observed_order_ids = None
         if "observed_order_ids" in body:
             observed_order_ids = json_string_list(body.get("observed_order_ids"))
@@ -1010,6 +1023,7 @@ class ControlPlaneRecoveryWriteRouteMixin:
             "reconciliation_reason": optional_string(body.get("reconciliation_reason")),
             "reconciliation_summary": optional_string(body.get("summary")),
             "reconciliation_source": optional_string(body.get("source")) or "operator_recorded",
+            "reconciliation_observed_at": reconciliation_observed_at,
             "reconciliation_operator_context": optional_object(body.get("operator_context")),
             "reconciliation_observed_order_ids": observed_order_ids,
             "reconciliation_observed_fill_ids": observed_fill_ids,

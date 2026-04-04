@@ -85,6 +85,7 @@ class RecoveryRuntimeInfo:
     handoff_after_seconds: int
     submit_timeout_seconds: int
     reconciliation_mismatch_handoff_count: int
+    reconciliation_stale_after_seconds: int
     running: bool
     state: str
     last_success_at: str | None
@@ -105,6 +106,7 @@ class RecoveryRuntimeInfo:
             "handoff_after_seconds": self.handoff_after_seconds,
             "submit_timeout_seconds": self.submit_timeout_seconds,
             "reconciliation_mismatch_handoff_count": self.reconciliation_mismatch_handoff_count,
+            "reconciliation_stale_after_seconds": self.reconciliation_stale_after_seconds,
             "running": self.running,
             "state": self.state,
             "last_success_at": self.last_success_at,
@@ -129,6 +131,7 @@ class RecoveryRuntime:
         handoff_after_seconds: int,
         submit_timeout_seconds: int = 15,
         reconciliation_mismatch_handoff_count: int = 2,
+        reconciliation_stale_after_seconds: int = 15,
         read_store: ControlPlaneStoreProtocol,
         redis_runtime: RedisRuntime,
     ) -> None:
@@ -138,6 +141,9 @@ class RecoveryRuntime:
         self.submit_timeout_seconds = max(submit_timeout_seconds, 1)
         self.reconciliation_mismatch_handoff_count = max(
             reconciliation_mismatch_handoff_count, 1
+        )
+        self.reconciliation_stale_after_seconds = max(
+            reconciliation_stale_after_seconds, 1
         )
         self.read_store = read_store
         self.redis_runtime = redis_runtime
@@ -165,6 +171,7 @@ class RecoveryRuntime:
                 handoff_after_seconds=self.handoff_after_seconds,
                 submit_timeout_seconds=self.submit_timeout_seconds,
                 reconciliation_mismatch_handoff_count=self.reconciliation_mismatch_handoff_count,
+                reconciliation_stale_after_seconds=self.reconciliation_stale_after_seconds,
                 running=self._running,
                 state=self._state_name(),
                 last_success_at=self._last_success_at,
@@ -355,6 +362,15 @@ class RecoveryRuntime:
         )
         intent_terminal = self._intent_is_terminal(intent_id=intent_id)
         residual_exposure_quote = _parse_decimal(trace.get("residual_exposure_quote"))
+        reconciliation_stale_handoff = self._reconciliation_stale_handoff_reason(trace)
+        if reconciliation_stale_handoff is not None:
+            handoff_reason, summary = reconciliation_stale_handoff
+            self._mark_handoff_required(
+                trace,
+                handoff_reason=handoff_reason,
+                summary=summary,
+            )
+            return
         reconciliation_resolution_reason = self._reconciliation_resolution_reason(trace)
         if reconciliation_resolution_reason is not None:
             self._resolve_trace(trace, resolution_reason=reconciliation_resolution_reason)
@@ -496,6 +512,23 @@ class RecoveryRuntime:
         if reconciliation_open_order_count == 0 and reconciliation_residual == Decimal("0"):
             return "reconciliation_matched_zero_residual"
         return None
+
+    def _reconciliation_stale_handoff_reason(
+        self, trace: dict[str, object]
+    ) -> tuple[str, str] | None:
+        reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
+        if reconciliation_result != "matched":
+            return None
+        observed_at = _parse_iso_datetime(trace.get("reconciliation_observed_at"))
+        if observed_at is None:
+            return None
+        age_seconds = max(0, int((datetime.now(UTC) - observed_at).total_seconds()))
+        if age_seconds < self.reconciliation_stale_after_seconds:
+            return None
+        return (
+            "reconciliation_observation_stale",
+            "reconciliation matched result is older than automatic resolution threshold",
+        )
 
     def _reconciliation_handoff_reason(
         self, trace: dict[str, object]

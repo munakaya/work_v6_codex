@@ -2668,6 +2668,11 @@ components:
           oneOf:
             - type: 'null'
             - type: string
+        reconciliation_observed_at:
+          oneOf:
+            - type: 'null'
+            - type: string
+              format: date-time
         reconciliation_observed_order_ids:
           oneOf:
             - type: 'null'
@@ -2862,6 +2867,9 @@ components:
           type: integer
         residual_exposure_quote:
           type: string
+        observed_at:
+          type: string
+          format: date-time
         observed_order_ids:
           type: array
           items:
