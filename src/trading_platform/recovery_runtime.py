@@ -13,6 +13,7 @@ from .storage.store_protocol import ControlPlaneStoreProtocol
 
 LOGGER = logging.getLogger(__name__)
 TERMINAL_ORDER_STATUSES = {"filled", "cancelled", "rejected", "expired", "failed"}
+TERMINAL_FAILURE_ORDER_STATUSES = {"cancelled", "rejected", "expired", "failed"}
 TERMINAL_INTENT_STATUSES = {"filled", "closed", "simulated", "cancelled", "expired", "rejected"}
 TERMINAL_SYNC_CANDIDATE_STATES = {
     "entry_submitting",
@@ -323,6 +324,14 @@ class RecoveryRuntime:
         if not has_active_orders and intent_terminal:
             self._resolve_trace(trace, resolution_reason="terminal_intent_and_no_active_orders")
             return
+        unwind_failure_status = self._linked_unwind_terminal_failure_status(trace)
+        if unwind_failure_status is not None:
+            self._mark_handoff_required(
+                trace,
+                handoff_reason="unwind_order_terminal_without_resolution",
+                summary=f"linked unwind order became terminal without resolution: {unwind_failure_status}",
+            )
+            return
         age_seconds = self._trace_age_seconds(trace)
         if (
             age_seconds is not None
@@ -373,6 +382,18 @@ class RecoveryRuntime:
         if not timestamps:
             return None
         return min(timestamps)
+
+    def _linked_unwind_terminal_failure_status(self, trace: dict[str, object]) -> str | None:
+        linked_order_id = str(trace.get("linked_unwind_order_id") or "").strip()
+        if not linked_order_id:
+            return None
+        order = self.read_store.get_order_detail(linked_order_id)
+        if order is None:
+            return None
+        status = str(order.get("status") or "").strip().lower()
+        if status in TERMINAL_FAILURE_ORDER_STATUSES:
+            return status
+        return None
 
     def _create_submit_timeout_trace(
         self,
@@ -482,7 +503,13 @@ class RecoveryRuntime:
             self._resolved_count += 1
             self._last_resolution_at = _iso_now()
 
-    def _mark_handoff_required(self, trace: dict[str, object]) -> None:
+    def _mark_handoff_required(
+        self,
+        trace: dict[str, object],
+        *,
+        handoff_reason: str = "recovery_timeout_exceeded",
+        summary: str | None = None,
+    ) -> None:
         recovery_trace_id = str(trace.get("recovery_trace_id") or "")
         bot_id = str(trace.get("bot_id") or "") or None
         alert = None
@@ -491,7 +518,7 @@ class RecoveryRuntime:
                 bot_id=bot_id,
                 level="critical",
                 code="ARBITRAGE_MANUAL_HANDOFF_REQUIRED",
-                message="recovery trace exceeded auto-recovery window",
+                message=summary or "recovery trace exceeded auto-recovery window",
             )
         payload = {
             **trace,
@@ -500,7 +527,8 @@ class RecoveryRuntime:
             "manual_handoff_required": True,
             "incident_code": "ARB-302 MANUAL_HANDOFF_REQUIRED",
             "alert_id": None if alert is None else alert.get("alert_id"),
-            "handoff_reason": "recovery_timeout_exceeded",
+            "handoff_reason": handoff_reason,
+            "summary": summary or str(trace.get("summary") or ""),
         }
         self.redis_runtime.sync_recovery_trace(
             recovery_trace_id=recovery_trace_id,
