@@ -855,15 +855,20 @@ class RecoveryRuntime:
             and reconciliation_open_order_count > 0
             and observed_order_statuses
             and len(observed_order_statuses) >= reconciliation_open_order_count
-            and all(
-                str(status["status"]).strip().lower() in TERMINAL_FAILURE_ORDER_STATUSES
-                for status in observed_order_statuses
-            )
         ):
-            return (
-                "reconciliation_open_orders_terminal_failure",
-                "reconciliation reports open orders but observed order statuses are all terminal failures",
-            )
+            normalized_statuses = [
+                str(status["status"]).strip().lower() for status in observed_order_statuses
+            ]
+            if all(status in TERMINAL_FAILURE_ORDER_STATUSES for status in normalized_statuses):
+                return (
+                    "reconciliation_open_orders_terminal_failure",
+                    "reconciliation reports open orders but observed order statuses are all terminal failures",
+                )
+            if all(status in TERMINAL_ORDER_STATUSES for status in normalized_statuses):
+                return (
+                    "reconciliation_open_orders_terminal_status_conflict",
+                    "reconciliation reports open orders but observed order statuses are all terminal",
+                )
         if reconciliation_open_order_count is None or reconciliation_open_order_count < 0:
             return None
         if reconciliation_residual is None:
