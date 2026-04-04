@@ -435,6 +435,17 @@ class RecoveryRuntime:
                 summary=summary,
             )
             return
+        reconciliation_invalid_evidence_handoff = self._reconciliation_invalid_evidence_handoff_reason(
+            trace
+        )
+        if reconciliation_invalid_evidence_handoff is not None:
+            handoff_reason, summary = reconciliation_invalid_evidence_handoff
+            self._mark_handoff_required(
+                trace,
+                handoff_reason=handoff_reason,
+                summary=summary,
+            )
+            return
         reconciliation_evidence_handoff = self._reconciliation_evidence_handoff_reason(trace)
         if reconciliation_evidence_handoff is not None:
             handoff_reason, summary = reconciliation_evidence_handoff
@@ -813,6 +824,52 @@ class RecoveryRuntime:
         return (
             "reconciliation_evidence_missing",
             "reconciliation matched result is missing fill, status, or balance evidence",
+        )
+
+    def _reconciliation_invalid_evidence_handoff_reason(
+        self, trace: dict[str, object]
+    ) -> tuple[str, str] | None:
+        reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
+        if reconciliation_result != "matched":
+            return None
+        reconciliation_open_order_count = _parse_int(
+            trace.get("reconciliation_open_order_count")
+        )
+        reconciliation_residual = _parse_decimal(
+            trace.get("reconciliation_residual_exposure_quote")
+        )
+        if (
+            reconciliation_open_order_count is None
+            or reconciliation_open_order_count != 0
+            or reconciliation_residual is None
+            or reconciliation_residual != Decimal("0")
+        ):
+            return None
+        invalid_fields: list[str] = []
+        if (
+            "reconciliation_observed_fill_ids" in trace
+            and trace.get("reconciliation_observed_fill_ids") is not None
+            and _observed_string_ids(trace.get("reconciliation_observed_fill_ids")) is None
+        ):
+            invalid_fields.append("observed_fill_ids")
+        if (
+            "reconciliation_observed_order_statuses" in trace
+            and trace.get("reconciliation_observed_order_statuses") is not None
+            and _observed_order_statuses(trace.get("reconciliation_observed_order_statuses")) is None
+        ):
+            invalid_fields.append("observed_order_statuses")
+        if (
+            "reconciliation_observed_balances" in trace
+            and trace.get("reconciliation_observed_balances") is not None
+            and _observed_balances(trace.get("reconciliation_observed_balances")) is None
+        ):
+            invalid_fields.append("observed_balances")
+        if not invalid_fields:
+            return None
+        return (
+            "reconciliation_evidence_invalid",
+            "reconciliation matched result contains invalid evidence fields: "
+            + ", ".join(invalid_fields),
         )
 
     def _reconciliation_status_handoff_reason(

@@ -196,6 +196,40 @@ def main() -> None:
         "missing evidence handoff reason mismatch",
     )
 
+    invalid_fill_ids_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=invalid_fill_ids_trace_id,
+        payload={
+            "recovery_trace_id": invalid_fill_ids_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_fill_ids": ["fill-ok", ""],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+        },
+    )
+    runtime.run_once()
+    invalid_fill_ids_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=invalid_fill_ids_trace_id
+    )
+    _assert(invalid_fill_ids_trace is not None, "invalid fill ids trace missing")
+    _assert(
+        invalid_fill_ids_trace.get("status") == "handoff_required",
+        "invalid fill ids should trigger manual handoff",
+    )
+    _assert(
+        invalid_fill_ids_trace.get("handoff_reason") == "reconciliation_evidence_invalid",
+        "invalid fill ids handoff reason mismatch",
+    )
+
     failed_open_order_trace_id = f"rt_{uuid4().hex}"
     redis_runtime.sync_recovery_trace(
         recovery_trace_id=failed_open_order_trace_id,
@@ -471,7 +505,7 @@ def main() -> None:
     )
     _assert(
         duplicate_balance_trace.get("handoff_reason")
-        == "reconciliation_balance_evidence_incomplete",
+        == "reconciliation_evidence_invalid",
         "duplicate balance handoff reason mismatch",
     )
 
@@ -1388,7 +1422,7 @@ def main() -> None:
     )
     _assert(
         duplicate_fill_ids_trace.get("handoff_reason")
-        == "reconciliation_evidence_missing",
+        == "reconciliation_evidence_invalid",
         "duplicate fill ids handoff reason mismatch",
     )
 
