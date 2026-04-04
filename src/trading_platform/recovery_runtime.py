@@ -104,6 +104,7 @@ def _observed_balances(value: object) -> list[dict[str, object]] | None:
     if value is None or not isinstance(value, list):
         return None
     balances: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
     for item in value:
         if not isinstance(item, dict):
             return None
@@ -122,10 +123,14 @@ def _observed_balances(value: object) -> list[dict[str, object]] | None:
             or locked < 0
         ):
             return None
+        key = (exchange_name.strip(), asset.strip().upper())
+        if key in seen:
+            return None
+        seen.add(key)
         balances.append(
             {
-                "exchange_name": exchange_name.strip(),
-                "asset": asset.strip().upper(),
+                "exchange_name": key[0],
+                "asset": key[1],
                 "free": free,
                 "locked": locked,
             }

@@ -426,6 +426,55 @@ def main() -> None:
         "incomplete balance handoff reason mismatch",
     )
 
+    duplicate_balance_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=duplicate_balance_trace_id,
+        payload={
+            "recovery_trace_id": duplicate_balance_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": str(intent_balance["intent_id"]),
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_fill_ids": ["fill-balance-dup-1"],
+            "reconciliation_observed_balances": [
+                {
+                    "exchange_name": "upbit",
+                    "asset": "BTC",
+                    "free": "0.2",
+                    "locked": "0",
+                },
+                {
+                    "exchange_name": "upbit",
+                    "asset": "BTC",
+                    "free": "0.3",
+                    "locked": "0",
+                },
+            ],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+        },
+    )
+    runtime.run_once()
+    duplicate_balance_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=duplicate_balance_trace_id
+    )
+    _assert(duplicate_balance_trace is not None, "duplicate balance trace missing")
+    _assert(
+        duplicate_balance_trace.get("status") == "handoff_required",
+        "duplicate observed balances should not allow auto resolve",
+    )
+    _assert(
+        duplicate_balance_trace.get("handoff_reason")
+        == "reconciliation_balance_evidence_incomplete",
+        "duplicate balance handoff reason mismatch",
+    )
+
     balance_irrelevant_locked_trace_id = f"rt_{uuid4().hex}"
     redis_runtime.sync_recovery_trace(
         recovery_trace_id=balance_irrelevant_locked_trace_id,
