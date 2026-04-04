@@ -71,6 +71,8 @@
 - `strategy_runtime`에는 evaluation/persist/submit 카운터와 execution 모드(`simulate_success`, `simulate_failure`, `simulate_fill`, `private_stub`, `private_http`)도 포함
 - `strategy_runtime`에는 현재 연결된 execution adapter 이름도 포함
 - `recovery_runtime`에는 active trace 처리, submit-timeout watchdog, terminal evaluation close sync, auto resolve, manual handoff 승격 카운터가 포함
+- `strategy_runtime.execution_mode=private_http`이고 execution이 켜져 있으면 `dependencies.private_execution`도 함께 검사
+- 이때 `TP_STRATEGY_PRIVATE_EXECUTION_HEALTH_URL`이 없거나 health probe가 실패하면 ready는 `degraded`
 
 ### 18.3 Bot API
 

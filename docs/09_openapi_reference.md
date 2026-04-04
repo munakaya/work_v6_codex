@@ -2458,6 +2458,23 @@ components:
                       oneOf:
                         - type: 'null'
                         - type: integer
+                private_execution:
+                  type: object
+                  properties:
+                    configured:
+                      type: boolean
+                    reachable:
+                      type: boolean
+                    state:
+                      type: string
+                    host:
+                      oneOf:
+                        - type: 'null'
+                        - type: string
+                    port:
+                      oneOf:
+                        - type: 'null'
+                        - type: integer
         error:
           oneOf:
             - type: 'null'

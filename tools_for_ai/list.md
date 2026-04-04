@@ -3,3 +3,4 @@
 - arbitrage_runtime_cases.py: 재정거래 전략 런타임의 핵심 accept/reject 케이스(C1~C9)를 코드로 검증한다
 - recovery_runtime_cases.py: recovery trace가 zero-exposure 또는 terminal intent 상태면 resolved, 오래 지속되면 handoff_required로 바뀌는지 Redis 기준으로 검증한다
 - strategy_runtime_guard_cases.py: active recovery/manual handoff trace가 있을 때 strategy runtime이 새 평가를 skip하는지 검증한다
+- private_execution_readiness_cases.py: private_http execution이 health probe 기준으로 reachable, missing, not_required 상태를 올바르게 판정하는지 검증한다

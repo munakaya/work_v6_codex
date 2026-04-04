@@ -6,7 +6,7 @@ from http import HTTPStatus
 from urllib.parse import parse_qs
 
 from .request_utils import optional_bool, query_limit, single_query_value
-from .storage.dependencies import postgres_status, redis_status
+from .storage.dependencies import postgres_status, private_execution_status, redis_status
 
 
 class ControlPlaneReadRouteMixin:
@@ -114,9 +114,24 @@ class ControlPlaneReadRouteMixin:
         dependencies = {
             "postgres": postgres_status(config.postgres_dsn).as_dict(),
             "redis": redis_status(config.redis_url).as_dict(),
+            "private_execution": private_execution_status(
+                execution_enabled=config.strategy_runtime_execution_enabled,
+                execution_mode=config.strategy_runtime_execution_mode,
+                submit_url=config.strategy_private_execution_url,
+                health_url=config.strategy_private_execution_health_url,
+                token=config.strategy_private_execution_token,
+                timeout_ms=config.strategy_private_execution_timeout_ms,
+            ).as_dict(),
         }
+        required_dependency_names = ["postgres", "redis"]
+        if (
+            config.strategy_runtime_execution_enabled
+            and config.strategy_runtime_execution_mode.strip().lower() == "private_http"
+        ):
+            required_dependency_names.append("private_execution")
         ready = all(
-            bool(dep["configured"]) and bool(dep["reachable"]) for dep in dependencies.values()
+            bool(dependencies[name]["configured"]) and bool(dependencies[name]["reachable"])
+            for name in required_dependency_names
         )
         status = HTTPStatus.OK if ready else HTTPStatus.SERVICE_UNAVAILABLE
         payload = self._response(
