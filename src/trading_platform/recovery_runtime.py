@@ -887,6 +887,11 @@ class RecoveryRuntime:
                 )
         if reconciliation_residual is None:
             return None
+        if reconciliation_open_order_count == 0 and reconciliation_residual == Decimal("0"):
+            return (
+                "reconciliation_mismatch_zero_residual_conflict",
+                "reconciliation reports mismatch even though no open orders or residual exposure remain",
+            )
         if reconciliation_open_order_count == 0 and reconciliation_residual > Decimal("0"):
             return (
                 "reconciliation_mismatch_residual_without_orders",

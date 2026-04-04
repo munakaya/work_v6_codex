@@ -1914,6 +1914,42 @@ def main() -> None:
         "reconciliation mismatch should switch latest evaluation to manual_handoff",
     )
 
+    mismatch_zero_residual_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=mismatch_zero_residual_trace_id,
+        payload={
+            "recovery_trace_id": mismatch_zero_residual_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "mismatch",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+    )
+    runtime.run_once()
+    mismatch_zero_residual_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=mismatch_zero_residual_trace_id
+    )
+    _assert(
+        mismatch_zero_residual_trace is not None,
+        "mismatch zero residual trace missing",
+    )
+    _assert(
+        mismatch_zero_residual_trace.get("status") == "handoff_required",
+        "mismatch with zero open orders and zero residual should hand off",
+    )
+    _assert(
+        mismatch_zero_residual_trace.get("handoff_reason")
+        == "reconciliation_mismatch_zero_residual_conflict",
+        "mismatch zero residual handoff reason mismatch",
+    )
+
     repeated_mismatch_run_id = "run_reconciliation_repeated_mismatch_case"
     repeated_mismatch_bot_id = bot_id
     store.strategy_runs[repeated_mismatch_run_id] = {
