@@ -59,7 +59,7 @@
 | M9 | active entry uniqueness | 중복 active entry 차단 | L2 | `05_arbitrage_runtime_invariants.md` I1 |
 | M10 | accept without reservation | invariant 위반 또는 reject 처리 | L2 | `05_arbitrage_runtime_invariants.md` I2 |
 | M11 | residual exposure visibility | 계산 불가면 정상 종료 금지 | L2 | `05_arbitrage_runtime_invariants.md` I5 |
-| M12 | submit 실패 후 recovery | `recovery_required` 또는 recovery trace 전이 | L3 | `05_arbitrage_algorithm_validation_cases.md` C12 |
+| M12 | submit 실패 후 recovery | `recovery_required` 또는 active recovery trace 전이 | L3 | `05_arbitrage_algorithm_validation_cases.md` C12, `05_arbitrage_recovery_trace_contract.md` |
 
 
 ## P1 테스트 매트릭스

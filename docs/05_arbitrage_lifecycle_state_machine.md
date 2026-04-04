@@ -24,7 +24,8 @@
 - `orders.status`
 - `trade_fills`
 - `alert_events`
-- `unwind_actions` 또는 TODO(verify) recovery trace
+- `unwind_actions`
+- `05_arbitrage_recovery_trace_contract.md` 기준 recovery trace
 
 
 ## 권장 개념 상태
@@ -110,7 +111,7 @@
   - recovery 엔진이 복구 주문을 생성했고 아직 종료 안 됨
 - 근거:
   - unwind action active
-  - 또는 recovery trace active
+  - 또는 `05_arbitrage_recovery_trace_contract.md` 기준 active recovery trace
 - 후속:
   - 신규 진입 금지
   - 종료 후 exposure 재평가

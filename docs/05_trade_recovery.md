@@ -145,6 +145,8 @@
 
 모든 unwind 시도는 decision record와 별도 trace를 남긴다.
 
+재정거래 전략에서 이 trace의 최소 계약은 `05_arbitrage_recovery_trace_contract.md`를 따른다.
+
 추가 테이블 제안:
 
 - `unwind_actions`

@@ -119,7 +119,7 @@
 - `ARB_INV_REJECT_WITH_SIDE_EFFECT`
 
 - 대표 decision이 reject면 신규 order intent draft가 생기면 안 된다.
-- reject 후 side-effect가 있다면 별도 recovery trace로 남겨야 한다.
+- reject 후 side-effect가 있다면 `05_arbitrage_recovery_trace_contract.md` 기준 recovery trace로 남겨야 한다.
 
 ### I8. hedge balance claim consistency
 
