@@ -17,6 +17,12 @@ from .request_utils import (
 
 
 class ControlPlaneRecoveryWriteRouteMixin:
+    def _unique_string_list(self, value: object) -> list[str] | None:
+        values = json_string_list(value)
+        if values is None or not isinstance(value, list):
+            return None
+        return values if len(values) == len(value) else None
+
     def _observed_balances(
         self, value: object
     ) -> list[dict[str, str]] | None:
@@ -960,27 +966,27 @@ class ControlPlaneRecoveryWriteRouteMixin:
                 )
         observed_order_ids = None
         if "observed_order_ids" in body:
-            observed_order_ids = json_string_list(body.get("observed_order_ids"))
+            observed_order_ids = self._unique_string_list(body.get("observed_order_ids"))
             if observed_order_ids is None:
                 return (
                     HTTPStatus.BAD_REQUEST,
                     self._response(
                         error={
                             "code": "INVALID_REQUEST",
-                            "message": "observed_order_ids must be an array of non-empty strings",
+                            "message": "observed_order_ids must be an array of unique non-empty strings",
                         }
                     ),
                 )
         observed_fill_ids = None
         if "observed_fill_ids" in body:
-            observed_fill_ids = json_string_list(body.get("observed_fill_ids"))
+            observed_fill_ids = self._unique_string_list(body.get("observed_fill_ids"))
             if observed_fill_ids is None:
                 return (
                     HTTPStatus.BAD_REQUEST,
                     self._response(
                         error={
                             "code": "INVALID_REQUEST",
-                            "message": "observed_fill_ids must be an array of non-empty strings",
+                            "message": "observed_fill_ids must be an array of unique non-empty strings",
                         }
                     ),
                 )

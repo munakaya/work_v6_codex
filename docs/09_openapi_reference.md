@@ -2969,10 +2969,12 @@ components:
           format: date-time
         observed_order_ids:
           type: array
+          uniqueItems: true
           items:
             type: string
         observed_fill_ids:
           type: array
+          uniqueItems: true
           items:
             type: string
         observed_order_statuses:
