@@ -27,6 +27,7 @@ ALLOWED_ORDER_STATUSES = {
     "expired",
     "failed",
 }
+TERMINAL_ORDER_STATUSES = {"filled", "cancelled", "rejected", "expired", "failed"}
 
 
 def _iso_now() -> str:
@@ -306,6 +307,26 @@ def _validate_filled_order_states(
     return None
 
 
+def _validate_submitted_order_states(
+    *,
+    created_orders: tuple[dict[str, object], ...],
+    created_fills: tuple[dict[str, object], ...],
+) -> str | None:
+    if created_fills:
+        return "private execution submitted outcome must not include fills"
+    terminal_orders = [
+        f"{order.get('order_id')}:{order.get('status')}"
+        for order in created_orders
+        if str(order.get("status") or "").strip().lower() in TERMINAL_ORDER_STATUSES
+    ]
+    if terminal_orders:
+        return (
+            "private execution submitted outcome returned terminal orders: "
+            + ", ".join(terminal_orders)
+        )
+    return None
+
+
 def _match_order_for_fill(
     *,
     order_index: dict[tuple[str, str], dict[str, object]],
@@ -512,6 +533,19 @@ class PrivateHttpArbitrageExecutionAdapter:
                 details=_response_details(response_payload),
                 created_orders=refreshed_orders,
             )
+        if outcome == "submitted":
+            submitted_state_error = _validate_submitted_order_states(
+                created_orders=refreshed_orders,
+                created_fills=created_fills,
+            )
+            if submitted_state_error is not None:
+                return _failure_result(
+                    auto_unwind_on_failure=auto_unwind_on_failure,
+                    reason=submitted_state_error,
+                    details=_response_details(response_payload),
+                    created_orders=refreshed_orders,
+                    created_fills=created_fills,
+                )
         if outcome == "filled":
             filled_state_error = _validate_filled_order_states(created_orders=refreshed_orders)
             if filled_state_error is not None:
