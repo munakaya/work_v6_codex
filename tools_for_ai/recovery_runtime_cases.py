@@ -232,6 +232,46 @@ def main() -> None:
         "duplicate observed order statuses should not trigger handoff",
     )
 
+    matched_open_status_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=matched_open_status_trace_id,
+        payload={
+            "recovery_trace_id": matched_open_status_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_order_statuses": [
+                {"order_id": "ord-open-1", "status": "submitted"}
+            ],
+            "created_at": _iso(datetime.now(UTC)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+    )
+    runtime.run_once()
+    matched_open_status_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=matched_open_status_trace_id
+    )
+    _assert(
+        matched_open_status_trace is not None,
+        "matched open status trace missing",
+    )
+    _assert(
+        matched_open_status_trace.get("status") == "handoff_required",
+        "matched reconciliation with non-terminal observed statuses should hand off",
+    )
+    _assert(
+        matched_open_status_trace.get("handoff_reason")
+        == "reconciliation_open_order_status_conflict",
+        "matched open status handoff reason mismatch",
+    )
+
     intent_balance_outcome, intent_balance = store.create_order_intent(
         strategy_run_id=run_id,
         market="KRW-BTC",
@@ -1213,6 +1253,7 @@ def main() -> None:
     print("PASS recovery runtime resolves linked unwind actions after terminal fills")
     print("PASS recovery runtime escalates failed unwind orders to manual handoff")
     print("PASS recovery runtime ignores duplicate observed order statuses")
+    print("PASS recovery runtime hands off matched reconciliation with non-terminal statuses")
     print("PASS recovery runtime escalates stale unwind orders to manual handoff")
     print("PASS recovery runtime hands off matched reconciliation with locked balances")
     print("PASS recovery runtime hands off matched reconciliation with incomplete balances")

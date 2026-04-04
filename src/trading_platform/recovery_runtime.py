@@ -414,6 +414,15 @@ class RecoveryRuntime:
                 summary=summary,
             )
             return
+        reconciliation_status_handoff = self._reconciliation_status_handoff_reason(trace)
+        if reconciliation_status_handoff is not None:
+            handoff_reason, summary = reconciliation_status_handoff
+            self._mark_handoff_required(
+                trace,
+                handoff_reason=handoff_reason,
+                summary=summary,
+            )
+            return
         reconciliation_balance_handoff = self._reconciliation_balance_handoff_reason(trace)
         if reconciliation_balance_handoff is not None:
             handoff_reason, summary = reconciliation_balance_handoff
@@ -735,6 +744,45 @@ class RecoveryRuntime:
                 "reconciliation reports no open orders while residual exposure remains",
             )
         return None
+
+    def _reconciliation_status_handoff_reason(
+        self, trace: dict[str, object]
+    ) -> tuple[str, str] | None:
+        reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
+        if reconciliation_result != "matched":
+            return None
+        reconciliation_open_order_count = _parse_int(
+            trace.get("reconciliation_open_order_count")
+        )
+        reconciliation_residual = _parse_decimal(
+            trace.get("reconciliation_residual_exposure_quote")
+        )
+        if (
+            reconciliation_open_order_count is None
+            or reconciliation_open_order_count != 0
+            or reconciliation_residual is None
+            or reconciliation_residual != Decimal("0")
+        ):
+            return None
+        observed_order_statuses = _observed_order_statuses(
+            trace.get("reconciliation_observed_order_statuses")
+        )
+        if not observed_order_statuses:
+            return None
+        nonterminal_statuses = sorted(
+            {
+                str(item["status"]).strip().lower()
+                for item in observed_order_statuses
+                if str(item["status"]).strip().lower() not in TERMINAL_ORDER_STATUSES
+            }
+        )
+        if not nonterminal_statuses:
+            return None
+        return (
+            "reconciliation_open_order_status_conflict",
+            "reconciliation matched result conflicts with non-terminal observed order statuses: "
+            + ", ".join(nonterminal_statuses),
+        )
 
     def _trace_relevant_exchanges(self, trace: dict[str, object]) -> set[str]:
         intent_id = self._trace_intent_id(trace)
