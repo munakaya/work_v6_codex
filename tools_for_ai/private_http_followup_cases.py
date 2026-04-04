@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import socket
 import subprocess
-import threading
 import time
 from urllib import error, request
 from uuid import uuid4
+
+from private_executor_stub import start_private_executor_stub
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -24,6 +25,12 @@ def _iso_now() -> str:
 def _assert(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
+
+
+def _allocate_local_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
 
 
 def _http_json(
@@ -150,65 +157,15 @@ def _evaluate_payload() -> dict[str, object]:
     }
 
 
-class _PrivateExecHandler(BaseHTTPRequestHandler):
-    def do_GET(self) -> None:  # noqa: N802
-        if self.path != "/health":
-            self.send_response(404)
-            self.end_headers()
-            return
-        payload = b'{"status":"ok"}'
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
-
-    def do_POST(self) -> None:  # noqa: N802
-        size = int(self.headers.get("Content-Length", "0"))
-        body = json.loads(self.rfile.read(size).decode("utf-8"))
-        target_qty = str(body.get("target_qty") or "0.2")
-        mode = self.path.lstrip("/") or "submitted"
-        orders = [
-            {
-                "exchange_name": str(body["buy_exchange"]),
-                "exchange_order_id": f"{mode}-buy-001",
-                "market": str(body["market"]),
-                "side": "buy",
-                "requested_qty": target_qty,
-                "status": "submitted",
-                "raw_payload": {"remote_mode": mode},
-            },
-            {
-                "exchange_name": str(body["sell_exchange"]),
-                "exchange_order_id": f"{mode}-sell-001",
-                "market": str(body["market"]),
-                "side": "sell",
-                "requested_qty": target_qty,
-                "status": "submitted",
-                "raw_payload": {"remote_mode": mode},
-            },
-        ]
-        payload = {
-            "outcome": "submitted",
-            "orders": orders,
-            "details": {"remote_mode": mode},
-        }
-        encoded = json.dumps(payload).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(encoded)))
-        self.end_headers()
-        self.wfile.write(encoded)
-
-    def log_message(self, format: str, *args: object) -> None:  # noqa: A003
-        return
-
-
 def _launch_server(*, submit_url: str, health_url: str, submit_timeout_seconds: int) -> subprocess.Popen[str]:
+    global BASE_URL
     redis_prefix = f"tp_private_http_followup_{uuid4().hex[:8]}"
+    server_port = _allocate_local_port()
+    BASE_URL = f"http://127.0.0.1:{server_port}"
     env = os.environ.copy()
     env.update(
         {
+            "TP_PORT": str(server_port),
             "TP_REDIS_URL": "redis://127.0.0.1:6379/0",
             "TP_REDIS_KEY_PREFIX": redis_prefix,
             "TP_STRATEGY_RUNTIME_EXECUTION_ENABLED": "true",
@@ -385,9 +342,7 @@ def _run_submit_timeout_case(*, submit_url: str, health_url: str) -> None:
 
 def main() -> None:
     _assert(PYTHON_BIN.exists(), f"missing virtualenv python: {PYTHON_BIN}")
-    stub = ThreadingHTTPServer(("127.0.0.1", 0), _PrivateExecHandler)
-    thread = threading.Thread(target=stub.serve_forever, daemon=True)
-    thread.start()
+    stub, thread = start_private_executor_stub(default_mode="submitted")
     try:
         host, port = stub.server_address
         health_url = f"http://{host}:{port}/health"
