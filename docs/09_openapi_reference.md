@@ -1471,6 +1471,10 @@ components:
                 $ref: '#/components/schemas/FillSummary'
             count:
               type: integer
+            next_before_stream_id:
+              oneOf:
+                - type: 'null'
+                - type: string
         error:
           oneOf:
             - type: 'null'
@@ -1539,6 +1543,10 @@ components:
                 $ref: '#/components/schemas/ConfigVersionSummary'
             count:
               type: integer
+            next_before_stream_id:
+              oneOf:
+                - type: 'null'
+                - type: string
         error:
           oneOf:
             - type: 'null'

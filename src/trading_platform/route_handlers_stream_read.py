@@ -131,6 +131,7 @@ class ControlPlaneStreamReadRouteMixin:
         filters: tuple[dict[str, object], ...],
     ) -> tuple[HTTPStatus, dict[str, object]]:
         params = parse_qs(query)
+        limit = query_limit(params)
         if not self.server.redis_runtime.info.enabled:
             return (
                 HTTPStatus.SERVICE_UNAVAILABLE,
@@ -152,12 +153,12 @@ class ControlPlaneStreamReadRouteMixin:
                     }
                 ),
             )
-        events = self.server.redis_runtime.list_stream_events(
+        raw_events = self.server.redis_runtime.list_stream_events(
             stream_name=stream_name,
-            limit=query_limit(params),
+            limit=limit,
             before_stream_id=before_stream_id or None,
         )
-        if events is None:
+        if raw_events is None:
             return (
                 HTTPStatus.BAD_GATEWAY,
                 self._response(
@@ -167,6 +168,12 @@ class ControlPlaneStreamReadRouteMixin:
                     }
                 ),
             )
+        next_before_stream_id: str | None = None
+        if len(raw_events) >= limit:
+            last_stream_id = raw_events[-1].get("stream_id")
+            if isinstance(last_stream_id, str) and last_stream_id:
+                next_before_stream_id = last_stream_id
+        events = list(raw_events)
 
         event_type = (single_query_value(params, "event_type") or "").strip()
         if event_type:
@@ -200,7 +207,13 @@ class ControlPlaneStreamReadRouteMixin:
                 for event in events
                 if event_filter["normalizer"](str(extractor(event) or "")) == normalized_value
             ]
-        return HTTPStatus.OK, self._response(data={"items": events, "count": len(events)})
+        return HTTPStatus.OK, self._response(
+            data={
+                "items": events,
+                "count": len(events),
+                "next_before_stream_id": next_before_stream_id,
+            }
+        )
 
     def _event_filter(
         self,

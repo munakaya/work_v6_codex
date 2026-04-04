@@ -574,7 +574,8 @@
         }
       }
     ],
-    "count": 1
+    "count": 1,
+    "next_before_stream_id": "1775266477835-0"
   },
   "error": null
 }
@@ -648,7 +649,8 @@
         }
       }
     ],
-    "count": 1
+    "count": 1,
+    "next_before_stream_id": "1775266477835-0"
   },
   "error": null
 }
