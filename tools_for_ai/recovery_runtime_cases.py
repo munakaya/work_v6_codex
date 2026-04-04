@@ -196,6 +196,42 @@ def main() -> None:
         "terminal failed open-order handoff reason mismatch",
     )
 
+    duplicate_order_status_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=duplicate_order_status_trace_id,
+        payload={
+            "recovery_trace_id": duplicate_order_status_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "50",
+            "reconciliation_result": "mismatch",
+            "reconciliation_open_order_count": 2,
+            "reconciliation_residual_exposure_quote": "50",
+            "reconciliation_mismatch_streak": 1,
+            "reconciliation_observed_order_statuses": [
+                {"order_id": "ord-dup-1", "status": "failed"},
+                {"order_id": "ord-dup-1", "status": "failed"},
+            ],
+            "created_at": _iso(datetime.now(UTC)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+    )
+    runtime.run_once()
+    duplicate_order_status_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=duplicate_order_status_trace_id
+    )
+    _assert(
+        duplicate_order_status_trace is not None,
+        "duplicate order status trace missing",
+    )
+    _assert(
+        duplicate_order_status_trace.get("status") == "active",
+        "duplicate observed order statuses should not trigger handoff",
+    )
+
     intent_balance_outcome, intent_balance = store.create_order_intent(
         strategy_run_id=run_id,
         market="KRW-BTC",
@@ -1176,6 +1212,7 @@ def main() -> None:
     print("PASS recovery runtime closes terminal latest evaluations")
     print("PASS recovery runtime resolves linked unwind actions after terminal fills")
     print("PASS recovery runtime escalates failed unwind orders to manual handoff")
+    print("PASS recovery runtime ignores duplicate observed order statuses")
     print("PASS recovery runtime escalates stale unwind orders to manual handoff")
     print("PASS recovery runtime hands off matched reconciliation with locked balances")
     print("PASS recovery runtime hands off matched reconciliation with incomplete balances")

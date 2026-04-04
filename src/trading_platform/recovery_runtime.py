@@ -61,20 +61,26 @@ def _parse_int(value: object) -> int | None:
         return None
 
 
-def _observed_order_statuses(value: object) -> list[str] | None:
+def _observed_order_statuses(value: object) -> list[dict[str, str]] | None:
     if value is None or not isinstance(value, list):
         return None
-    statuses: list[str] = []
+    statuses: list[dict[str, str]] = []
+    seen: set[str] = set()
     for item in value:
         if not isinstance(item, dict):
             return None
+        order_id = item.get("order_id")
         status = item.get("status")
-        if not isinstance(status, str):
+        if not isinstance(order_id, str) or not isinstance(status, str):
             return None
+        normalized_order_id = order_id.strip()
         normalized = status.strip().lower()
-        if not normalized:
+        if not normalized_order_id or not normalized:
             return None
-        statuses.append(normalized)
+        if normalized_order_id in seen:
+            return None
+        seen.add(normalized_order_id)
+        statuses.append({"order_id": normalized_order_id, "status": normalized})
     return statuses
 
 
@@ -283,6 +289,10 @@ class RecoveryRuntime:
                 self._last_success_at = _iso_now()
                 self._last_error_message = None
         except Exception as exc:
+            if self._stop_event.is_set():
+                with self._lock:
+                    self._last_error_message = None
+                return
             with self._lock:
                 self._failure_count += 1
                 self._last_error_at = _iso_now()
@@ -707,7 +717,7 @@ class RecoveryRuntime:
             and observed_order_statuses
             and len(observed_order_statuses) >= reconciliation_open_order_count
             and all(
-                status in TERMINAL_FAILURE_ORDER_STATUSES
+                str(status["status"]).strip().lower() in TERMINAL_FAILURE_ORDER_STATUSES
                 for status in observed_order_statuses
             )
         ):

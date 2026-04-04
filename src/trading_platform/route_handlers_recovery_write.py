@@ -77,7 +77,7 @@ class ControlPlaneRecoveryWriteRouteMixin:
             if not order_id or not status:
                 return None
             if order_id in seen:
-                continue
+                return None
             seen.add(order_id)
             result.append({"order_id": order_id, "status": status})
         return result
@@ -995,7 +995,7 @@ class ControlPlaneRecoveryWriteRouteMixin:
                     self._response(
                         error={
                             "code": "INVALID_REQUEST",
-                            "message": "observed_order_statuses must be an array of {order_id, status} objects",
+                            "message": "observed_order_statuses must be an array of unique {order_id, status} objects",
                         }
                     ),
                 )

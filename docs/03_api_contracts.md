@@ -213,7 +213,7 @@
 - `observed_at` (선택, ISO datetime)
 - `observed_order_ids` (선택, non-empty string 배열)
 - `observed_fill_ids` (선택, non-empty string 배열)
-- `observed_order_statuses` (선택, `{order_id, status}` 배열)
+- `observed_order_statuses` (선택, unique `{order_id, status}` 배열)
 - `observed_balances` (선택, `{exchange_name, asset, free, locked}` 배열, `(exchange_name, asset)` 중복 금지)
 - `summary` (선택)
 - `source` (선택)
