@@ -137,19 +137,38 @@ class MarketDataRuntime:
             with self._lock:
                 self._running = False
 
-    def _poll_once(self) -> None:
-        for market in self.markets:
+    def refresh(
+        self, *, exchange: str, markets: Sequence[str]
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        normalized_exchange = exchange.strip().lower()
+        normalized_markets = [market.strip().upper() for market in markets if market.strip()]
+        snapshots: list[dict[str, object]] = []
+        errors: list[dict[str, object]] = []
+        for market in normalized_markets:
             if self._stop_event.is_set():
                 break
             try:
                 snapshot = self.connector.get_orderbook_top(
-                    exchange=self.exchange,
+                    exchange=normalized_exchange,
                     market=market,
                 )
             except MarketDataError as exc:
-                self._record_failure(market, exc)
+                self._record_failure(exchange=normalized_exchange, market=market, exc=exc)
+                errors.append(
+                    {
+                        "market": market,
+                        "code": exc.code,
+                        "message": exc.message,
+                        "status": exc.status.value,
+                    }
+                )
                 continue
             self._record_snapshot(snapshot)
+            snapshots.append(snapshot)
+        return snapshots, errors
+
+    def _poll_once(self) -> None:
+        self.refresh(exchange=self.exchange, markets=self.markets)
 
     def _record_snapshot(self, snapshot: dict[str, object]) -> None:
         self.metrics.observe_orderbook_snapshot(
@@ -168,14 +187,16 @@ class MarketDataRuntime:
             self._last_success_at = _iso_now()
             self._last_error_message = None
 
-    def _record_failure(self, market: str, exc: MarketDataError) -> None:
+    def _record_failure(
+        self, *, exchange: str, market: str, exc: MarketDataError
+    ) -> None:
         with self._lock:
             self._failure_count += 1
             self._last_error_at = _iso_now()
             self._last_error_message = exc.message
         LOGGER.warning(
             "market data poll failed: exchange=%s market=%s code=%s message=%s",
-            self.exchange,
+            exchange,
             market,
             exc.code,
             exc.message,

@@ -169,6 +169,33 @@ paths:
         '503':
           description: Redis runtime unavailable
 
+  /api/v1/market-data/poll:
+    post:
+      tags: [MarketData]
+      summary: Refresh market snapshots now
+      operationId: pollMarketSnapshots
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarketDataPollRequest'
+      responses:
+        '200':
+          description: Poll completed without upstream errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketDataPollResponse'
+        '207':
+          description: Poll completed with partial upstream errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketDataPollResponse'
+        '400':
+          description: Invalid request
+
   /api/v1/market-data/events:
     get:
       tags: [MarketData]
@@ -1792,6 +1819,82 @@ components:
                   source_type:
                     type: string
             count:
+              type: integer
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    MarketDataPollRequest:
+      type: object
+      required: [exchange, markets]
+      properties:
+        exchange:
+          type: string
+        markets:
+          type: array
+          items:
+            type: string
+
+    MarketDataPollResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            exchange:
+              type: string
+            requested_markets:
+              type: array
+              items:
+                type: string
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  exchange:
+                    type: string
+                  market:
+                    type: string
+                  best_bid:
+                    type: string
+                  best_ask:
+                    type: string
+                  bid_volume:
+                    type: string
+                  ask_volume:
+                    type: string
+                  exchange_timestamp:
+                    type: string
+                    format: date-time
+                  received_at:
+                    type: string
+                    format: date-time
+                  exchange_age_ms:
+                    type: integer
+                  stale:
+                    type: boolean
+                  source_type:
+                    type: string
+            count:
+              type: integer
+            errors:
+              type: array
+              items:
+                type: object
+                properties:
+                  market:
+                    type: string
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  status:
+                    type: integer
+            error_count:
               type: integer
         error:
           oneOf:

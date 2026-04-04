@@ -341,6 +341,7 @@
 - `GET /api/v1/market-data/runtime`
 - `GET /api/v1/market-data/snapshots`
 - `GET /api/v1/market-data/events`
+- `POST /api/v1/market-data/poll`
 
 #### Bots
 
@@ -522,6 +523,17 @@
 - `limit`: 기본 20, 최대 100
 - `exchange`: 선택
 - `market`: 선택
+
+#### `POST /api/v1/market-data/poll`
+
+목적:
+
+- 지정한 거래소/마켓의 최신 snapshot을 즉시 수집하고 Redis cache를 갱신
+
+요청 핵심 필드:
+
+- `exchange`
+- `markets`
 
 #### `GET /api/v1/market-data/events`
 
