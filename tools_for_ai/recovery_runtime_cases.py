@@ -1069,7 +1069,7 @@ def main() -> None:
             "reconciliation_open_order_count": 0,
             "reconciliation_residual_exposure_quote": "0",
             "reconciliation_observed_at": _iso(datetime.now(UTC)),
-            "reconciliation_observed_order_ids": ["ord-recon-1"],
+            "reconciliation_observed_fill_ids": ["fill-recon-1"],
             "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
             "updated_at": _iso(datetime.now(UTC)),
         },
@@ -1102,6 +1102,41 @@ def main() -> None:
     _assert(
         reconciliation_trace.get("resolution_reason") == "reconciliation_matched_zero_residual",
         "reconciliation resolution reason mismatch",
+    )
+
+    order_ids_only_trace_id = f"rt_{uuid4().hex}"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=order_ids_only_trace_id,
+        payload={
+            "recovery_trace_id": order_ids_only_trace_id,
+            "run_id": run_id,
+            "bot_id": bot_id,
+            "intent_id": "",
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "0",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "reconciliation_observed_at": _iso(datetime.now(UTC)),
+            "reconciliation_observed_order_ids": ["ord-only-1"],
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+        trace_id=None,
+    )
+    runtime.run_once()
+    order_ids_only_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=order_ids_only_trace_id
+    )
+    _assert(order_ids_only_trace is not None, "order-ids-only trace missing")
+    _assert(
+        order_ids_only_trace.get("status") == "handoff_required",
+        "matched reconciliation with only order ids should hand off",
+    )
+    _assert(
+        order_ids_only_trace.get("handoff_reason") == "reconciliation_evidence_missing",
+        "order-ids-only handoff reason mismatch",
     )
     _assert(
         str(reconciliation_trace.get("residual_exposure_quote") or "") == "0",

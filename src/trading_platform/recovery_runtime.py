@@ -773,9 +773,6 @@ class RecoveryRuntime:
             or reconciliation_residual != Decimal("0")
         ):
             return None
-        has_order_ids = isinstance(trace.get("reconciliation_observed_order_ids"), list) and bool(
-            trace.get("reconciliation_observed_order_ids")
-        )
         has_fill_ids = isinstance(trace.get("reconciliation_observed_fill_ids"), list) and bool(
             trace.get("reconciliation_observed_fill_ids")
         )
@@ -783,11 +780,11 @@ class RecoveryRuntime:
             _observed_order_statuses(trace.get("reconciliation_observed_order_statuses"))
         )
         has_balances = bool(_observed_balances(trace.get("reconciliation_observed_balances")))
-        if has_order_ids or has_fill_ids or has_order_statuses or has_balances:
+        if has_fill_ids or has_order_statuses or has_balances:
             return None
         return (
             "reconciliation_evidence_missing",
-            "reconciliation matched result is missing order, fill, status, and balance evidence",
+            "reconciliation matched result is missing fill, status, or balance evidence",
         )
 
     def _reconciliation_status_handoff_reason(
