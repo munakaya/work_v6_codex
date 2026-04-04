@@ -21,6 +21,42 @@ def _iso_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
+TERMINAL_ORDER_STATUSES = {"filled", "cancelled", "rejected", "expired", "failed"}
+TERMINAL_INTENT_STATUSES = {"filled", "closed", "simulated"}
+
+
+def _maybe_close_after_terminal_fill(
+    *,
+    store: ControlPlaneStoreProtocol,
+    intent: dict[str, object],
+    payload: dict[str, object],
+) -> dict[str, object]:
+    if str(payload.get("lifecycle_preview") or "") != "hedge_balanced":
+        return payload
+    intent_id = str(intent.get("intent_id") or "")
+    if not intent_id:
+        return payload
+    latest_intent = store.get_order_intent(intent_id)
+    if latest_intent is None:
+        return payload
+    intent_status = str(latest_intent.get("status") or "").strip().lower()
+    if intent_status not in TERMINAL_INTENT_STATUSES:
+        return payload
+    strategy_run_id = str(latest_intent.get("strategy_run_id") or "")
+    related_orders = store.list_orders(strategy_run_id=strategy_run_id or None)
+    related_orders = [
+        item for item in related_orders if str(item.get("order_intent_id") or "") == intent_id
+    ]
+    if not related_orders:
+        return payload
+    if any(
+        str(item.get("status") or "").strip().lower() not in TERMINAL_ORDER_STATUSES
+        for item in related_orders
+    ):
+        return payload
+    return {**payload, "lifecycle_preview": "closed"}
+
+
 def execute_persisted_arbitrage_intent(
     *,
     store: ControlPlaneStoreProtocol,
@@ -74,6 +110,11 @@ def execute_persisted_arbitrage_intent(
         lifecycle_preview_override=submit_result.lifecycle_preview,
         submit_result=submit_result.as_payload(),
     )
+    payload = _maybe_close_after_terminal_fill(
+        store=store,
+        intent=intent,
+        payload=payload,
+    )
     redis_runtime.sync_arbitrage_evaluation(
         run_id=run_id,
         payload=payload,
@@ -82,6 +123,20 @@ def execute_persisted_arbitrage_intent(
     )
 
     if submit_result.outcome in {"submitted", "filled"}:
+        if submit_result.outcome == "filled" and payload.get("lifecycle_preview") == "closed":
+            redis_runtime.append_event(
+                "strategy_events",
+                event_type="strategy.arbitrage_cycle_closed",
+                payload={
+                    "run_id": run_id,
+                    "bot_id": bot_id,
+                    "intent_id": intent.get("intent_id"),
+                    "order_count": len(submit_result.created_orders),
+                    "fill_count": len(submit_result.created_fills),
+                    "source": "runtime_loop",
+                },
+                trace_id=trace_id,
+            )
         redis_runtime.append_event(
             "strategy_events",
             event_type=(

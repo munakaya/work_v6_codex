@@ -94,6 +94,19 @@ def _create_simulated_order(
     )
 
 
+def _refresh_orders(
+    *,
+    store: ControlPlaneStoreProtocol,
+    orders: list[dict[str, object]],
+) -> tuple[dict[str, object], ...]:
+    refreshed: list[dict[str, object]] = []
+    for order in orders:
+        order_id = str(order.get("order_id") or "")
+        latest = store.get_order_detail(order_id) if order_id else None
+        refreshed.append(latest if latest is not None else order)
+    return tuple(refreshed)
+
+
 def submit_arbitrage_orders(
     *,
     store: ControlPlaneStoreProtocol,
@@ -169,12 +182,13 @@ def submit_arbitrage_orders(
                     created_orders=tuple(created_orders),
                 )
             created_fills.append(fill)
+        refreshed_orders = _refresh_orders(store=store, orders=created_orders)
         return ArbitrageSubmitResult(
             outcome="filled",
             lifecycle_preview="hedge_balanced",
             recovery_required=False,
             unwind_in_progress=False,
-            created_orders=tuple(created_orders),
+            created_orders=refreshed_orders,
             created_fills=tuple(created_fills),
             details={
                 "mode": normalized_mode,
