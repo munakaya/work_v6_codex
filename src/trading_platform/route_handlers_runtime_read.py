@@ -60,13 +60,13 @@ class ControlPlaneRuntimeReadRouteMixin:
         sort_by = (single_query_value(params, "sort_by") or "").strip()
         if not sort_by:
             sort_by = "stream_name"
-        if sort_by not in {"stream_name", "length"}:
+        if sort_by not in {"stream_name", "length", "newest_age_seconds"}:
             return (
                 HTTPStatus.BAD_REQUEST,
                 self._response(
                     error={
                         "code": "INVALID_REQUEST",
-                        "message": "sort_by must be stream_name or length",
+                        "message": "sort_by must be stream_name, length, or newest_age_seconds",
                     }
                 ),
             )
@@ -114,13 +114,17 @@ class ControlPlaneRuntimeReadRouteMixin:
                 continue
             items.append(summary)
         reverse = order == "desc"
-        if sort_by == "length":
+        if sort_by == "stream_name":
+            items.sort(key=lambda item: str(item.get("stream_name") or ""), reverse=reverse)
+        elif sort_by == "length":
             items.sort(
                 key=lambda item: (int(item.get("length") or 0), str(item.get("stream_name") or "")),
                 reverse=reverse,
             )
         else:
-            items.sort(key=lambda item: str(item.get("stream_name") or ""), reverse=reverse)
+            items.sort(
+                key=lambda item: self._newest_age_sort_key(item, reverse=reverse),
+            )
         total_length = sum(int(item.get("length") or 0) for item in items)
         non_empty_count = sum(1 for item in items if int(item.get("length") or 0) > 0)
         stale_count = sum(1 for item in items if item.get("is_stale") is True)
@@ -169,6 +173,17 @@ class ControlPlaneRuntimeReadRouteMixin:
         )
         summary["newest_age_seconds"] = age_seconds
         summary["is_stale"] = age_seconds > stale_after_seconds
+
+    def _newest_age_sort_key(
+        self, item: dict[str, object], *, reverse: bool
+    ) -> tuple[bool, int, str]:
+        age = item.get("newest_age_seconds")
+        stream_name = str(item.get("stream_name") or "")
+        if not isinstance(age, int):
+            return (True, 0, stream_name)
+        if reverse:
+            return (False, -age, stream_name)
+        return (False, age, stream_name)
 
     def _parse_iso_datetime(self, value: str) -> datetime | None:
         normalized = value.strip()

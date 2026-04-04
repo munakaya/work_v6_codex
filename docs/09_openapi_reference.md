@@ -266,6 +266,7 @@ paths:
           name: sort_by
           schema:
             type: string
+            enum: [stream_name, length, newest_age_seconds]
         - in: query
           name: order
           schema:
