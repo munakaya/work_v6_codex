@@ -2668,6 +2668,22 @@ components:
           oneOf:
             - type: 'null'
             - type: string
+        reconciliation_attempt_count:
+          oneOf:
+            - type: 'null'
+            - type: integer
+        reconciliation_matched_count:
+          oneOf:
+            - type: 'null'
+            - type: integer
+        reconciliation_mismatch_count:
+          oneOf:
+            - type: 'null'
+            - type: integer
+        reconciliation_mismatch_streak:
+          oneOf:
+            - type: 'null'
+            - type: integer
         reconciliation_reason:
           oneOf:
             - type: 'null'

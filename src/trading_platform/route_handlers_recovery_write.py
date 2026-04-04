@@ -903,10 +903,44 @@ class ControlPlaneRecoveryWriteRouteMixin:
                     }
                 ),
             )
+        previous_attempt_count = current.get("reconciliation_attempt_count")
+        previous_matched_count = current.get("reconciliation_matched_count")
+        previous_mismatch_count = current.get("reconciliation_mismatch_count")
+        previous_mismatch_streak = current.get("reconciliation_mismatch_streak")
+        reconciliation_attempt_count = (
+            int(previous_attempt_count)
+            if isinstance(previous_attempt_count, int) and not isinstance(previous_attempt_count, bool)
+            else 0
+        ) + 1
+        reconciliation_matched_count = (
+            int(previous_matched_count)
+            if isinstance(previous_matched_count, int) and not isinstance(previous_matched_count, bool)
+            else 0
+        )
+        reconciliation_mismatch_count = (
+            int(previous_mismatch_count)
+            if isinstance(previous_mismatch_count, int) and not isinstance(previous_mismatch_count, bool)
+            else 0
+        )
+        reconciliation_mismatch_streak = (
+            int(previous_mismatch_streak)
+            if isinstance(previous_mismatch_streak, int) and not isinstance(previous_mismatch_streak, bool)
+            else 0
+        )
+        if matched_param:
+            reconciliation_matched_count += 1
+            reconciliation_mismatch_streak = 0
+        else:
+            reconciliation_mismatch_count += 1
+            reconciliation_mismatch_streak += 1
         patch = {
             "reconciliation_result": "matched" if matched_param else "mismatch",
             "reconciliation_open_order_count": open_order_count,
             "reconciliation_residual_exposure_quote": residual_exposure_quote,
+            "reconciliation_attempt_count": reconciliation_attempt_count,
+            "reconciliation_matched_count": reconciliation_matched_count,
+            "reconciliation_mismatch_count": reconciliation_mismatch_count,
+            "reconciliation_mismatch_streak": reconciliation_mismatch_streak,
             "reconciliation_reason": optional_string(body.get("reconciliation_reason")),
             "reconciliation_summary": optional_string(body.get("summary")),
             "reconciliation_source": optional_string(body.get("source")) or "operator_recorded",

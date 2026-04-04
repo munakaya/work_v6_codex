@@ -62,6 +62,7 @@ class AppConfig:
     recovery_runtime_interval_ms: int
     recovery_runtime_handoff_after_seconds: int
     recovery_runtime_submit_timeout_seconds: int
+    recovery_runtime_reconciliation_mismatch_handoff_count: int
     use_sample_read_model: bool
     enable_postgres_mutation: bool
 
@@ -126,6 +127,9 @@ def load_config() -> AppConfig:
         ),
         recovery_runtime_submit_timeout_seconds=_env_int(
             "TP_RECOVERY_RUNTIME_SUBMIT_TIMEOUT_SECONDS", 15
+        ),
+        recovery_runtime_reconciliation_mismatch_handoff_count=_env_int(
+            "TP_RECOVERY_RUNTIME_RECONCILIATION_MISMATCH_HANDOFF_COUNT", 2
         ),
         use_sample_read_model=_env_bool("TP_USE_SAMPLE_READ_MODEL", True),
         enable_postgres_mutation=_env_bool("TP_ENABLE_POSTGRES_MUTATION", False),

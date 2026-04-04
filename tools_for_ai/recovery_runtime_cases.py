@@ -34,6 +34,7 @@ def main() -> None:
         interval_ms=1000,
         handoff_after_seconds=1,
         submit_timeout_seconds=1,
+        reconciliation_mismatch_handoff_count=2,
         read_store=store,
         redis_runtime=redis_runtime,
     )
@@ -790,6 +791,91 @@ def main() -> None:
         "reconciliation mismatch should switch latest evaluation to manual_handoff",
     )
 
+    repeated_mismatch_run_id = "run_reconciliation_repeated_mismatch_case"
+    repeated_mismatch_bot_id = bot_id
+    store.strategy_runs[repeated_mismatch_run_id] = {
+        "run_id": repeated_mismatch_run_id,
+        "bot_id": repeated_mismatch_bot_id,
+        "strategy_name": "arbitrage",
+        "mode": "shadow",
+        "status": "running",
+        "created_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "started_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "stopped_at": None,
+        "decision_count": 1,
+    }
+    repeated_mismatch_outcome, repeated_mismatch_intent = store.create_order_intent(
+        strategy_run_id=repeated_mismatch_run_id,
+        market="KRW-BTC",
+        buy_exchange="sample",
+        sell_exchange="upbit",
+        side_pair="buy_then_sell",
+        target_qty="0.19",
+        expected_profit=None,
+        expected_profit_ratio=None,
+        status="submitted",
+        decision_context={"source": "reconciliation_repeated_mismatch_case"},
+    )
+    _assert(
+        repeated_mismatch_outcome == "created" and repeated_mismatch_intent is not None,
+        "repeated mismatch intent create failed",
+    )
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id="rt_reconciliation_repeated_mismatch_case",
+        payload={
+            "recovery_trace_id": "rt_reconciliation_repeated_mismatch_case",
+            "run_id": repeated_mismatch_run_id,
+            "bot_id": repeated_mismatch_bot_id,
+            "intent_id": str(repeated_mismatch_intent["intent_id"]),
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "19",
+            "reconciliation_result": "mismatch",
+            "reconciliation_open_order_count": 1,
+            "reconciliation_residual_exposure_quote": "19",
+            "reconciliation_mismatch_streak": 2,
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+        trace_id=None,
+    )
+    redis_runtime.sync_arbitrage_evaluation(
+        run_id=repeated_mismatch_run_id,
+        payload={
+            "bot_id": repeated_mismatch_bot_id,
+            "strategy_run_id": repeated_mismatch_run_id,
+            "accepted": True,
+            "reason_code": "ARBITRAGE_OPPORTUNITY_FOUND",
+            "lifecycle_preview": "recovery_required",
+            "persisted_intent": {"intent_id": str(repeated_mismatch_intent["intent_id"])},
+            "recovery_trace_id": "rt_reconciliation_repeated_mismatch_case",
+            "recovery_status": "active",
+            "recovery_lifecycle_state": "recovery_required",
+        },
+        publish_event=False,
+    )
+    runtime.run_once()
+    repeated_mismatch_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id="rt_reconciliation_repeated_mismatch_case"
+    )
+    _assert(repeated_mismatch_trace is not None, "repeated mismatch trace missing")
+    _assert(
+        repeated_mismatch_trace.get("status") == "handoff_required",
+        "repeated mismatch trace should require manual handoff",
+    )
+    _assert(
+        repeated_mismatch_trace.get("handoff_reason") == "reconciliation_mismatch_repeated",
+        "repeated mismatch handoff reason mismatch",
+    )
+    repeated_mismatch_eval = redis_runtime.get_arbitrage_evaluation(
+        run_id=repeated_mismatch_run_id
+    )
+    _assert(
+        repeated_mismatch_eval is not None
+        and repeated_mismatch_eval.get("lifecycle_preview") == "manual_handoff",
+        "repeated mismatch latest evaluation should switch to manual_handoff",
+    )
+
     print("PASS recovery runtime resolves zero-exposure traces")
     print("PASS recovery runtime resolves terminal intents without active orders")
     print("PASS recovery runtime opens submit-timeout recovery traces")
@@ -799,6 +885,7 @@ def main() -> None:
     print("PASS recovery runtime escalates stale unwind orders to manual handoff")
     print("PASS recovery runtime resolves matched reconciliation traces")
     print("PASS recovery runtime hands off unresolved reconciliation mismatch")
+    print("PASS recovery runtime hands off repeated reconciliation mismatches")
     print("PASS recovery runtime escalates aged traces to manual handoff")
 
 

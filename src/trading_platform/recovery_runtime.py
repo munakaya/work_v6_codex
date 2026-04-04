@@ -67,6 +67,7 @@ class RecoveryRuntimeInfo:
     interval_ms: int
     handoff_after_seconds: int
     submit_timeout_seconds: int
+    reconciliation_mismatch_handoff_count: int
     running: bool
     state: str
     last_success_at: str | None
@@ -86,6 +87,7 @@ class RecoveryRuntimeInfo:
             "interval_ms": self.interval_ms,
             "handoff_after_seconds": self.handoff_after_seconds,
             "submit_timeout_seconds": self.submit_timeout_seconds,
+            "reconciliation_mismatch_handoff_count": self.reconciliation_mismatch_handoff_count,
             "running": self.running,
             "state": self.state,
             "last_success_at": self.last_success_at,
@@ -109,6 +111,7 @@ class RecoveryRuntime:
         interval_ms: int,
         handoff_after_seconds: int,
         submit_timeout_seconds: int = 15,
+        reconciliation_mismatch_handoff_count: int = 2,
         read_store: ControlPlaneStoreProtocol,
         redis_runtime: RedisRuntime,
     ) -> None:
@@ -116,6 +119,9 @@ class RecoveryRuntime:
         self.interval_ms = max(interval_ms, 250)
         self.handoff_after_seconds = max(handoff_after_seconds, 0)
         self.submit_timeout_seconds = max(submit_timeout_seconds, 1)
+        self.reconciliation_mismatch_handoff_count = max(
+            reconciliation_mismatch_handoff_count, 1
+        )
         self.read_store = read_store
         self.redis_runtime = redis_runtime
         self._lock = threading.Lock()
@@ -141,6 +147,7 @@ class RecoveryRuntime:
                 interval_ms=self.interval_ms,
                 handoff_after_seconds=self.handoff_after_seconds,
                 submit_timeout_seconds=self.submit_timeout_seconds,
+                reconciliation_mismatch_handoff_count=self.reconciliation_mismatch_handoff_count,
                 running=self._running,
                 state=self._state_name(),
                 last_success_at=self._last_success_at,
@@ -479,12 +486,23 @@ class RecoveryRuntime:
         reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
         if reconciliation_result != "mismatch":
             return None
+        reconciliation_mismatch_streak = _parse_int(
+            trace.get("reconciliation_mismatch_streak")
+        )
         reconciliation_open_order_count = _parse_int(
             trace.get("reconciliation_open_order_count")
         )
         reconciliation_residual = _parse_decimal(
             trace.get("reconciliation_residual_exposure_quote")
         )
+        if (
+            reconciliation_mismatch_streak is not None
+            and reconciliation_mismatch_streak >= self.reconciliation_mismatch_handoff_count
+        ):
+            return (
+                "reconciliation_mismatch_repeated",
+                "reconciliation mismatch repeated beyond automatic recovery threshold",
+            )
         if reconciliation_open_order_count is None or reconciliation_open_order_count < 0:
             return None
         if reconciliation_residual is None:
