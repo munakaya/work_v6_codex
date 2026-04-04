@@ -17,6 +17,9 @@
 
 ### 22.2 필수 필드
 
+초기 초안은 `best bid / best ask` 중심이었지만, 현재 권장 형식은 "실행 가능 수익"과 "왜 reject됐는지"가 더 직접 드러나야 한다.
+즉, decision record는 단순 시세 스냅샷이 아니라 `gate check + executable simulation + reservation 결과`를 같이 남겨야 한다.
+
 ```json
 {
   "decision_id": "uuid",
@@ -29,6 +32,7 @@
   "sell_exchange": "bithumb",
   "observed_at": "2026-04-03T14:13:00Z",
   "inputs": {
+    "quote_pair_id": "upbit:bithumb:XRP-KRW:2026-04-03T14:13:00Z",
     "best_bid_sell_exchange": "1023.2",
     "best_ask_buy_exchange": "1018.4",
     "balance_buy_exchange_quote": "1200000",
@@ -36,20 +40,44 @@
     "orderbook_age_ms": {
       "upbit": 120,
       "bithumb": 180
+    },
+    "clock_skew_ms": 60,
+    "connector_health": {
+      "upbit": "healthy",
+      "bithumb": "healthy"
     }
   },
   "constraints": {
-    "min_profit": "1000",
+    "min_expected_profit_quote": "1000",
+    "min_expected_profit_bps": "8",
     "max_order_notional": "500000",
-    "max_order_age_ms": 1000
+    "max_orderbook_age_ms": 1000,
+    "max_clock_skew_ms": 1000
+  },
+  "gate_checks": {
+    "connector_health_passed": true,
+    "orderbook_freshness_passed": true,
+    "clock_skew_passed": true,
+    "balance_freshness_passed": true,
+    "symbol_tradeable_passed": true,
+    "unwind_block_passed": true
   },
   "computed": {
     "target_qty": "120.5",
-    "expected_profit": "14320.11",
-    "expected_profit_ratio": "0.0121",
-    "freshness_passed": true,
-    "balance_passed": true,
+    "executable_buy_cost_quote": "122707.20",
+    "executable_sell_proceeds_quote": "124139.21",
+    "executable_profit_quote": "1432.01",
+    "executable_profit_bps": "11.67",
+    "unwind_buffer_quote": "210.00",
+    "depth_passed": true,
+    "profit_passed": true,
     "risk_passed": true
+  },
+  "reservation": {
+    "buy_quote_reserved": "122707.20",
+    "sell_base_reserved": "120.5",
+    "risk_budget_reserved": true,
+    "reservation_passed": true
   },
   "decision": {
     "action": "create_order_intent",
@@ -59,21 +87,43 @@
 }
 ```
 
-### 22.3 reason_code 초안
+### 22.3 reason_code 카탈로그
+
+#### accept 계열
 
 - `ARBITRAGE_OPPORTUNITY_FOUND`
+
+#### reject 계열
+
 - `ORDERBOOK_STALE`
+- `QUOTE_PAIR_SKEW_TOO_HIGH`
 - `BALANCE_INSUFFICIENT`
 - `PROFIT_TOO_LOW`
+- `EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH`
 - `RISK_LIMIT_BLOCKED`
+- `RESERVATION_FAILED`
+- `HEDGE_CONFIDENCE_TOO_LOW`
+- `REENTRY_COOLDOWN_ACTIVE`
 - `CONFIG_DISABLED`
 - `DUPLICATE_INTENT_BLOCKED`
+
+운영 중 필요한 code가 더 생기더라도 아래 원칙은 유지한다.
+
+- gate 실패 code와 수익 실패 code를 섞지 않는다.
+- risk 실패 code와 reservation 실패 code를 섞지 않는다.
+- unwind 진입 이후 failure는 신규 진입 reject code와 구분한다.
 
 ### 22.4 저장 위치
 
 - 운영 분석용: PostgreSQL `order_intents.decision_context`
 - 실시간 디버깅용: structured log
 - 필요 시 object storage에 raw decision archive 저장 가능
+
+### 22.5 기록 원칙 보강
+
+- accept뿐 아니라 reject도 동일한 입력 구조를 남긴다.
+- `reason_code`는 하나만 대표로 남기되, 세부 실패 항목은 `gate_checks`, `computed`, `reservation`에서 다시 읽을 수 있어야 한다.
+- top-of-book 수익과 executable 수익이 다를 수 있으므로, 최종 판단은 항상 executable 필드 기준으로 해석한다.
 
 ## 26. Strategy ADR 초안
 
