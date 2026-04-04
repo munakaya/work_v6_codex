@@ -155,6 +155,24 @@ def json_bool(value: object) -> bool | None:
     return None
 
 
+def json_string_list(value: object) -> list[str] | None:
+    if value is None or not isinstance(value, list):
+        return None
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            return None
+        text = item.strip()
+        if not text:
+            return None
+        if text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
 def optional_object(value: object) -> dict[str, object] | None:
     if value is None:
         return None

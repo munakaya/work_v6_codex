@@ -8,6 +8,7 @@ from .request_utils import (
     is_positive_number_text,
     json_datetime_text,
     json_number_text,
+    json_string_list,
     optional_object,
     optional_bool,
     optional_string,
@@ -879,6 +880,32 @@ class ControlPlaneRecoveryWriteRouteMixin:
                     }
                 ),
             )
+        observed_order_ids = None
+        if "observed_order_ids" in body:
+            observed_order_ids = json_string_list(body.get("observed_order_ids"))
+            if observed_order_ids is None:
+                return (
+                    HTTPStatus.BAD_REQUEST,
+                    self._response(
+                        error={
+                            "code": "INVALID_REQUEST",
+                            "message": "observed_order_ids must be an array of non-empty strings",
+                        }
+                    ),
+                )
+        observed_fill_ids = None
+        if "observed_fill_ids" in body:
+            observed_fill_ids = json_string_list(body.get("observed_fill_ids"))
+            if observed_fill_ids is None:
+                return (
+                    HTTPStatus.BAD_REQUEST,
+                    self._response(
+                        error={
+                            "code": "INVALID_REQUEST",
+                            "message": "observed_fill_ids must be an array of non-empty strings",
+                        }
+                    ),
+                )
         current = self.server.redis_runtime.get_recovery_trace(
             recovery_trace_id=recovery_trace_id
         )
@@ -945,6 +972,8 @@ class ControlPlaneRecoveryWriteRouteMixin:
             "reconciliation_summary": optional_string(body.get("summary")),
             "reconciliation_source": optional_string(body.get("source")) or "operator_recorded",
             "reconciliation_operator_context": optional_object(body.get("operator_context")),
+            "reconciliation_observed_order_ids": observed_order_ids,
+            "reconciliation_observed_fill_ids": observed_fill_ids,
             "reconciliation_verified_by": optional_string(body.get("verified_by")),
             "reconciliation_updated_at": self.server.redis_runtime.now_iso(),
         }
@@ -982,6 +1011,8 @@ class ControlPlaneRecoveryWriteRouteMixin:
                 "bot_id": updated_trace.get("bot_id"),
                 "matched": matched_param,
                 "open_order_count": open_order_count,
+                "observed_order_count": len(observed_order_ids or []),
+                "observed_fill_count": len(observed_fill_ids or []),
             },
             trace_id=self.headers.get("X-Trace-Id"),
         )

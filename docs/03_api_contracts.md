@@ -204,6 +204,8 @@
 - `open_order_count` (필수, 0 이상 정수)
 - `residual_exposure_quote` (필수, 0 이상 숫자)
 - `reconciliation_reason` (선택)
+- `observed_order_ids` (선택, non-empty string 배열)
+- `observed_fill_ids` (선택, non-empty string 배열)
 - `summary` (선택)
 - `source` (선택)
 - `verified_by` (선택)
@@ -214,6 +216,8 @@
 - `reconciliation_result`
 - `reconciliation_open_order_count`
 - `reconciliation_residual_exposure_quote`
+- `reconciliation_observed_order_ids`
+- `reconciliation_observed_fill_ids`
 - `reconciliation_attempt_count`
 - `reconciliation_mismatch_count`
 - `reconciliation_mismatch_streak`

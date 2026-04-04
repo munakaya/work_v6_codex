@@ -2668,6 +2668,18 @@ components:
           oneOf:
             - type: 'null'
             - type: string
+        reconciliation_observed_order_ids:
+          oneOf:
+            - type: 'null'
+            - type: array
+              items:
+                type: string
+        reconciliation_observed_fill_ids:
+          oneOf:
+            - type: 'null'
+            - type: array
+              items:
+                type: string
         reconciliation_attempt_count:
           oneOf:
             - type: 'null'
@@ -2839,6 +2851,14 @@ components:
           type: integer
         residual_exposure_quote:
           type: string
+        observed_order_ids:
+          type: array
+          items:
+            type: string
+        observed_fill_ids:
+          type: array
+          items:
+            type: string
         reconciliation_reason:
           type: string
         summary:
