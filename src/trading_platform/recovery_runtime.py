@@ -632,6 +632,17 @@ class RecoveryRuntime:
         reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
         if reconciliation_result not in {"matched", "mismatch"}:
             if "reconciliation_result" not in trace and not reconciliation_result:
+                has_partial_reconciliation_fields = any(
+                    key.startswith("reconciliation_") and key != "reconciliation_result"
+                    for key in trace
+                )
+                if not has_partial_reconciliation_fields:
+                    return None
+                return (
+                    "reconciliation_result_invalid",
+                    "reconciliation result is missing while reconciliation fields are present",
+                )
+            if not reconciliation_result:
                 return None
             return (
                 "reconciliation_result_invalid",
