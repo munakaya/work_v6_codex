@@ -198,6 +198,42 @@ paths:
         '503':
           description: Redis runtime unavailable
 
+  /api/v1/recovery-traces/{recovery_trace_id}/start-unwind:
+    post:
+      tags: [Recovery]
+      summary: Mark recovery trace as unwind in progress
+      operationId: startUnwindRecoveryTrace
+      parameters:
+        - in: path
+          name: recovery_trace_id
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: X-Trace-Id
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryTraceActionRequest'
+      responses:
+        '200':
+          description: Recovery trace marked as unwind in progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryTraceResponse'
+        '404':
+          description: Recovery trace not found
+        '409':
+          description: Recovery trace already terminal
+        '503':
+          description: Redis runtime unavailable
+
   /api/v1/market-data/orderbook-top:
     get:
       tags: [MarketData]

@@ -120,6 +120,20 @@
 - `summary`
 - `operator_context`
 
+#### `POST /api/v1/recovery-traces/{recovery_trace_id}/start-unwind`
+
+목적:
+
+- operator가 recovery trace를 다시 `unwind_in_progress` 상태로 전환
+
+요청 핵심 필드:
+
+- `unwind_reason`
+- `residual_exposure_quote` (주면 0 이상 숫자여야 함)
+- `verified_by`
+- `summary`
+- `operator_context`
+
 #### `POST /api/v1/bots/register`
 
 목적:
