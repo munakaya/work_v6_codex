@@ -2181,6 +2181,15 @@ components:
               oneOf:
                 - type: 'null'
                 - type: string
+            status_counts:
+              type: object
+              properties:
+                empty:
+                  type: integer
+                fresh:
+                  type: integer
+                stale:
+                  type: integer
             limit:
               oneOf:
                 - type: 'null'

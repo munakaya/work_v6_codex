@@ -150,6 +150,7 @@ class ControlPlaneRuntimeReadRouteMixin:
                 key=lambda item: self._newest_age_sort_key(item, reverse=reverse),
             )
         matched_count = len(items)
+        status_counts = self._status_counts(items)
         if limit is not None:
             items = items[:limit]
         total_length = sum(int(item.get("length") or 0) for item in items)
@@ -166,6 +167,7 @@ class ControlPlaneRuntimeReadRouteMixin:
                 "stale_count": stale_count,
                 "stale_only": stale_only is True,
                 "status": status or None,
+                "status_counts": status_counts,
                 "limit": limit,
                 "has_more": matched_count > len(items),
                 "sort_by": sort_by,
@@ -184,6 +186,18 @@ class ControlPlaneRuntimeReadRouteMixin:
         if value < 1 or value > len(self.STREAM_NAMES):
             return None
         return value
+
+    def _status_counts(self, items: list[dict[str, object]]) -> dict[str, int]:
+        counts = {
+            "empty": 0,
+            "fresh": 0,
+            "stale": 0,
+        }
+        for item in items:
+            status = item.get("status")
+            if isinstance(status, str) and status in counts:
+                counts[status] += 1
+        return counts
 
     def _stale_after_seconds(self, params: dict[str, list[str]]) -> int | None:
         raw = (single_query_value(params, "stale_after_seconds") or "").strip()
