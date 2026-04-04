@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from http import HTTPStatus
 from urllib.parse import parse_qs
 
@@ -70,6 +71,17 @@ class ControlPlaneRuntimeReadRouteMixin:
                     }
                 ),
             )
+        stale_after_seconds = self._stale_after_seconds(params)
+        if stale_after_seconds is None:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "stale_after_seconds must be a non-negative integer",
+                    }
+                ),
+            )
         items: list[dict[str, object]] = []
         for stream_name in stream_names:
             summary = self.server.redis_runtime.get_stream_summary(stream_name=stream_name)
@@ -83,6 +95,7 @@ class ControlPlaneRuntimeReadRouteMixin:
                         }
                     ),
                 )
+            self._annotate_stream_summary(summary, stale_after_seconds=stale_after_seconds)
             if not include_empty and int(summary.get("length") or 0) == 0:
                 continue
             items.append(summary)
@@ -96,13 +109,62 @@ class ControlPlaneRuntimeReadRouteMixin:
             items.sort(key=lambda item: str(item.get("stream_name") or ""), reverse=reverse)
         total_length = sum(int(item.get("length") or 0) for item in items)
         non_empty_count = sum(1 for item in items if int(item.get("length") or 0) > 0)
+        stale_count = sum(1 for item in items if item.get("is_stale") is True)
         return HTTPStatus.OK, self._response(
             data={
                 "items": items,
                 "count": len(items),
                 "non_empty_count": non_empty_count,
                 "total_length": total_length,
+                "stale_after_seconds": stale_after_seconds,
+                "stale_count": stale_count,
                 "sort_by": sort_by,
                 "order": order,
             }
         )
+
+    def _stale_after_seconds(self, params: dict[str, list[str]]) -> int | None:
+        raw = (single_query_value(params, "stale_after_seconds") or "").strip()
+        if not raw:
+            return 300
+        try:
+            value = int(raw)
+        except ValueError:
+            return None
+        if value < 0:
+            return None
+        return value
+
+    def _annotate_stream_summary(
+        self, summary: dict[str, object], *, stale_after_seconds: int
+    ) -> None:
+        occurred_at = summary.get("newest_occurred_at")
+        if not isinstance(occurred_at, str) or not occurred_at:
+            summary["newest_age_seconds"] = None
+            summary["is_stale"] = None
+            return
+        newest_at = self._parse_iso_datetime(occurred_at)
+        if newest_at is None:
+            summary["newest_age_seconds"] = None
+            summary["is_stale"] = None
+            return
+        age_seconds = max(
+            0,
+            int((datetime.now(UTC) - newest_at).total_seconds()),
+        )
+        summary["newest_age_seconds"] = age_seconds
+        summary["is_stale"] = age_seconds > stale_after_seconds
+
+    def _parse_iso_datetime(self, value: str) -> datetime | None:
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if normalized.endswith("Z"):
+            normalized = normalized[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)

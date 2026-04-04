@@ -266,6 +266,10 @@ paths:
           name: order
           schema:
             type: string
+        - in: query
+          name: stale_after_seconds
+          schema:
+            type: integer
       responses:
         '200':
           description: Runtime stream summaries
@@ -2116,6 +2120,14 @@ components:
                     type: string
                   length:
                     type: integer
+                  newest_age_seconds:
+                    oneOf:
+                      - type: 'null'
+                      - type: integer
+                  is_stale:
+                    oneOf:
+                      - type: 'null'
+                      - type: boolean
                   newest_stream_id:
                     oneOf:
                       - type: 'null'
@@ -2137,6 +2149,10 @@ components:
             non_empty_count:
               type: integer
             total_length:
+              type: integer
+            stale_after_seconds:
+              type: integer
+            stale_count:
               type: integer
             sort_by:
               type: string

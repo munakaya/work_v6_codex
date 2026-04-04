@@ -596,16 +596,21 @@
 - `include_empty`: 선택. 기본 `true`, `false`면 길이가 0인 stream은 제외
 - `sort_by`: 선택. `stream_name` 또는 `length`, 기본 `stream_name`
 - `order`: 선택. `asc` 또는 `desc`, 기본 `asc`
+- `stale_after_seconds`: 선택. 기본 `300`
 
 응답 핵심 필드:
 
 - `count`
 - `non_empty_count`
 - `total_length`
+- `stale_after_seconds`
+- `stale_count`
 - `sort_by`
 - `order`
 - `stream_name`
 - `length`
+- `newest_age_seconds`
+- `is_stale`
 - `newest_stream_id`
 - `newest_occurred_at`
 - `oldest_stream_id`
