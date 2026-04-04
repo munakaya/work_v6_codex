@@ -299,8 +299,13 @@ def main() -> None:
         "duplicate order status trace missing",
     )
     _assert(
-        duplicate_order_status_trace.get("status") == "active",
-        "duplicate observed order statuses should not trigger handoff",
+        duplicate_order_status_trace.get("status") == "handoff_required",
+        "duplicate observed order statuses should trigger manual handoff",
+    )
+    _assert(
+        duplicate_order_status_trace.get("handoff_reason")
+        == "reconciliation_evidence_invalid",
+        "duplicate observed order statuses handoff reason mismatch",
     )
 
     matched_open_status_trace_id = f"rt_{uuid4().hex}"

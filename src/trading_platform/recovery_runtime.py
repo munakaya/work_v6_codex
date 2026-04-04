@@ -830,7 +830,7 @@ class RecoveryRuntime:
         self, trace: dict[str, object]
     ) -> tuple[str, str] | None:
         reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
-        if reconciliation_result != "matched":
+        if reconciliation_result not in {"matched", "mismatch"}:
             return None
         reconciliation_open_order_count = _parse_int(
             trace.get("reconciliation_open_order_count")
@@ -840,9 +840,7 @@ class RecoveryRuntime:
         )
         if (
             reconciliation_open_order_count is None
-            or reconciliation_open_order_count != 0
             or reconciliation_residual is None
-            or reconciliation_residual != Decimal("0")
         ):
             return None
         invalid_fields: list[str] = []

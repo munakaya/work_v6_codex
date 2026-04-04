@@ -200,9 +200,9 @@
 - `matched + open_order_count=0 + residual_exposure_quote=0`인데 `observed_at`이 없으면 recovery runtime이 `manual_handoff`로 올릴 수 있음
 - `mismatch + open_order_count=0 + residual_exposure_quote>0`이면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `mismatch`가 같은 trace에서 반복되면 threshold 이후 `manual_handoff`로 승격될 수 있음
+- `matched` 또는 `mismatch` reconciliation인데 `observed_order_ids`, `observed_fill_ids`, `observed_order_statuses`, `observed_balances` 중 하나라도 형식이 깨져 있으면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `mismatch + open_order_count>0`이어도 `observed_order_statuses`가 전부 실패 terminal이면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `matched + open_order_count=0 + residual_exposure_quote=0`인데 `observed_fill_ids`, `observed_order_statuses`, `observed_balances`가 전부 비어 있으면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
-- `matched + open_order_count=0 + residual_exposure_quote=0`인데 `observed_order_ids`, `observed_fill_ids`, `observed_order_statuses`, `observed_balances` 중 하나라도 형식이 깨져 있으면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `observed_order_ids`만 있는 경우는 자동 종료 근거로 보지 않음
 - `matched + open_order_count=0 + residual_exposure_quote=0`인데 trace에 `intent` 문맥이 없거나, 관련 거래소 두 곳을 모두 식별할 수 없으면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
 - `matched + open_order_count=0 + residual_exposure_quote=0`인데 trace에 `market` 자산 문맥이 없어 관련 자산을 식별할 수 없으면 recovery runtime이 즉시 `manual_handoff`로 올릴 수 있음
