@@ -83,7 +83,7 @@
 | M21 | stale 상태 신규 진입 금지, unwind 허용 | 신규 진입 `BALANCE_STALE`, unwind는 정책대로 | L3 | `05_arbitrage_algorithm_validation_cases.md` C10 |
 | M22 | high spread outlier | `RISK_LIMIT_BLOCKED` | L1 | `05_arbitrage_algorithm_validation_cases.md` C11 |
 | M23 | config immutability during active entry | 기존 entry/새 entry 분리 | L3 | `05_arbitrage_runtime_invariants.md` I10 |
-| M24 | shadow-live decision diff | diff metric 또는 TODO(verify) 보고 | L4 | `05_arbitrage_observability_spec.md` |
+| M24 | shadow-live decision diff | `accept_mismatch=0`, `reason_code_mismatch=0`, 나머지 diff는 분석 가능 | L4 | `05_arbitrage_observability_spec.md`, `05_arbitrage_shadow_live_gate.md` |
 | M25 | live gate bypass 시도 | `ARB-501` 분류 | L5 | `05_arbitrage_shadow_live_gate.md`, `05_arbitrage_incident_taxonomy.md` |
 
 
@@ -125,4 +125,4 @@ live 전에는 최소 아래를 닫는다.
 - 새 validation case를 추가하면 이 표에도 넣는다.
 - 새 invariant를 추가하면 최소 L2 테스트를 같이 만든다.
 - 새 incident code를 추가하면 최소 L4 또는 L5 테스트를 같이 만든다.
-- TODO(verify) 항목은 live gate 대상이면 별도 pending 목록으로 올린다.
+- 미확정 계약 항목은 live gate 대상이면 별도 pending 목록으로 올린다.

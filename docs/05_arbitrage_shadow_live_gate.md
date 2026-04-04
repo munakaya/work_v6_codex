@@ -55,6 +55,8 @@
 - 연속 shadow 운영 중 decision record 누락이 없어야 한다.
 - stale alert, connector degraded, reconciliation mismatch가 비정상적으로 많지 않아야 한다.
 - stop command와 신규 진입 차단이 즉시 반영되어야 한다.
+- shadow 비교 지표에서 `accept_mismatch`, `reason_code_mismatch`는 0이어야 한다.
+- `reservation_mismatch`, `target_qty_bucket_mismatch`가 있으면 원인 분석이 승인 산출물에 남아야 한다.
 
 ### 7. 운영자 대응 가능성
 
@@ -71,8 +73,9 @@
 - recovery_required 상태를 정상 종료로 오해할 가능성 존재
 - residual exposure 계산 불가
 - shadow 결과와 decision record 계약 불일치
+- 승인 윈도우에서 `accept_mismatch` 또는 `reason_code_mismatch` > 0
 - 운영자 stop/rollback 절차 미검증
-- TODO(verify) 항목이 live 안전성에 직접 연결됨
+- 미확정 계약 항목이 live 안전성에 직접 연결됨
 
 
 ## 권장 승인 산출물
@@ -81,6 +84,7 @@
 - validation case 결과표
 - invariant 위반 건수
 - stale/skew/reject 분포
+- shadow diff 지표 요약
 - recovery/unwind 사례 요약
 - stop command 확인 결과
 - 승인자와 승인 시각

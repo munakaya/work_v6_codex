@@ -66,7 +66,14 @@
 - `arbitrage_hedge_latency_ms`
 - `arbitrage_residual_exposure_quote`
 - `arbitrage_unwind_duration_ms`
-- `arbitrage_shadow_live_decision_diff_total` TODO(verify)
+- `arbitrage_shadow_live_decision_diff_total{mode_pair=dry_run_vs_shadow,diff_type=accept_mismatch|reason_code_mismatch|reservation_mismatch|target_qty_bucket_mismatch}`
+
+원칙:
+
+- 비교 단위는 같은 `quote_pair_id`를 가진 decision record 쌍이다.
+- 두 모드 모두 decision record가 있을 때만 diff를 센다.
+- 초기 live 승인 기준에서는 `accept_mismatch`, `reason_code_mismatch`가 0이어야 한다.
+- `reservation_mismatch`, `target_qty_bucket_mismatch`가 있으면 원인 분석을 같이 남긴다.
 
 
 ## 경고 기준 초안
@@ -154,6 +161,7 @@
 - P0 invariant violation 건수
 - recovery_required / unwind_in_progress 사례 수
 - stop command 반영 시간
+- `accept_mismatch`, `reason_code_mismatch` 건수
 
 
 ## 구현 체크리스트
