@@ -54,7 +54,12 @@ def _failure_result(
     )
     payload = {"mode": "private_http", "reason": reason}
     if isinstance(details, dict):
-        payload.update(details)
+        details_to_merge = dict(details)
+        detail_reason = _json_text(details_to_merge.get("reason"))
+        if detail_reason is not None and detail_reason != reason:
+            details_to_merge["remote_reason"] = detail_reason
+            details_to_merge.pop("reason", None)
+        payload.update(details_to_merge)
     return ArbitrageSubmitResult(
         outcome="submit_failed",
         lifecycle_preview=str(transition["next_state"]),
@@ -262,6 +267,7 @@ def _validate_required_arbitrage_legs(
     created_orders: tuple[dict[str, object], ...],
     order_index: dict[tuple[str, str], dict[str, object]],
     intent: dict[str, object],
+    require_complete: bool = True,
 ) -> str | None:
     expected_legs = {
         ("buy", str(intent.get("buy_exchange") or "")),
@@ -274,7 +280,7 @@ def _validate_required_arbitrage_legs(
         for side, exchange_name in sorted(expected_legs)
         if (side, exchange_name) not in order_index
     ]
-    if missing_legs:
+    if require_complete and missing_legs:
         return (
             "private execution response missing required arbitrage order legs: "
             + ", ".join(missing_legs)
@@ -473,6 +479,19 @@ class PrivateHttpArbitrageExecutionAdapter:
                     return _failure_result(
                         auto_unwind_on_failure=auto_unwind_on_failure,
                         reason=order_error,
+                        details=_response_details(response_payload),
+                        created_orders=created_orders,
+                    )
+                leg_error = _validate_required_arbitrage_legs(
+                    created_orders=created_orders,
+                    order_index=order_index,
+                    intent=intent,
+                    require_complete=False,
+                )
+                if leg_error is not None:
+                    return _failure_result(
+                        auto_unwind_on_failure=auto_unwind_on_failure,
+                        reason=leg_error,
                         details=_response_details(response_payload),
                         created_orders=created_orders,
                     )
