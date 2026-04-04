@@ -28,12 +28,13 @@
 
 - `ORDERBOOK_STALE`
 - `QUOTE_PAIR_SKEW_TOO_HIGH`
+- `BALANCE_STALE`
 - `BALANCE_INSUFFICIENT`는 잔고 부족일 때만 사용
-- balance freshness 실패는 `BALANCE_INSUFFICIENT`로 뭉개지지 않게 TODO(verify)
 
 원칙:
 
 - stale / skew는 수익 계산보다 먼저 남긴다.
+- balance freshness 실패는 `BALANCE_STALE`로 남기고 `BALANCE_INSUFFICIENT`로 뭉개지지 않는다.
 
 ### 3. 리스크/거래 가능 상태
 
@@ -45,6 +46,7 @@
 원칙:
 
 - 거래 가능 상태가 아니면 profit이 양수여도 reject한다.
+- `max_spread_bps` 같은 비정상 market 차단 규칙은 이 단계에서 `RISK_LIMIT_BLOCKED`로 본다.
 
 ### 4. 실행 가능 수익 부족
 
@@ -102,11 +104,11 @@
 
 ### E. executable profit 음수 + high spread outlier
 
-- 대표 code: `EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH`
+- 대표 code: `RISK_LIMIT_BLOCKED`
 
-단:
+이유:
 
-- `max_spread_bps`를 별도 risk block으로 구현하면 TODO(verify)
+- `max_spread_bps`는 비정상 market 차단 규칙이므로 profit 계산보다 먼저 막아야 한다.
 
 
 ## 권장 구현 방식

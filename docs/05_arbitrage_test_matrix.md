@@ -80,8 +80,8 @@
 
 | ID | 검증 대상 | 기대 결과 | 최소 레벨 | 연결 문서 |
 |---|---|---|---|---|
-| M21 | stale 상태 신규 진입 금지, unwind 허용 | 신규 진입 reject, unwind는 정책대로 | L3 | `05_arbitrage_algorithm_validation_cases.md` C10 |
-| M22 | high spread outlier | TODO(verify) policy와 일치 | L1 | `05_arbitrage_algorithm_validation_cases.md` C11 |
+| M21 | stale 상태 신규 진입 금지, unwind 허용 | 신규 진입 `BALANCE_STALE`, unwind는 정책대로 | L3 | `05_arbitrage_algorithm_validation_cases.md` C10 |
+| M22 | high spread outlier | `RISK_LIMIT_BLOCKED` | L1 | `05_arbitrage_algorithm_validation_cases.md` C11 |
 | M23 | config immutability during active entry | 기존 entry/새 entry 분리 | L3 | `05_arbitrage_runtime_invariants.md` I10 |
 | M24 | shadow-live decision diff | diff metric 또는 TODO(verify) 보고 | L4 | `05_arbitrage_observability_spec.md` |
 | M25 | live gate bypass 시도 | `ARB-501` 분류 | L5 | `05_arbitrage_shadow_live_gate.md`, `05_arbitrage_incident_taxonomy.md` |

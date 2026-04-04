@@ -76,6 +76,11 @@
 - `min_expected_profit_quote`: 절대 금액 기준 최소 기대 수익
 - `max_spread_bps`: 비정상 스프레드 환경 차단용 상한
 
+추가 원칙:
+
+- `max_spread_bps` 초과는 profit 부족이 아니라 risk block으로 해석한다.
+- 즉, 이 조건은 `RISK_LIMIT_BLOCKED` 쪽에서 fail-closed 한다.
+
 검증 규칙:
 
 - `min_expected_profit_bps`는 음수 금지

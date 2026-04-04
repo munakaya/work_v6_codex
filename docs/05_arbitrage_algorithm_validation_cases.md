@@ -109,6 +109,7 @@
   - 별도 unwind action은 필요한 상태
 - 기대 결과:
   - 신규 진입은 `reject`
+  - `reason_code=BALANCE_STALE`
   - unwind 경로는 별도 정책으로 계속 허용
 
 ### C11. high spread outlier
@@ -118,7 +119,7 @@
   - `max_spread_bps` 초과
 - 기대 결과:
   - `reject`
-  - `reason_code=PROFIT_TOO_LOW`가 아니라 별도 TODO(verify) 또는 `RISK_LIMIT_BLOCKED`
+  - `reason_code=RISK_LIMIT_BLOCKED`
 
 ### C12. reservation 성공 후 submit 실패
 

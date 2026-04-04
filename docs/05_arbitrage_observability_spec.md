@@ -37,7 +37,7 @@
 
 - `arbitrage_orderbook_stale_reject_total`
 - `arbitrage_quote_pair_skew_reject_total`
-- `arbitrage_balance_stale_reject_total` TODO(verify)
+- `arbitrage_balance_stale_reject_total`
 
 ### 상태 전이
 
