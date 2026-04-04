@@ -118,6 +118,10 @@
   - `invariant_code`
   - `severity`
   - `count`
+- reject code 분포
+  - `reason_code`
+  - `count`
+  - `ratio`
 - stale/skew/reject 분포
   - `reason_code`
   - `count`
@@ -125,6 +129,9 @@
 - stale alert / connector degraded / reconciliation mismatch 건수와 `top_reason`
 - shadow diff 지표 요약
   - `reservation_mismatch`, `target_qty_bucket_mismatch`가 있으면 `time_window`, `top_reason`, `affected_bot_ids`, `suggested_action` 포함
+- recovery_required / unwind_in_progress 사례 수
+  - `state`
+  - `count`
 - recovery/unwind 사례 요약
   - `strategy_run_id`
   - `lifecycle_state`
