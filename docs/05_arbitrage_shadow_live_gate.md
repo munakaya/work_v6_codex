@@ -53,8 +53,9 @@
 ### 6. Shadow 안정성
 
 - 연속 shadow 운영 중 decision record 누락이 없어야 한다.
-- stale alert, connector degraded, reconciliation mismatch가 비정상적으로 많지 않아야 한다.
-- stop command와 신규 진입 차단이 즉시 반영되어야 한다.
+- stale alert, connector degraded, reconciliation mismatch는 승인 산출물에 건수와 상위 원인이 같이 남아야 한다.
+- 위 세 항목에 unresolved critical 사례가 있으면 live 금지다.
+- stop command 확인에서는 `stop_requested_at` 이후 같은 bot의 새 accept decision record와 새 order intent가 0이어야 한다.
 - shadow 비교 지표에서 `accept_mismatch`, `reason_code_mismatch`는 0이어야 한다.
 - `reservation_mismatch`, `target_qty_bucket_mismatch`가 있으면 원인 분석이 승인 산출물에 남아야 한다.
 
@@ -87,6 +88,7 @@
 - validation case 결과표
 - invariant 위반 건수
 - stale/skew/reject 분포
+- stale alert / connector degraded / reconciliation mismatch 건수와 상위 원인
 - shadow diff 지표 요약
 - recovery/unwind 사례 요약
 - stop command 확인 결과
