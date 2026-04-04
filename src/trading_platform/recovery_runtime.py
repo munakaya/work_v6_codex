@@ -426,6 +426,17 @@ class RecoveryRuntime:
         )
         intent_terminal = self._intent_is_terminal(intent_id=intent_id)
         residual_exposure_quote = _parse_decimal(trace.get("residual_exposure_quote"))
+        reconciliation_invalid_result_handoff = self._reconciliation_invalid_result_handoff_reason(
+            trace
+        )
+        if reconciliation_invalid_result_handoff is not None:
+            handoff_reason, summary = reconciliation_invalid_result_handoff
+            self._mark_handoff_required(
+                trace,
+                handoff_reason=handoff_reason,
+                summary=summary,
+            )
+            return
         reconciliation_stale_handoff = self._reconciliation_stale_handoff_reason(trace)
         if reconciliation_stale_handoff is not None:
             handoff_reason, summary = reconciliation_stale_handoff
@@ -614,6 +625,31 @@ class RecoveryRuntime:
         if reconciliation_open_order_count == 0 and reconciliation_residual == Decimal("0"):
             return "reconciliation_matched_zero_residual"
         return None
+
+    def _reconciliation_invalid_result_handoff_reason(
+        self, trace: dict[str, object]
+    ) -> tuple[str, str] | None:
+        reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
+        if reconciliation_result not in {"matched", "mismatch"}:
+            return None
+        invalid_fields: list[str] = []
+        open_order_count_raw = trace.get("reconciliation_open_order_count")
+        reconciliation_open_order_count = _parse_int(open_order_count_raw)
+        if reconciliation_open_order_count is None or reconciliation_open_order_count < 0:
+            invalid_fields.append("open_order_count")
+        residual_raw = trace.get("reconciliation_residual_exposure_quote")
+        reconciliation_residual = _parse_decimal(residual_raw)
+        if reconciliation_residual is None:
+            invalid_fields.append("residual_exposure_quote")
+        observed_at_raw = trace.get("reconciliation_observed_at")
+        if observed_at_raw is not None and _parse_iso_datetime(observed_at_raw) is None:
+            invalid_fields.append("observed_at")
+        if not invalid_fields:
+            return None
+        return (
+            "reconciliation_result_invalid",
+            "reconciliation result contains invalid core fields: " + ", ".join(invalid_fields),
+        )
 
     def _reconciliation_balance_handoff_reason(
         self, trace: dict[str, object]
