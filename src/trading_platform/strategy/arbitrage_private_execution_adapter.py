@@ -424,6 +424,31 @@ def _validate_submitted_order_states(
     return None
 
 
+def _validate_response_submitted_payload(
+    *,
+    orders_payload: object,
+    fills_payload: object,
+) -> str | None:
+    if isinstance(fills_payload, list) and fills_payload:
+        return "private execution submitted outcome must not include fills"
+    if not isinstance(orders_payload, list):
+        return None
+    terminal_orders: list[str] = []
+    for item in orders_payload:
+        if not isinstance(item, dict):
+            continue
+        status = (_json_text(item.get("status")) or "submitted").strip().lower()
+        if status in TERMINAL_ORDER_STATUSES:
+            exchange_name = _json_text(item.get("exchange_name")) or "unknown"
+            terminal_orders.append(f"{exchange_name}:{status}")
+    if terminal_orders:
+        return (
+            "private execution submitted outcome returned terminal orders: "
+            + ", ".join(terminal_orders)
+        )
+    return None
+
+
 def _validate_lifecycle_preview(
     *,
     outcome: str,
@@ -666,6 +691,17 @@ class PrivateHttpArbitrageExecutionAdapter:
                 created_orders=refreshed_orders,
                 created_fills=created_fills,
             )
+        if outcome == "submitted":
+            submitted_payload_error = _validate_response_submitted_payload(
+                orders_payload=response_payload.get("orders"),
+                fills_payload=response_payload.get("fills"),
+            )
+            if submitted_payload_error is not None:
+                return _failure_result(
+                    auto_unwind_on_failure=auto_unwind_on_failure,
+                    reason=submitted_payload_error,
+                    details=_response_details(response_payload),
+                )
         created_orders, order_index, order_error = _create_orders_from_response(
             store=store,
             intent=intent,
