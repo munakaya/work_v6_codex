@@ -235,6 +235,18 @@ def main() -> None:
                     "locked": "50000",
                 },
                 {
+                    "exchange_name": "upbit",
+                    "asset": "BTC",
+                    "free": "0.1",
+                    "locked": "0",
+                },
+                {
+                    "exchange_name": "bithumb",
+                    "asset": "KRW",
+                    "free": "950000",
+                    "locked": "0",
+                },
+                {
                     "exchange_name": "bithumb",
                     "asset": "BTC",
                     "free": "0.2",

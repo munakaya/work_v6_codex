@@ -592,15 +592,38 @@ class RecoveryRuntime:
                 or str(balance["asset"]).strip().upper() in relevant_assets
             )
         ]
-        observed_exchanges = {
-            str(balance["exchange_name"]).strip() for balance in relevant_balance_rows
+        required_balance_keys = {
+            (exchange, asset)
+            for exchange in relevant_exchanges
+            for asset in (relevant_assets or set())
         }
-        missing_exchanges = sorted(relevant_exchanges - observed_exchanges)
-        if missing_exchanges:
+        if not required_balance_keys:
+            required_balance_keys = {
+                (exchange, "")
+                for exchange in relevant_exchanges
+            }
+        observed_balance_keys = {
+            (
+                str(balance["exchange_name"]).strip(),
+                str(balance["asset"]).strip().upper()
+                if relevant_assets
+                else "",
+            )
+            for balance in relevant_balance_rows
+        }
+        missing_balance_keys = sorted(required_balance_keys - observed_balance_keys)
+        if missing_balance_keys:
             return (
                 "reconciliation_balance_evidence_incomplete",
-                "reconciliation matched result is missing observed balances for exchanges: "
-                + ", ".join(missing_exchanges),
+                "reconciliation matched result is missing observed balances for exchange/assets: "
+                + ", ".join(
+                    (
+                        f"{exchange}:{asset}"
+                        if asset
+                        else exchange
+                    )
+                    for exchange, asset in missing_balance_keys
+                ),
             )
         locked_entries = [
             balance
