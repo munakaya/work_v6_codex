@@ -623,6 +623,88 @@ def main() -> None:
         "stale unwind latest evaluation should switch to manual_handoff",
     )
 
+    reconciliation_run_id = "run_reconciliation_resolution_case"
+    reconciliation_bot_id = bot_id
+    store.strategy_runs[reconciliation_run_id] = {
+        "run_id": reconciliation_run_id,
+        "bot_id": reconciliation_bot_id,
+        "strategy_name": "arbitrage",
+        "mode": "shadow",
+        "status": "running",
+        "created_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "started_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "stopped_at": None,
+        "decision_count": 1,
+    }
+    reconciliation_outcome, reconciliation_intent = store.create_order_intent(
+        strategy_run_id=reconciliation_run_id,
+        market="KRW-BTC",
+        buy_exchange="sample",
+        sell_exchange="upbit",
+        side_pair="buy_then_sell",
+        target_qty="0.13",
+        expected_profit=None,
+        expected_profit_ratio=None,
+        status="submitted",
+        decision_context={"source": "reconciliation_resolution_case"},
+    )
+    _assert(
+        reconciliation_outcome == "created" and reconciliation_intent is not None,
+        "reconciliation intent create failed",
+    )
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id="rt_reconciliation_resolution_case",
+        payload={
+            "recovery_trace_id": "rt_reconciliation_resolution_case",
+            "run_id": reconciliation_run_id,
+            "bot_id": reconciliation_bot_id,
+            "intent_id": str(reconciliation_intent["intent_id"]),
+            "status": "active",
+            "lifecycle_state": "recovery_required",
+            "residual_exposure_quote": "15",
+            "reconciliation_result": "matched",
+            "reconciliation_open_order_count": 0,
+            "reconciliation_residual_exposure_quote": "0",
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=2)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+        trace_id=None,
+    )
+    redis_runtime.sync_arbitrage_evaluation(
+        run_id=reconciliation_run_id,
+        payload={
+            "bot_id": reconciliation_bot_id,
+            "strategy_run_id": reconciliation_run_id,
+            "accepted": True,
+            "reason_code": "ARBITRAGE_OPPORTUNITY_FOUND",
+            "lifecycle_preview": "recovery_required",
+            "persisted_intent": {"intent_id": str(reconciliation_intent["intent_id"])},
+            "recovery_trace_id": "rt_reconciliation_resolution_case",
+            "recovery_status": "active",
+            "recovery_lifecycle_state": "recovery_required",
+        },
+        publish_event=False,
+    )
+    runtime.run_once()
+    reconciliation_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id="rt_reconciliation_resolution_case"
+    )
+    _assert(reconciliation_trace is not None, "reconciliation trace missing")
+    _assert(
+        reconciliation_trace.get("status") == "resolved",
+        "reconciliation trace should resolve when matched with zero residual",
+    )
+    _assert(
+        reconciliation_trace.get("resolution_reason") == "reconciliation_matched_zero_residual",
+        "reconciliation resolution reason mismatch",
+    )
+    reconciliation_eval = redis_runtime.get_arbitrage_evaluation(run_id=reconciliation_run_id)
+    _assert(reconciliation_eval is not None, "reconciliation latest evaluation missing")
+    _assert(
+        reconciliation_eval.get("lifecycle_preview") == "closed",
+        "reconciliation latest evaluation should close after matched reconciliation",
+    )
+
     print("PASS recovery runtime resolves zero-exposure traces")
     print("PASS recovery runtime resolves terminal intents without active orders")
     print("PASS recovery runtime opens submit-timeout recovery traces")
@@ -630,6 +712,7 @@ def main() -> None:
     print("PASS recovery runtime resolves linked unwind actions after terminal fills")
     print("PASS recovery runtime escalates failed unwind orders to manual handoff")
     print("PASS recovery runtime escalates stale unwind orders to manual handoff")
+    print("PASS recovery runtime resolves matched reconciliation traces")
     print("PASS recovery runtime escalates aged traces to manual handoff")
 
 

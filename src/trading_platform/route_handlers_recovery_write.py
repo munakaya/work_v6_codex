@@ -36,6 +36,7 @@ class ControlPlaneRecoveryWriteRouteMixin:
             "/start-unwind": self._start_unwind_recovery_trace_response,
             "/submit-unwind-order": self._submit_unwind_order_response,
             "/record-unwind-fill": self._record_unwind_fill_response,
+            "/record-reconciliation": self._record_reconciliation_response,
         }
         for suffix, handler in suffixes.items():
             if not path.endswith(suffix):
@@ -828,3 +829,137 @@ class ControlPlaneRecoveryWriteRouteMixin:
         if evaluation_payload is not None:
             data["latest_evaluation"] = evaluation_payload
         return HTTPStatus.CREATED, self._response(data=data)
+
+    def _record_reconciliation_response(
+        self, recovery_trace_id: str
+    ) -> tuple[HTTPStatus, dict[str, object]]:
+        if not self.server.redis_runtime.info.enabled:
+            return (
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                self._response(
+                    error={
+                        "code": "REDIS_RUNTIME_UNAVAILABLE",
+                        "message": "redis runtime is not enabled",
+                    }
+                ),
+            )
+        body, error = self._read_json_body()
+        if error is not None:
+            return error
+        matched_param = optional_bool(optional_string(body.get("matched")))
+        if matched_param is None:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "matched must be true or false",
+                    }
+                ),
+            )
+        open_order_count = body.get("open_order_count")
+        if not isinstance(open_order_count, int) or isinstance(open_order_count, bool) or open_order_count < 0:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "open_order_count must be a non-negative integer",
+                    }
+                ),
+            )
+        residual_exposure_quote = json_number_text(body.get("residual_exposure_quote"))
+        if residual_exposure_quote is None or not is_nonnegative_number_text(residual_exposure_quote):
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": "residual_exposure_quote must be a finite non-negative number",
+                    }
+                ),
+            )
+        current = self.server.redis_runtime.get_recovery_trace(
+            recovery_trace_id=recovery_trace_id
+        )
+        if current is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_NOT_FOUND",
+                        "message": "recovery_trace_id not found",
+                    }
+                ),
+            )
+        current_status = str(current.get("status") or "").strip().lower()
+        if current_status in {"resolved", "cancelled"}:
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_TERMINAL",
+                        "message": "recovery trace is already terminal",
+                    }
+                ),
+            )
+        patch = {
+            "reconciliation_result": "matched" if matched_param else "mismatch",
+            "reconciliation_open_order_count": open_order_count,
+            "reconciliation_residual_exposure_quote": residual_exposure_quote,
+            "reconciliation_reason": optional_string(body.get("reconciliation_reason")),
+            "reconciliation_summary": optional_string(body.get("summary")),
+            "reconciliation_source": optional_string(body.get("source")) or "operator_recorded",
+            "reconciliation_operator_context": optional_object(body.get("operator_context")),
+            "reconciliation_verified_by": optional_string(body.get("verified_by")),
+            "reconciliation_updated_at": self.server.redis_runtime.now_iso(),
+        }
+        self.server.redis_runtime.sync_recovery_trace(
+            recovery_trace_id=recovery_trace_id,
+            payload={**current, **patch},
+            trace_id=self.headers.get("X-Trace-Id"),
+        )
+        updated_trace = self.server.redis_runtime.get_recovery_trace(
+            recovery_trace_id=recovery_trace_id
+        )
+        if updated_trace is None:
+            return (
+                HTTPStatus.BAD_GATEWAY,
+                self._response(
+                    error={
+                        "code": "REDIS_RUNTIME_WRITE_FAILED",
+                        "message": "failed to persist reconciliation result",
+                    }
+                ),
+            )
+        run_id = optional_string(updated_trace.get("run_id"))
+        if run_id:
+            self.server.redis_runtime.sync_arbitrage_evaluation_recovery_state(
+                run_id=run_id,
+                recovery_trace=updated_trace,
+                trace_id=self.headers.get("X-Trace-Id"),
+            )
+        self.server.redis_runtime.append_event(
+            "strategy_events",
+            event_type="strategy.recovery_trace.reconciliation_recorded",
+            payload={
+                "recovery_trace_id": recovery_trace_id,
+                "run_id": updated_trace.get("run_id"),
+                "bot_id": updated_trace.get("bot_id"),
+                "matched": matched_param,
+                "open_order_count": open_order_count,
+            },
+            trace_id=self.headers.get("X-Trace-Id"),
+        )
+        if self.server.recovery_runtime.enabled:
+            self.server.recovery_runtime.run_once()
+        latest_trace = self.server.redis_runtime.get_recovery_trace(
+            recovery_trace_id=recovery_trace_id
+        )
+        evaluation_payload = None
+        if run_id:
+            evaluation_payload = self.server.redis_runtime.get_arbitrage_evaluation(run_id=run_id)
+        data = dict(latest_trace) if latest_trace is not None else dict(updated_trace)
+        if evaluation_payload is not None:
+            data["latest_evaluation"] = evaluation_payload
+        return HTTPStatus.OK, self._response(data=data)

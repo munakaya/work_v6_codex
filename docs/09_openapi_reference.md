@@ -314,6 +314,44 @@ paths:
         '503':
           description: Redis runtime unavailable
 
+  /api/v1/recovery-traces/{recovery_trace_id}/record-reconciliation:
+    post:
+      tags: [Recovery]
+      summary: Record reconciliation result for recovery trace
+      operationId: recordRecoveryTraceReconciliation
+      parameters:
+        - in: path
+          name: recovery_trace_id
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: X-Trace-Id
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryTraceReconciliationRequest'
+      responses:
+        '200':
+          description: Reconciliation result recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryTraceResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Recovery trace not found
+        '409':
+          description: Recovery trace already terminal
+        '503':
+          description: Redis runtime unavailable
+
   /api/v1/market-data/orderbook-top:
     get:
       tags: [MarketData]
@@ -2618,6 +2656,35 @@ components:
           oneOf:
             - type: 'null'
             - type: string
+        reconciliation_result:
+          oneOf:
+            - type: 'null'
+            - type: string
+        reconciliation_open_order_count:
+          oneOf:
+            - type: 'null'
+            - type: integer
+        reconciliation_residual_exposure_quote:
+          oneOf:
+            - type: 'null'
+            - type: string
+        reconciliation_reason:
+          oneOf:
+            - type: 'null'
+            - type: string
+        reconciliation_source:
+          oneOf:
+            - type: 'null'
+            - type: string
+        reconciliation_verified_by:
+          oneOf:
+            - type: 'null'
+            - type: string
+        reconciliation_updated_at:
+          oneOf:
+            - type: 'null'
+            - type: string
+              format: date-time
         handoff_reason:
           oneOf:
             - type: 'null'
@@ -2746,6 +2813,26 @@ components:
         filled_at:
           type: string
           format: date-time
+
+    RecoveryTraceReconciliationRequest:
+      type: object
+      properties:
+        matched:
+          type: boolean
+        open_order_count:
+          type: integer
+        residual_exposure_quote:
+          type: string
+        reconciliation_reason:
+          type: string
+        summary:
+          type: string
+        source:
+          type: string
+        verified_by:
+          type: string
+        operator_context:
+          type: object
 
     MarketOrderbookTopResponse:
       type: object

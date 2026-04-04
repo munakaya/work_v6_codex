@@ -189,6 +189,33 @@
 - `lifecycle_state`
 - `latest_evaluation`
 
+#### `POST /api/v1/recovery-traces/{recovery_trace_id}/record-reconciliation`
+
+목적:
+
+- operator 또는 reconciliation job이 recovery trace에 정합성 결과를 기록
+- `matched + open_order_count=0 + residual_exposure_quote=0`이면 recovery runtime이 즉시 `resolved / closed`까지 반영할 수 있음
+
+요청 핵심 필드:
+
+- `matched` (필수, true/false)
+- `open_order_count` (필수, 0 이상 정수)
+- `residual_exposure_quote` (필수, 0 이상 숫자)
+- `reconciliation_reason` (선택)
+- `summary` (선택)
+- `source` (선택)
+- `verified_by` (선택)
+- `operator_context` (선택)
+
+응답 핵심 필드:
+
+- `reconciliation_result`
+- `reconciliation_open_order_count`
+- `reconciliation_residual_exposure_quote`
+- `status`
+- `lifecycle_state`
+- `latest_evaluation`
+
 #### `POST /api/v1/bots/register`
 
 목적:

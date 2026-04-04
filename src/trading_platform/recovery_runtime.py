@@ -48,6 +48,19 @@ def _parse_decimal(value: object) -> Decimal | None:
         return None
 
 
+def _parse_int(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    try:
+        return int(str(value))
+    except (ValueError, TypeError):
+        return None
+
+
 @dataclass(frozen=True)
 class RecoveryRuntimeInfo:
     enabled: bool
@@ -318,6 +331,10 @@ class RecoveryRuntime:
         )
         intent_terminal = self._intent_is_terminal(intent_id=intent_id)
         residual_exposure_quote = _parse_decimal(trace.get("residual_exposure_quote"))
+        reconciliation_resolution_reason = self._reconciliation_resolution_reason(trace)
+        if reconciliation_resolution_reason is not None:
+            self._resolve_trace(trace, resolution_reason=reconciliation_resolution_reason)
+            return
         if not has_active_orders and residual_exposure_quote == Decimal("0"):
             self._resolve_trace(trace, resolution_reason="no_active_orders_and_zero_residual")
             return
@@ -428,6 +445,24 @@ class RecoveryRuntime:
         if age_seconds < self.submit_timeout_seconds:
             return None
         return status, age_seconds
+
+    def _reconciliation_resolution_reason(self, trace: dict[str, object]) -> str | None:
+        reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
+        if reconciliation_result != "matched":
+            return None
+        reconciliation_open_order_count = _parse_int(
+            trace.get("reconciliation_open_order_count")
+        )
+        reconciliation_residual = _parse_decimal(
+            trace.get("reconciliation_residual_exposure_quote")
+        )
+        if reconciliation_open_order_count is None or reconciliation_open_order_count < 0:
+            return None
+        if reconciliation_residual is None:
+            return None
+        if reconciliation_open_order_count == 0 and reconciliation_residual == Decimal("0"):
+            return "reconciliation_matched_zero_residual"
+        return None
 
     def _create_submit_timeout_trace(
         self,
