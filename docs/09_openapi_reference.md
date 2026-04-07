@@ -586,6 +586,27 @@ paths:
         '503':
           description: Redis runtime unavailable
 
+  /api/v1/runtime/private-connectors:
+    get:
+      tags: [Runtime]
+      summary: List private exchange connector states
+      operationId: listPrivateExchangeConnectors
+      parameters:
+        - in: query
+          name: exchange
+          schema:
+            type: string
+            enum: [upbit, bithumb, coinone]
+      responses:
+        '200':
+          description: Private exchange connector states
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateExchangeConnectorListResponse'
+        '404':
+          description: Requested private connector exchange not found
+
   /api/v1/bots/events:
     get:
       tags: [Bots]
@@ -2675,6 +2696,88 @@ components:
                       oneOf:
                         - type: 'null'
                         - type: integer
+                exchange_trading_keys:
+                  type: object
+                  properties:
+                    count:
+                      type: integer
+                    configured_count:
+                      type: integer
+                    ready_count:
+                      type: integer
+                    overall_state:
+                      type: string
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/PrivateExchangeConnectorDependencyItem'
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    PrivateExchangeConnectorDependencyItem:
+      type: object
+      properties:
+        exchange:
+          type: string
+        configured:
+          type: boolean
+        ready:
+          type: boolean
+        state:
+          type: string
+        source_path:
+          oneOf:
+            - type: 'null'
+            - type: string
+        primary_path:
+          type: string
+        fallback_path:
+          type: string
+        access_key_field:
+          oneOf:
+            - type: 'null'
+            - type: string
+
+    PrivateExchangeConnectorItem:
+      type: object
+      properties:
+        exchange:
+          type: string
+        name:
+          type: string
+        configured:
+          type: boolean
+        ready:
+          type: boolean
+        state:
+          type: string
+        credential_source_path:
+          oneOf:
+            - type: 'null'
+            - type: string
+
+    PrivateExchangeConnectorListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/PrivateExchangeConnectorItem'
+            count:
+              type: integer
+            configured_count:
+              type: integer
+            ready_count:
+              type: integer
+            overall_state:
+              type: string
         error:
           oneOf:
             - type: 'null'

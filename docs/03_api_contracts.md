@@ -72,6 +72,7 @@
 - `strategy_runtime`에는 현재 연결된 execution adapter 이름도 포함
 - `recovery_runtime`에는 active trace 처리, submit-timeout watchdog, terminal evaluation close sync, auto resolve, manual handoff 승격 카운터가 포함
 - `strategy_runtime.execution_mode=private_http`이고 execution이 켜져 있으면 `dependencies.private_execution`도 함께 검사
+- `dependencies.exchange_trading_keys`에는 upbit/bithumb/coinone 키 파일 상태와 primary/fallback 경로가 포함
 - 이때 `TP_STRATEGY_PRIVATE_EXECUTION_HEALTH_URL`이 없거나 health probe가 실패하면 ready는 `degraded`
 
 ### 18.3 Bot API
@@ -693,6 +694,11 @@
 - `GET /api/v1/market-data/events`
 - `POST /api/v1/market-data/poll`
 
+#### Runtime
+
+- `GET /api/v1/runtime/streams`
+- `GET /api/v1/runtime/private-connectors`
+
 #### Bots
 
 - `POST /api/v1/bots/register`
@@ -980,6 +986,30 @@
 - `newest_occurred_at`
 - `oldest_stream_id`
 - `oldest_occurred_at`
+
+#### `GET /api/v1/runtime/private-connectors`
+
+목적:
+
+- 직접 거래소 실행용 private connector 준비 상태를 한 번에 확인
+- 거래소별 키 파일 로드 상태와 placeholder/unavailable 상태를 운영 화면에서 조회
+
+쿼리:
+
+- `exchange`: 선택. `upbit`, `bithumb`, `coinone` 중 하나
+
+응답 핵심 필드:
+
+- `count`
+- `configured_count`
+- `ready_count`
+- `overall_state`
+- `items[].exchange`
+- `items[].name`
+- `items[].configured`
+- `items[].ready`
+- `items[].state`
+- `items[].credential_source_path`
 
 #### `GET /api/v1/bots/events`
 

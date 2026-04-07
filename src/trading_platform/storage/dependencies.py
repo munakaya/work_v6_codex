@@ -8,6 +8,9 @@ from typing import Final
 from urllib.parse import urlparse
 from urllib import error, request
 
+from ..config import AppConfig
+from ..strategy.exchange_key_loader import inspect_exchange_trading_credentials_from_config
+
 
 DEFAULT_POSTGRES_PORT: Final[int] = 5432
 DEFAULT_REDIS_PORT: Final[int] = 6379
@@ -31,6 +34,30 @@ class DependencyStatus:
             "host": self.host,
             "port": self.port,
         }
+
+
+def exchange_trading_key_statuses(config: AppConfig) -> dict[str, object]:
+    exchanges = ("upbit", "bithumb", "coinone")
+    items = [
+        inspect_exchange_trading_credentials_from_config(config, exchange).as_dict()
+        for exchange in exchanges
+    ]
+    ready_count = sum(1 for item in items if bool(item.get("ready")))
+    configured_count = sum(1 for item in items if bool(item.get("configured")))
+    overall_state = (
+        "ready"
+        if ready_count == len(items)
+        else "partial"
+        if ready_count > 0
+        else "missing"
+    )
+    return {
+        "items": items,
+        "count": len(items),
+        "configured_count": configured_count,
+        "ready_count": ready_count,
+        "overall_state": overall_state,
+    }
 
 
 def postgres_status(dsn: str | None) -> DependencyStatus:

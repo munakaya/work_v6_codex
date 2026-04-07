@@ -5,6 +5,8 @@ import tempfile
 
 from trading_platform.config import load_config
 from trading_platform.strategy.exchange_key_loader import (
+    inspect_exchange_trading_credentials,
+    inspect_exchange_trading_credentials_from_config,
     load_exchange_trading_credentials,
     load_exchange_trading_credentials_from_config,
 )
@@ -61,6 +63,14 @@ def main() -> None:
             credentials.source_path == primary_dir / "upbit_trading.json",
             "primary path mismatch",
         )
+        status = inspect_exchange_trading_credentials(
+            "upbit",
+            primary_dir=primary_dir,
+            fallback_dir=fallback_dir,
+        )
+        _assert(status.ready is True, "inspect should report ready")
+        _assert(status.state == "primary_ready", "inspect primary state mismatch")
+        _assert(status.access_key_field == "access_key", "inspect field mismatch")
         print("PASS exchange key loader prefers /dev/shm-style primary path")
 
         _write(
@@ -78,6 +88,12 @@ def main() -> None:
             credentials.source_path == fallback_dir / "bithumb.json",
             "fallback path mismatch",
         )
+        status = inspect_exchange_trading_credentials(
+            "bithumb",
+            primary_dir=primary_dir,
+            fallback_dir=fallback_dir,
+        )
+        _assert(status.state == "fallback_ready", "inspect fallback state mismatch")
         print("PASS exchange key loader uses ~/.key-style fallback path")
 
         _write(
@@ -94,6 +110,12 @@ def main() -> None:
             credentials.access_key == "legacy-coinone-access",
             "legacy field normalization mismatch",
         )
+        status = inspect_exchange_trading_credentials(
+            "coinone",
+            primary_dir=primary_dir,
+            fallback_dir=fallback_dir,
+        )
+        _assert(status.access_key_field == "access_token", "legacy field source mismatch")
         print("PASS exchange key loader normalizes legacy access key aliases")
 
         _write(
@@ -128,6 +150,8 @@ def main() -> None:
             credentials = load_exchange_trading_credentials_from_config(config, "upbit")
             _assert(credentials is not None, "config helper credentials missing")
             _assert(credentials.access_key == "config-upbit-access", "config helper mismatch")
+            status = inspect_exchange_trading_credentials_from_config(config, "upbit")
+            _assert(status.state == "fallback_ready", "config inspect state mismatch")
         finally:
             import os
 
@@ -146,6 +170,16 @@ def main() -> None:
             '{"access_key":"broken-only"}',
         )
         try:
+            status = inspect_exchange_trading_credentials(
+                "coinone",
+                primary_dir=primary_dir,
+                fallback_dir=fallback_dir,
+            )
+            _assert(status.ready is False, "invalid inspect should not be ready")
+            _assert(
+                status.state == "fallback_missing_secret_key",
+                "invalid inspect state mismatch",
+            )
             load_exchange_trading_credentials(
                 "coinone",
                 primary_dir=primary_dir,

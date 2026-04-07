@@ -12,6 +12,10 @@ from .config import AppConfig
 from .market_data_connector import PublicMarketDataConnector
 from .market_data_runtime import MarketDataRuntime
 from .observability import AlertHookNotifier, MetricsRegistry
+from .private_exchange_connector import (
+    PrivateExchangeConnectorProtocol,
+    build_private_exchange_connectors,
+)
 from .recovery_runtime import RecoveryRuntime
 from .redis_runtime import RedisRuntime
 from .route_handlers import ControlPlaneRouteMixin
@@ -36,6 +40,7 @@ class ControlPlaneServer(ThreadingHTTPServer):
         alert_hook: AlertHookNotifier,
         redis_runtime: RedisRuntime,
         market_data_connector: PublicMarketDataConnector,
+        private_exchange_connectors: dict[str, PrivateExchangeConnectorProtocol],
         market_data_runtime: MarketDataRuntime,
         strategy_runtime: StrategyRuntime,
         recovery_runtime: RecoveryRuntime,
@@ -48,6 +53,7 @@ class ControlPlaneServer(ThreadingHTTPServer):
         self.alert_hook = alert_hook
         self.redis_runtime = redis_runtime
         self.market_data_connector = market_data_connector
+        self.private_exchange_connectors = private_exchange_connectors
         self.market_data_runtime = market_data_runtime
         self.strategy_runtime = strategy_runtime
         self.recovery_runtime = recovery_runtime
@@ -110,6 +116,10 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
 
         if path == "/api/v1/runtime/streams":
             status, payload = self._runtime_streams_response(query)
+            return status, payload, False
+
+        if path == "/api/v1/runtime/private-connectors":
+            status, payload = self._runtime_private_connectors_response(query)
             return status, payload, False
 
         if path == "/api/v1/recovery-traces":
@@ -259,6 +269,7 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         metrics=metrics,
         redis_runtime=redis_runtime,
     )
+    private_exchange_connectors = build_private_exchange_connectors(config=config)
     strategy_runtime = StrategyRuntime(
         enabled=config.strategy_runtime_enabled,
         interval_ms=config.strategy_runtime_interval_ms,
@@ -296,6 +307,7 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         AlertHookNotifier(config.alert_hook_path, config.service_name),
         redis_runtime,
         market_data_connector,
+        private_exchange_connectors,
         market_data_runtime,
         strategy_runtime,
         recovery_runtime,

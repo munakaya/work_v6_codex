@@ -10,3 +10,6 @@
 - private_http_followup_cases.py: private_http가 submitted를 반환한 뒤 later fill로 closed 되거나 timeout으로 recovery trace가 열리는지 서버 전체 흐름에서 검증한다
 - memory_store_contract_cases.py: 메모리 저장소의 read/mutation 반환값이 내부 상태를 직접 노출하지 않는지 방어 복사 계약을 검증한다
 - exchange_key_loader_cases.py: 거래소 키 로더가 /dev/shm/keys 우선, ~/.key fallback, access_key/secret_key 정규화, 파일 없음/오류 처리를 올바르게 하는지 검증한다
+- exchange_key_ready_cases.py: /api/v1/ready가 거래소 키 파일 상태를 primary/fallback/오류 기준으로 노출하는지 검증한다
+- private_exchange_connector_cases.py: private 거래소 connector skeleton이 키 상태에 따라 placeholder 또는 unavailable로 만들어지는지 검증한다
+- private_exchange_runtime_cases.py: runtime API가 private 거래소 connector 상태를 조회/필터링할 수 있는지 검증한다

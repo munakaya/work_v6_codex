@@ -31,35 +31,147 @@ class ExchangeTradingCredentials:
         }
 
 
+@dataclass(frozen=True)
+class ExchangeTradingCredentialsStatus:
+    exchange: str
+    configured: bool
+    ready: bool
+    state: str
+    source_path: Path | None
+    primary_path: Path
+    fallback_path: Path
+    access_key_field: str | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "exchange": self.exchange,
+            "configured": self.configured,
+            "ready": self.ready,
+            "state": self.state,
+            "source_path": None if self.source_path is None else str(self.source_path),
+            "primary_path": str(self.primary_path),
+            "fallback_path": str(self.fallback_path),
+            "access_key_field": self.access_key_field,
+        }
+
+
 def load_exchange_trading_credentials(
     exchange: str,
     *,
     primary_dir: Path,
     fallback_dir: Path,
 ) -> ExchangeTradingCredentials | None:
+    status = inspect_exchange_trading_credentials(
+        exchange,
+        primary_dir=primary_dir,
+        fallback_dir=fallback_dir,
+    )
+    if not status.configured:
+        return None
+    if not status.ready or status.source_path is None:
+        raise ValueError(
+            f"trading credential file is not ready: exchange={status.exchange} state={status.state}"
+        )
+    if status.source_path is None:
+        return None
+    payload = _read_json_object(status.source_path)
+    access_key = _resolve_access_key(payload, status.exchange)
+    secret_key = _require_non_empty_string(
+        payload,
+        "secret_key",
+        path=status.source_path,
+        exchange=status.exchange,
+    )
+    return ExchangeTradingCredentials(
+        exchange=status.exchange,
+        access_key=access_key,
+        secret_key=secret_key,
+        source_path=status.source_path,
+    )
+
+
+def inspect_exchange_trading_credentials(
+    exchange: str,
+    *,
+    primary_dir: Path,
+    fallback_dir: Path,
+) -> ExchangeTradingCredentialsStatus:
     normalized_exchange = _normalize_exchange(exchange)
-    for path in _candidate_paths(
+    primary_path, fallback_path = _candidate_paths(
         exchange=normalized_exchange,
         primary_dir=primary_dir,
         fallback_dir=fallback_dir,
+    )
+    for path, state_prefix in (
+        (primary_path, "primary"),
+        (fallback_path, "fallback"),
     ):
         if not path.is_file():
             continue
-        payload = _read_json_object(path)
-        access_key = _resolve_access_key(payload, normalized_exchange)
-        secret_key = _require_non_empty_string(
-            payload,
-            "secret_key",
-            path=path,
+        try:
+            payload = _read_json_object(path)
+        except ValueError as exc:
+            return ExchangeTradingCredentialsStatus(
+                exchange=normalized_exchange,
+                configured=True,
+                ready=False,
+                state=f"{state_prefix}_invalid:{exc}",
+                source_path=path,
+                primary_path=primary_path,
+                fallback_path=fallback_path,
+            )
+        access_key_field = _resolve_access_key_field(payload, normalized_exchange)
+        if access_key_field is None:
+            return ExchangeTradingCredentialsStatus(
+                exchange=normalized_exchange,
+                configured=True,
+                ready=False,
+                state=f"{state_prefix}_missing_access_key",
+                source_path=path,
+                primary_path=primary_path,
+                fallback_path=fallback_path,
+            )
+        if _string_value(payload.get("secret_key")) is None:
+            return ExchangeTradingCredentialsStatus(
+                exchange=normalized_exchange,
+                configured=True,
+                ready=False,
+                state=f"{state_prefix}_missing_secret_key",
+                source_path=path,
+                primary_path=primary_path,
+                fallback_path=fallback_path,
+                access_key_field=access_key_field,
+            )
+        return ExchangeTradingCredentialsStatus(
             exchange=normalized_exchange,
-        )
-        return ExchangeTradingCredentials(
-            exchange=normalized_exchange,
-            access_key=access_key,
-            secret_key=secret_key,
+            configured=True,
+            ready=True,
+            state=f"{state_prefix}_ready",
             source_path=path,
+            primary_path=primary_path,
+            fallback_path=fallback_path,
+            access_key_field=access_key_field,
         )
-    return None
+    return ExchangeTradingCredentialsStatus(
+        exchange=normalized_exchange,
+        configured=False,
+        ready=False,
+        state="not_found",
+        source_path=None,
+        primary_path=primary_path,
+        fallback_path=fallback_path,
+    )
+
+
+def inspect_exchange_trading_credentials_from_config(
+    config: AppConfig,
+    exchange: str,
+) -> ExchangeTradingCredentialsStatus:
+    return inspect_exchange_trading_credentials(
+        exchange,
+        primary_dir=config.exchange_key_primary_dir,
+        fallback_dir=config.exchange_key_fallback_dir,
+    )
 
 
 def load_exchange_trading_credentials_from_config(
@@ -107,16 +219,29 @@ def _read_json_object(path: Path) -> dict[str, object]:
 
 
 def _resolve_access_key(payload: dict[str, object], exchange: str) -> str:
+    field_name = _resolve_access_key_field(payload, exchange)
+    if field_name is None:
+        raise ValueError(
+            "trading credential file is missing access_key "
+            f"(exchange={exchange}, accepted_legacy_fields={LEGACY_ACCESS_KEY_FIELDS.get(exchange, ())})"
+        )
+    value = _string_value(payload.get(field_name))
+    if value is None:
+        raise ValueError(
+            "trading credential file is missing access_key "
+            f"(exchange={exchange}, field={field_name})"
+        )
+    return value
+
+
+def _resolve_access_key_field(payload: dict[str, object], exchange: str) -> str | None:
     if _string_value(payload.get("access_key")) is not None:
-        return _string_value(payload.get("access_key")) or ""
+        return "access_key"
     for field_name in LEGACY_ACCESS_KEY_FIELDS.get(exchange, ()):
         value = _string_value(payload.get(field_name))
         if value is not None:
-            return value
-    raise ValueError(
-        "trading credential file is missing access_key "
-        f"(exchange={exchange}, accepted_legacy_fields={LEGACY_ACCESS_KEY_FIELDS.get(exchange, ())})"
-    )
+            return field_name
+    return None
 
 
 def _require_non_empty_string(

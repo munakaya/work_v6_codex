@@ -6,7 +6,12 @@ from http import HTTPStatus
 from urllib.parse import parse_qs
 
 from .request_utils import optional_bool, query_limit, single_query_value
-from .storage.dependencies import postgres_status, private_execution_status, redis_status
+from .storage.dependencies import (
+    exchange_trading_key_statuses,
+    postgres_status,
+    private_execution_status,
+    redis_status,
+)
 
 
 class ControlPlaneReadRouteMixin:
@@ -122,6 +127,7 @@ class ControlPlaneReadRouteMixin:
                 token=config.strategy_private_execution_token,
                 timeout_ms=config.strategy_private_execution_timeout_ms,
             ).as_dict(),
+            "exchange_trading_keys": exchange_trading_key_statuses(config),
         }
         required_dependency_names = ["postgres", "redis"]
         if (

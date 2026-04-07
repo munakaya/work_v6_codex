@@ -177,6 +177,48 @@ class ControlPlaneRuntimeReadRouteMixin:
             }
         )
 
+    def _runtime_private_connectors_response(
+        self, query: str
+    ) -> tuple[HTTPStatus, dict[str, object]]:
+        params = parse_qs(query)
+        exchange = (single_query_value(params, "exchange") or "").strip().lower()
+        items = [
+            connector.info.as_dict()
+            for connector in self.server.private_exchange_connectors.values()
+        ]
+        if exchange:
+            items = [item for item in items if str(item.get("exchange") or "") == exchange]
+            if not items:
+                return (
+                    HTTPStatus.NOT_FOUND,
+                    self._response(
+                        error={
+                            "code": "EXCHANGE_NOT_FOUND",
+                            "message": "private connector exchange not found",
+                        }
+                    ),
+                )
+        ready_count = sum(1 for item in items if bool(item.get("ready")))
+        configured_count = sum(1 for item in items if bool(item.get("configured")))
+        overall_state = (
+            "ready"
+            if ready_count == len(items) and items
+            else "partial"
+            if ready_count > 0
+            else "missing"
+            if items
+            else "empty"
+        )
+        return HTTPStatus.OK, self._response(
+            data={
+                "items": items,
+                "count": len(items),
+                "configured_count": configured_count,
+                "ready_count": ready_count,
+                "overall_state": overall_state,
+            }
+        )
+
     def _limit_value(self, params: dict[str, list[str]]) -> int | None:
         raw = (single_query_value(params, "limit") or "").strip()
         if not raw:

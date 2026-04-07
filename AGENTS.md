@@ -14,6 +14,9 @@ No build system, package manager, or automated test suite is committed yet. For 
 When application code is introduced, add the corresponding setup, run, and test commands to this guide in the same change.
 
 - `PYTHONPATH=src ./.venv/bin/python tools_for_ai/exchange_key_loader_cases.py`: 거래소 키 로더의 경로 우선순위와 필드 정규화를 검증
+- `PYTHONPATH=src ./.venv/bin/python tools_for_ai/exchange_key_ready_cases.py`: ready endpoint에 거래소 키 상태가 반영되는지 검증
+- `PYTHONPATH=src ./.venv/bin/python tools_for_ai/private_exchange_connector_cases.py`: private 거래소 connector skeleton의 준비 상태를 검증
+- `PYTHONPATH=src ./.venv/bin/python tools_for_ai/private_exchange_runtime_cases.py`: runtime API에서 private 거래소 connector 상태를 조회하는지 검증
 
 ## Coding Style & Naming Conventions
 Use concise Markdown with clear section headings and short paragraphs. Prefer bullet lists for requirements, constraints, and decisions. Name new docs by purpose, not by date alone, for example `docs/architecture_overview.md` or `docs/exchange_adapter_notes.md`. Keep file and directory names lowercase with underscores.
