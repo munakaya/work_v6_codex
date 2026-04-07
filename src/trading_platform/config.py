@@ -143,6 +143,6 @@ def load_config() -> AppConfig:
         recovery_runtime_reconciliation_stale_after_seconds=_env_int(
             "TP_RECOVERY_RUNTIME_RECONCILIATION_STALE_AFTER_SECONDS", 15
         ),
-        use_sample_read_model=_env_bool("TP_USE_SAMPLE_READ_MODEL", True),
+        use_sample_read_model=_env_bool("TP_USE_SAMPLE_READ_MODEL", False),
         enable_postgres_mutation=_env_bool("TP_ENABLE_POSTGRES_MUTATION", False),
     )

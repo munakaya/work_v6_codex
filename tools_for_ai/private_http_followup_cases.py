@@ -168,6 +168,7 @@ def _launch_server(*, submit_url: str, health_url: str, submit_timeout_seconds: 
             "TP_PORT": str(server_port),
             "TP_REDIS_URL": "redis://127.0.0.1:6379/0",
             "TP_REDIS_KEY_PREFIX": redis_prefix,
+            "TP_USE_SAMPLE_READ_MODEL": "true",
             "TP_STRATEGY_RUNTIME_EXECUTION_ENABLED": "true",
             "TP_STRATEGY_RUNTIME_EXECUTION_MODE": "private_http",
             "TP_STRATEGY_PRIVATE_EXECUTION_URL": submit_url,

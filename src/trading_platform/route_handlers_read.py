@@ -129,10 +129,13 @@ class ControlPlaneReadRouteMixin:
             and config.strategy_runtime_execution_mode.strip().lower() == "private_http"
         ):
             required_dependency_names.append("private_execution")
-        ready = all(
+        dependency_ready = all(
             bool(dependencies[name]["configured"]) and bool(dependencies[name]["reachable"])
             for name in required_dependency_names
         )
+        redis_runtime_ready = self.server.redis_runtime.info.enabled
+        read_store_ready = self.server.store_bootstrap.mode == "postgres"
+        ready = dependency_ready and redis_runtime_ready and read_store_ready
         status = HTTPStatus.OK if ready else HTTPStatus.SERVICE_UNAVAILABLE
         payload = self._response(
             data={
@@ -145,6 +148,11 @@ class ControlPlaneReadRouteMixin:
                 "recovery_runtime": self.server.recovery_runtime.info.as_dict(),
                 "read_store": self.server.store_bootstrap.as_dict(),
                 "dependencies": dependencies,
+                "readiness_checks": {
+                    "dependencies_ready": dependency_ready,
+                    "redis_runtime_ready": redis_runtime_ready,
+                    "read_store_ready": read_store_ready,
+                },
             }
         )
         return status, payload
