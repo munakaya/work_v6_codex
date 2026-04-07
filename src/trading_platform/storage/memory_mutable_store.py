@@ -5,7 +5,7 @@ from uuid import uuid4
 from .order_mutation_views import create_order as build_order_create
 from .order_mutation_views import create_fill as build_fill_create
 from .order_mutation_views import create_order_intent as build_order_intent_create
-from .read_store import MemoryReadStore, _sample_time
+from .read_store import MemoryReadStore, _clone, _sample_time
 
 
 class MemoryMutableStore(MemoryReadStore):
@@ -34,7 +34,7 @@ class MemoryMutableStore(MemoryReadStore):
                 detail = self.bot_details.get(bot_id)
                 if detail is not None:
                     detail.setdefault("recent_alerts", []).insert(0, alert)
-            return alert
+            return _clone(alert)
 
     def create_config_version(
         self,
@@ -57,7 +57,7 @@ class MemoryMutableStore(MemoryReadStore):
                 "created_at": _sample_time(0),
             }
             versions.insert(0, version)
-            return version
+            return _clone(version)
 
     def create_strategy_run(
         self,
@@ -80,7 +80,7 @@ class MemoryMutableStore(MemoryReadStore):
                 None,
             )
             if existing_active_run is not None:
-                return "conflict", existing_active_run
+                return "conflict", _clone(existing_active_run)
 
             run = {
                 "run_id": str(uuid4()),
@@ -95,7 +95,7 @@ class MemoryMutableStore(MemoryReadStore):
             }
             self.strategy_runs[run["run_id"]] = run
             detail["latest_strategy_run"] = run
-            return "created", run
+            return "created", _clone(run)
 
     def create_order_intent(
         self,
@@ -112,7 +112,7 @@ class MemoryMutableStore(MemoryReadStore):
         decision_context: dict[str, object] | None,
     ) -> tuple[str, dict[str, object] | None]:
         with self._lock:
-            return build_order_intent_create(
+            outcome, intent = build_order_intent_create(
                 strategy_runs=self.strategy_runs,
                 order_intents=self.order_intents,
                 strategy_run_id=strategy_run_id,
@@ -126,6 +126,7 @@ class MemoryMutableStore(MemoryReadStore):
                 status=status,
                 decision_context=decision_context,
             )
+            return outcome, None if intent is None else _clone(intent)
 
     def start_strategy_run(self, run_id: str) -> tuple[str, dict[str, object] | None]:
         with self._lock:
@@ -133,7 +134,7 @@ class MemoryMutableStore(MemoryReadStore):
             if run is None:
                 return "not_found", None
             if run["status"] != "created":
-                return "conflict", run
+                return "conflict", _clone(run)
 
             running_for_bot = next(
                 (
@@ -146,7 +147,7 @@ class MemoryMutableStore(MemoryReadStore):
                 None,
             )
             if running_for_bot is not None:
-                return "conflict", run
+                return "conflict", _clone(run)
 
             run["status"] = "running"
             run["started_at"] = _sample_time(0)
@@ -154,7 +155,7 @@ class MemoryMutableStore(MemoryReadStore):
             detail = self.bot_details.get(str(run["bot_id"]))
             if detail is not None:
                 detail["latest_strategy_run"] = run
-            return "started", run
+            return "started", _clone(run)
 
     def stop_strategy_run(self, run_id: str) -> tuple[str, dict[str, object] | None]:
         with self._lock:
@@ -162,14 +163,14 @@ class MemoryMutableStore(MemoryReadStore):
             if run is None:
                 return "not_found", None
             if run["status"] != "running":
-                return "conflict", run
+                return "conflict", _clone(run)
 
             run["status"] = "stopped"
             run["stopped_at"] = _sample_time(0)
             detail = self.bot_details.get(str(run["bot_id"]))
             if detail is not None:
                 detail["latest_strategy_run"] = run
-            return "stopped", run
+            return "stopped", _clone(run)
 
     def create_order(
         self,
@@ -185,7 +186,7 @@ class MemoryMutableStore(MemoryReadStore):
         raw_payload: dict[str, object] | None,
     ) -> tuple[str, dict[str, object] | None]:
         with self._lock:
-            return build_order_create(
+            outcome, order = build_order_create(
                 order_intents=self.order_intents,
                 orders=self.orders,
                 order_intent_id=order_intent_id,
@@ -198,6 +199,7 @@ class MemoryMutableStore(MemoryReadStore):
                 status=status,
                 raw_payload=raw_payload,
             )
+            return outcome, None if order is None else _clone(order)
 
     def create_fill(
         self,
@@ -211,7 +213,7 @@ class MemoryMutableStore(MemoryReadStore):
         filled_at: str,
     ) -> tuple[str, dict[str, object] | None]:
         with self._lock:
-            return build_fill_create(
+            outcome, fill = build_fill_create(
                 orders=self.orders,
                 order_intents=self.order_intents,
                 fills=self.fills,
@@ -223,6 +225,7 @@ class MemoryMutableStore(MemoryReadStore):
                 fee_amount=fee_amount,
                 filled_at=filled_at,
             )
+            return outcome, None if fill is None else _clone(fill)
 
     def assign_config(
         self,
@@ -262,7 +265,7 @@ class MemoryMutableStore(MemoryReadStore):
                 code="CONFIG_ASSIGNED",
                 message=f"config {config_scope} v{version_no} assigned",
             )
-            return assigned
+            return _clone(assigned)
 
     def acknowledge_alert(self, alert_id: str) -> dict[str, object] | None:
         with self._lock:
@@ -270,10 +273,10 @@ class MemoryMutableStore(MemoryReadStore):
             for alert in self.alerts:
                 if alert["alert_id"] == alert_id:
                     alert["acknowledged_at"] = acknowledged_at
-                    return {
+                    return _clone({
                         "alert_id": alert_id,
                         "acknowledged_at": acknowledged_at,
-                    }
+                    })
             return None
 
     def register_bot(
@@ -306,11 +309,11 @@ class MemoryMutableStore(MemoryReadStore):
                 existing["last_seen_at"] = _sample_time(0)
                 detail = self.bot_details[str(existing["bot_id"])]
                 detail.update(existing)
-                return {
+                return _clone({
                     "bot_id": existing["bot_id"],
                     "assigned_config_version": existing["assigned_config_version"],
                     "status": existing["status"],
-                }
+                })
 
             bot_id = str(uuid4())
             bot = {
@@ -331,11 +334,11 @@ class MemoryMutableStore(MemoryReadStore):
                 "recent_alerts": [],
             }
             self.heartbeats[bot_id] = []
-            return {
+            return _clone({
                 "bot_id": bot_id,
                 "assigned_config_version": assigned_config_version,
                 "status": bot["status"],
-            }
+            })
 
     def record_heartbeat(
         self,
@@ -372,8 +375,8 @@ class MemoryMutableStore(MemoryReadStore):
                     detail["status"] = bot["status"]
                     break
 
-            return {
+            return _clone({
                 "bot_id": bot_id,
                 "status": detail["status"],
                 "recorded_at": heartbeat["created_at"],
-            }
+            })

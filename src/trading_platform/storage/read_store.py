@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 import threading
 
@@ -15,6 +16,10 @@ def _iso(dt: datetime) -> str:
 
 def _sample_time(minutes_ago: int) -> str:
     return _iso(datetime.now(UTC) - timedelta(minutes=minutes_ago))
+
+
+def _clone(value):
+    return deepcopy(value)
 
 
 class MemoryReadStore:
@@ -64,11 +69,12 @@ class MemoryReadStore:
                 bots = [bot for bot in bots if bot["strategy_name"] == strategy_name]
             if mode:
                 bots = [bot for bot in bots if bot["mode"] == mode]
-            return bots
+            return _clone(bots)
 
     def get_bot_detail(self, bot_id: str) -> dict[str, object] | None:
         with self._lock:
-            return self.bot_details.get(bot_id)
+            detail = self.bot_details.get(bot_id)
+            return None if detail is None else _clone(detail)
 
     def list_strategy_runs(
         self,
@@ -85,17 +91,23 @@ class MemoryReadStore:
                 runs = [run for run in runs if run.get("status") == status]
             if mode:
                 runs = [run for run in runs if run.get("mode") == mode]
-            return sorted(
-                runs,
-                key=lambda run: str(
-                    run.get("started_at") or run.get("created_at") or run.get("stopped_at") or ""
-                ),
-                reverse=True,
+            return _clone(
+                sorted(
+                    runs,
+                    key=lambda run: str(
+                        run.get("started_at")
+                        or run.get("created_at")
+                        or run.get("stopped_at")
+                        or ""
+                    ),
+                    reverse=True,
+                )
             )
 
     def get_strategy_run(self, run_id: str) -> dict[str, object] | None:
         with self._lock:
-            return self.strategy_runs.get(run_id)
+            run = self.strategy_runs.get(run_id)
+            return None if run is None else _clone(run)
 
     def list_order_intents(
         self,
@@ -133,15 +145,18 @@ class MemoryReadStore:
                     for intent in intents
                     if str(intent.get("created_at", "")) <= created_to
                 ]
-            return sorted(
-                intents,
-                key=lambda intent: str(intent.get("created_at", "")),
-                reverse=True,
+            return _clone(
+                sorted(
+                    intents,
+                    key=lambda intent: str(intent.get("created_at", "")),
+                    reverse=True,
+                )
             )
 
     def get_order_intent(self, intent_id: str) -> dict[str, object] | None:
         with self._lock:
-            return self.order_intents.get(intent_id)
+            intent = self.order_intents.get(intent_id)
+            return None if intent is None else _clone(intent)
 
     def create_order_intent(
         self,
@@ -171,21 +186,24 @@ class MemoryReadStore:
         created_to: str | None = None,
     ) -> list[dict[str, object]]:
         with self._lock:
-            return filter_orders(
-                self.orders,
-                self.fills,
-                bot_id=bot_id,
-                exchange_name=exchange_name,
-                status=status,
-                market=market,
-                strategy_run_id=strategy_run_id,
-                created_from=created_from,
-                created_to=created_to,
+            return _clone(
+                filter_orders(
+                    self.orders,
+                    self.fills,
+                    bot_id=bot_id,
+                    exchange_name=exchange_name,
+                    status=status,
+                    market=market,
+                    strategy_run_id=strategy_run_id,
+                    created_from=created_from,
+                    created_to=created_to,
+                )
             )
 
     def get_order_detail(self, order_id: str) -> dict[str, object] | None:
         with self._lock:
-            return build_order_detail(self.orders, self.order_intents, self.fills, order_id)
+            detail = build_order_detail(self.orders, self.order_intents, self.fills, order_id)
+            return None if detail is None else _clone(detail)
 
     def create_order(
         self,
@@ -214,15 +232,17 @@ class MemoryReadStore:
         created_to: str | None = None,
     ) -> list[dict[str, object]]:
         with self._lock:
-            return filter_fills(
-                self.fills,
-                bot_id=bot_id,
-                exchange_name=exchange_name,
-                market=market,
-                strategy_run_id=strategy_run_id,
-                order_id=order_id,
-                created_from=created_from,
-                created_to=created_to,
+            return _clone(
+                filter_fills(
+                    self.fills,
+                    bot_id=bot_id,
+                    exchange_name=exchange_name,
+                    market=market,
+                    strategy_run_id=strategy_run_id,
+                    order_id=order_id,
+                    created_from=created_from,
+                    created_to=created_to,
+                )
             )
 
     def create_fill(
@@ -243,7 +263,7 @@ class MemoryReadStore:
             entries = self.heartbeats.get(bot_id)
             if entries is None:
                 return None
-            return entries[:limit]
+            return _clone(entries[:limit])
 
     def list_alerts(
         self,
@@ -264,22 +284,23 @@ class MemoryReadStore:
                     for alert in alerts
                     if (alert.get("acknowledged_at") is not None) == acknowledged
                 ]
-            return alerts
+            return _clone(alerts)
 
     def latest_config(self, config_scope: str) -> dict[str, object] | None:
         with self._lock:
             versions = self.config_versions.get(config_scope)
             if not versions:
                 return None
-            return versions[0]
+            return _clone(versions[0])
 
     def list_config_versions(self, config_scope: str) -> list[dict[str, object]]:
         with self._lock:
-            return build_config_versions(self.config_versions, config_scope)
+            return _clone(build_config_versions(self.config_versions, config_scope))
 
     def get_alert_detail(self, alert_id: str) -> dict[str, object] | None:
         with self._lock:
-            return get_alert_detail(self.alerts, alert_id)
+            detail = get_alert_detail(self.alerts, alert_id)
+            return None if detail is None else _clone(detail)
 
     def active_bot_count(self) -> int:
         with self._lock:
