@@ -171,6 +171,8 @@
 - `REDIS_URL`
 - `CONFIG_SCOPE`
 - `RUN_MODE`
+- `TP_EXCHANGE_KEY_PRIMARY_DIR`
+- `TP_EXCHANGE_KEY_FALLBACK_DIR`
 
 #### Notification
 
@@ -184,6 +186,11 @@
 - 운영 secret은 vault 또는 배포 환경 secret store를 우선 사용한다.
 - local 개발 시에만 `.env.local` 또는 별도 local secret file 허용
 - bot API key/secret은 strategy worker가 직접 읽되 Control Plane DB에는 평문 저장 금지
+- local trading key file 조회 순서는 `/dev/shm/keys/{exchange}_trading.json` 후 `~/.key/{exchange}.json` fallback으로 둔다.
+- `/dev/shm/keys`는 RAM 디스크이므로 재부팅 시 사라질 수 있다.
+- worker 또는 bot 부팅 시 `fetch-keys.sh`가 `/dev/shm/keys`를 다시 채운다는 전제를 운영 문서에 포함한다.
+- local trading key file JSON은 모든 거래소에서 `{"access_key": "...", "secret_key": "..."}`를 기본 형식으로 사용한다.
+- key file이 아직 없는 상태는 배포 전 또는 미등록 상태로 보고, worker는 이를 명시적으로 처리해야 한다.
 
 ### 25.5 초기 배포 순서
 

@@ -132,6 +132,18 @@
 - access key / secret key / nonce / timestamp 생성 책임은 adapter 내부에 둔다
 - 전략 계층은 인증 세부를 몰라야 한다
 
+### 35.1.1 로컬 trading key 파일 규약
+
+- worker의 로컬 파일 조회 순서는 아래 2단계로 고정한다.
+  1. `/dev/shm/keys/{exchange}_trading.json`
+  2. `~/.key/{exchange}.json`
+- `/dev/shm/keys`는 RAM 디스크 기준 경로로 본다.
+- bot 부팅 시 `fetch-keys.sh`가 `/dev/shm/keys`를 채운다고 가정한다.
+- 파일명 예시는 `upbit_trading.json`, `bithumb_trading.json`, `coinone_trading.json` 이다.
+- 내부 표준 필드명은 모든 거래소에서 `access_key`, `secret_key`로 통일한다.
+- 키 파일이 아직 없을 수 있으므로, 파일 없음은 정상적인 미배포 상태로 처리해야 한다.
+- 기존 로컬 개발 파일 호환을 위해 loader는 빗썸 `api_key`, 코인원 `access_token` 같은 legacy access key 필드를 읽은 뒤 내부적으로 `access_key`로 정규화할 수 있다.
+
 ### 35.2 Upbit Auth Flow
 
 문서상 Upbit는 API Key 기반 인증 가이드를 제공하며, Exchange REST와 private WebSocket 모두 인증이 필요하다.
@@ -156,7 +168,7 @@
 
 권장 구현 흐름:
 
-1. api key / secret 로드
+1. worker가 local/secure source에서 `access_key` / `secret_key` 로드
 2. 요청별 nonce/timestamp 생성
 3. 문서 기준 signature 생성
 4. private REST header 부착
@@ -173,7 +185,7 @@
 
 권장 구현 흐름:
 
-1. access token 또는 api key / secret 로드
+1. worker가 local/secure source에서 `access_key` / `secret_key` 로드
 2. nonce/timestamp 생성
 3. 문서 기준 payload encode + sign
 4. REST 요청 header/body 부착

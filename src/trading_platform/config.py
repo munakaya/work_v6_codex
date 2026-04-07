@@ -41,6 +41,8 @@ class AppConfig:
     postgres_dsn: str | None
     redis_url: str | None
     redis_key_prefix: str
+    exchange_key_primary_dir: Path
+    exchange_key_fallback_dir: Path
     market_data_timeout_ms: int
     market_data_stale_threshold_ms: int
     upbit_quotation_base_url: str
@@ -91,6 +93,12 @@ def load_config() -> AppConfig:
         postgres_dsn=os.getenv("TP_POSTGRES_DSN"),
         redis_url=os.getenv("TP_REDIS_URL"),
         redis_key_prefix=os.getenv("TP_REDIS_KEY_PREFIX", "tp"),
+        exchange_key_primary_dir=Path(
+            os.getenv("TP_EXCHANGE_KEY_PRIMARY_DIR", "/dev/shm/keys")
+        ),
+        exchange_key_fallback_dir=Path(
+            os.getenv("TP_EXCHANGE_KEY_FALLBACK_DIR", str(Path.home() / ".key"))
+        ),
         market_data_timeout_ms=_env_int("TP_MARKET_DATA_TIMEOUT_MS", 3000),
         market_data_stale_threshold_ms=_env_int("TP_MARKET_DATA_STALE_THRESHOLD_MS", 3000),
         upbit_quotation_base_url=os.getenv(
