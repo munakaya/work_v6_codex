@@ -8,3 +8,4 @@
 - private_http_adapter_cases.py: private_http adapter를 runtime guard 없이 직접 호출해 existing order id 충돌, submitted-with-fill, submit_failed bad fill/extra fill leg/filled-no-fill/partial-no-fill, filled bad preview, filled partial, extra fill leg 무저장 fail-closed를 검증한다
 - private_http_server_cases.py: private_http executor를 실제 서버 흐름에서 filled/submitted/failed 세 경로로 검증한다
 - private_http_followup_cases.py: private_http가 submitted를 반환한 뒤 later fill로 closed 되거나 timeout으로 recovery trace가 열리는지 서버 전체 흐름에서 검증한다
+- memory_store_contract_cases.py: 메모리 저장소의 read/mutation 반환값이 내부 상태를 직접 노출하지 않는지 방어 복사 계약을 검증한다
