@@ -13,3 +13,5 @@
 - exchange_key_ready_cases.py: /api/v1/ready가 거래소 키 파일 상태를 primary/fallback/오류 기준으로 노출하는지 검증한다
 - private_exchange_connector_cases.py: private 거래소 connector skeleton이 키 상태에 따라 placeholder 또는 unavailable로 만들어지는지 검증한다
 - private_exchange_runtime_cases.py: runtime API가 private 거래소 connector 상태를 조회/필터링할 수 있는지 검증한다
+- market_data_rate_limit_cases.py: 공통 token bucket limiter와 market data retry/backoff가 설정대로 동작하는지 검증한다
+- market_data_runtime_rate_limit_cases.py: market-data/runtime API가 rate limit과 retry/backoff 설정을 노출하는지 검증한다

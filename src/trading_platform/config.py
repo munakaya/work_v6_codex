@@ -12,6 +12,13 @@ def _env_int(name: str, default: int) -> int:
     return int(raw)
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return float(raw)
+
+
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -45,6 +52,15 @@ class AppConfig:
     exchange_key_fallback_dir: Path
     market_data_timeout_ms: int
     market_data_stale_threshold_ms: int
+    market_data_retry_count: int
+    market_data_retry_backoff_initial_ms: int
+    market_data_retry_backoff_max_ms: int
+    upbit_public_rest_rate_limit_per_sec: float
+    upbit_public_rest_burst: int
+    bithumb_public_rest_rate_limit_per_sec: float
+    bithumb_public_rest_burst: int
+    coinone_public_rest_rate_limit_per_sec: float
+    coinone_public_rest_burst: int
     upbit_quotation_base_url: str
     bithumb_public_base_url: str
     coinone_public_base_url: str
@@ -101,6 +117,25 @@ def load_config() -> AppConfig:
         ),
         market_data_timeout_ms=_env_int("TP_MARKET_DATA_TIMEOUT_MS", 3000),
         market_data_stale_threshold_ms=_env_int("TP_MARKET_DATA_STALE_THRESHOLD_MS", 3000),
+        market_data_retry_count=_env_int("TP_MARKET_DATA_RETRY_COUNT", 0),
+        market_data_retry_backoff_initial_ms=_env_int(
+            "TP_MARKET_DATA_RETRY_BACKOFF_INITIAL_MS", 250
+        ),
+        market_data_retry_backoff_max_ms=_env_int(
+            "TP_MARKET_DATA_RETRY_BACKOFF_MAX_MS", 2000
+        ),
+        upbit_public_rest_rate_limit_per_sec=_env_float(
+            "TP_UPBIT_PUBLIC_REST_RATE_LIMIT_PER_SEC", 0.0
+        ),
+        upbit_public_rest_burst=_env_int("TP_UPBIT_PUBLIC_REST_BURST", 1),
+        bithumb_public_rest_rate_limit_per_sec=_env_float(
+            "TP_BITHUMB_PUBLIC_REST_RATE_LIMIT_PER_SEC", 0.0
+        ),
+        bithumb_public_rest_burst=_env_int("TP_BITHUMB_PUBLIC_REST_BURST", 1),
+        coinone_public_rest_rate_limit_per_sec=_env_float(
+            "TP_COINONE_PUBLIC_REST_RATE_LIMIT_PER_SEC", 0.0
+        ),
+        coinone_public_rest_burst=_env_int("TP_COINONE_PUBLIC_REST_BURST", 1),
         upbit_quotation_base_url=os.getenv(
             "TP_UPBIT_QUOTATION_BASE_URL", "https://api.upbit.com"
         ),

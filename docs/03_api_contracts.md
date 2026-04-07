@@ -864,6 +864,12 @@
 응답 핵심 필드:
 
 - `runtime.enabled`
+- `rate_limits.items[].name`
+- `rate_limits.items[].rate_per_sec`
+- `rate_limits.items[].burst`
+- `rate_limits.retry_count`
+- `rate_limits.retry_backoff.initial_delay_ms`
+- `rate_limits.retry_backoff.max_delay_ms`
 - `runtime.state`
 - `runtime.exchange`
 - `runtime.markets`

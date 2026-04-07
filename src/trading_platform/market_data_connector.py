@@ -5,10 +5,13 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from http import HTTPStatus
 import json
+import time
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+from .rate_limit import ExponentialBackoffPolicy, RateLimitPolicy, TokenBucketRateLimiter
 
 
 def _iso_now() -> str:
@@ -55,15 +58,25 @@ class PublicMarketDataConnector:
         *,
         timeout_ms: int,
         stale_threshold_ms: int,
+        retry_count: int,
+        retry_backoff: ExponentialBackoffPolicy,
+        rate_limit_policies: dict[str, RateLimitPolicy] | None,
         upbit_base_url: str,
         bithumb_base_url: str,
         coinone_base_url: str,
     ) -> None:
         self.timeout_seconds = max(timeout_ms, 100) / 1000
         self.stale_threshold_ms = max(stale_threshold_ms, 0)
+        self.retry_count = max(retry_count, 0)
+        self.retry_backoff = retry_backoff
         self.upbit_base_url = upbit_base_url.rstrip("/")
         self.bithumb_base_url = bithumb_base_url.rstrip("/")
         self.coinone_base_url = coinone_base_url.rstrip("/")
+        self.rate_limit_policies = dict(rate_limit_policies or {})
+        self._rate_limiters = {
+            exchange: TokenBucketRateLimiter(policy)
+            for exchange, policy in self.rate_limit_policies.items()
+        }
 
     def get_orderbook_top(self, *, exchange: str, market: str) -> dict[str, object]:
         normalized_exchange = exchange.strip().lower()
@@ -100,7 +113,7 @@ class PublicMarketDataConnector:
             self.upbit_base_url,
             urlencode({"markets": market, "count": 1}),
         )
-        payload = self._fetch_json(url)
+        payload = self._fetch_json(url, exchange="upbit")
         if not isinstance(payload, list) or not payload:
             raise MarketDataError(
                 HTTPStatus.BAD_GATEWAY,
@@ -165,7 +178,7 @@ class PublicMarketDataConnector:
             self.bithumb_base_url,
             urlencode({"markets": market}),
         )
-        payload = self._fetch_json(url)
+        payload = self._fetch_json(url, exchange="bithumb")
         if isinstance(payload, dict):
             error = payload.get("error")
             if isinstance(error, dict):
@@ -225,7 +238,7 @@ class PublicMarketDataConnector:
             target_currency,
             urlencode({"size": 5}),
         )
-        payload = self._fetch_json(url)
+        payload = self._fetch_json(url, exchange="coinone")
         if not isinstance(payload, dict):
             raise MarketDataError(
                 HTTPStatus.BAD_GATEWAY,
@@ -324,7 +337,33 @@ class PublicMarketDataConnector:
             "source_type": source_type,
         }
 
-    def _fetch_json(self, url: str) -> object:
+    def describe_rate_limits(self) -> dict[str, object]:
+        items = [
+            policy.as_dict()
+            for _exchange, policy in sorted(self.rate_limit_policies.items(), key=lambda item: item[0])
+        ]
+        return {
+            "items": items,
+            "count": len(items),
+            "retry_count": self.retry_count,
+            "retry_backoff": self.retry_backoff.as_dict(),
+        }
+
+    def _fetch_json(self, url: str, *, exchange: str) -> object:
+        limiter = self._rate_limiters.get(exchange)
+        if limiter is not None:
+            limiter.acquire()
+        attempt = 0
+        while True:
+            try:
+                return self._fetch_json_once(url)
+            except MarketDataError as exc:
+                if not self._should_retry(exc=exc, attempt=attempt):
+                    raise
+                time.sleep(self.retry_backoff.delay_seconds(attempt))
+                attempt += 1
+
+    def _fetch_json_once(self, url: str) -> object:
         request = Request(
             url,
             headers={
@@ -368,6 +407,15 @@ class PublicMarketDataConnector:
                 "UPSTREAM_INVALID_RESPONSE",
                 "upstream response is not valid json",
             ) from exc
+
+    def _should_retry(self, *, exc: MarketDataError, attempt: int) -> bool:
+        if attempt >= self.retry_count:
+            return False
+        return exc.code in {
+            "UPSTREAM_RATE_LIMITED",
+            "UPSTREAM_HTTP_ERROR",
+            "UPSTREAM_NETWORK_ERROR",
+        }
 
     def _http_error_message(self, exc: HTTPError) -> str | None:
         try:

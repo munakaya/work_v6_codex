@@ -2363,6 +2363,106 @@ components:
             - type: 'null'
             - $ref: '#/components/schemas/ApiError'
 
+    MarketDataRateLimitItem:
+      type: object
+      properties:
+        name:
+          type: string
+        rate_per_sec:
+          type: number
+        burst:
+          type: integer
+        enabled:
+          type: boolean
+
+    MarketDataRateLimitSummary:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarketDataRateLimitItem'
+        count:
+          type: integer
+        retry_count:
+          type: integer
+        retry_backoff:
+          type: object
+          properties:
+            initial_delay_ms:
+              type: integer
+            max_delay_ms:
+              type: integer
+
+    MarketDataRuntimeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            runtime:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                exchange:
+                  type: string
+                markets:
+                  type: array
+                  items:
+                    type: string
+                interval_ms:
+                  type: integer
+                running:
+                  type: boolean
+                state:
+                  type: string
+                last_success_at:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                      format: date-time
+                last_error_at:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                      format: date-time
+                last_error_message:
+                  oneOf:
+                    - type: 'null'
+                    - type: string
+                success_count:
+                  type: integer
+                failure_count:
+                  type: integer
+            redis_runtime:
+              type: object
+              properties:
+                configured:
+                  type: boolean
+                cli_available:
+                  type: boolean
+                enabled:
+                  type: boolean
+                key_prefix:
+                  type: string
+                state:
+                  type: string
+            rate_limits:
+              $ref: '#/components/schemas/MarketDataRateLimitSummary'
+            snapshots:
+              type: array
+              items:
+                $ref: '#/components/schemas/MarketOrderbookTop'
+            snapshot_count:
+              type: integer
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
     AlertEventSummary:
       type: object
       properties:

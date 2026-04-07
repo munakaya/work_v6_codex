@@ -18,6 +18,7 @@ from .private_exchange_connector import (
 )
 from .recovery_runtime import RecoveryRuntime
 from .redis_runtime import RedisRuntime
+from .rate_limit import ExponentialBackoffPolicy, RateLimitPolicy
 from .route_handlers import ControlPlaneRouteMixin
 from .storage.store_factory import StoreBootstrapInfo, build_read_store_bundle
 from .storage.store_protocol import ControlPlaneStoreProtocol
@@ -256,6 +257,28 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
     market_data_connector = PublicMarketDataConnector(
         timeout_ms=config.market_data_timeout_ms,
         stale_threshold_ms=config.market_data_stale_threshold_ms,
+        retry_count=config.market_data_retry_count,
+        retry_backoff=ExponentialBackoffPolicy(
+            initial_delay_ms=config.market_data_retry_backoff_initial_ms,
+            max_delay_ms=config.market_data_retry_backoff_max_ms,
+        ),
+        rate_limit_policies={
+            "upbit": RateLimitPolicy(
+                name="upbit_public_rest",
+                rate_per_sec=config.upbit_public_rest_rate_limit_per_sec,
+                burst=config.upbit_public_rest_burst,
+            ),
+            "bithumb": RateLimitPolicy(
+                name="bithumb_public_rest",
+                rate_per_sec=config.bithumb_public_rest_rate_limit_per_sec,
+                burst=config.bithumb_public_rest_burst,
+            ),
+            "coinone": RateLimitPolicy(
+                name="coinone_public_rest",
+                rate_per_sec=config.coinone_public_rest_rate_limit_per_sec,
+                burst=config.coinone_public_rest_burst,
+            ),
+        },
         upbit_base_url=config.upbit_quotation_base_url,
         bithumb_base_url=config.bithumb_public_base_url,
         coinone_base_url=config.coinone_public_base_url,

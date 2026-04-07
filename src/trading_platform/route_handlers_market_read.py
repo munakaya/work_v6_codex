@@ -89,6 +89,7 @@ class ControlPlaneMarketReadRouteMixin:
             data={
                 "runtime": runtime.as_dict(),
                 "redis_runtime": self.server.redis_runtime.info.as_dict(),
+                "rate_limits": self.server.market_data_connector.describe_rate_limits(),
                 "snapshots": snapshots,
                 "snapshot_count": len(snapshots),
             }
