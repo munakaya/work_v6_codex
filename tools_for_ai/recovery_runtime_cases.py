@@ -1123,9 +1123,12 @@ def main() -> None:
         raw_payload={"source": "submit_timeout_case"},
     )
     _assert(order_outcome == "created" and stale_order is not None, "stale order create failed")
-    stale_order["submitted_at"] = _iso(datetime.now(UTC) - timedelta(seconds=5))
-    stale_order["created_at"] = stale_order["submitted_at"]
-    stale_order["updated_at"] = stale_order["submitted_at"]
+    stale_order_timestamp = _iso(datetime.now(UTC) - timedelta(seconds=5))
+    with store._lock:
+        persisted_stale_order = store.orders[str(stale_order["order_id"])]
+        persisted_stale_order["submitted_at"] = stale_order_timestamp
+        persisted_stale_order["created_at"] = stale_order_timestamp
+        persisted_stale_order["updated_at"] = stale_order_timestamp
     redis_runtime.sync_arbitrage_evaluation(
         run_id=stale_eval_run_id,
         payload={
@@ -1473,9 +1476,12 @@ def main() -> None:
         stale_unwind_order_outcome == "created" and stale_unwind_order is not None,
         "stale unwind order create failed",
     )
-    stale_unwind_order["submitted_at"] = _iso(datetime.now(UTC) - timedelta(seconds=5))
-    stale_unwind_order["created_at"] = stale_unwind_order["submitted_at"]
-    stale_unwind_order["updated_at"] = stale_unwind_order["submitted_at"]
+    stale_unwind_timestamp = _iso(datetime.now(UTC) - timedelta(seconds=5))
+    with store._lock:
+        persisted_stale_unwind_order = store.orders[str(stale_unwind_order["order_id"])]
+        persisted_stale_unwind_order["submitted_at"] = stale_unwind_timestamp
+        persisted_stale_unwind_order["created_at"] = stale_unwind_timestamp
+        persisted_stale_unwind_order["updated_at"] = stale_unwind_timestamp
     stale_unwind_trace_id = "rt_unwind_timeout_case"
     redis_runtime.sync_recovery_trace(
         recovery_trace_id=stale_unwind_trace_id,
