@@ -64,7 +64,46 @@
   - `work_v6_gpt-pro/tests/test_bithumb_auth.py`
   - `work_v6_gpt-pro/tests/test_coinone_auth.py`
 
+## 6. 거래소 fixture / contract test 자산화
+
+- 현재 문서에도 fixture와 mock payload가 미완료로 남아 있다.
+- 실제 private/public adapter 구현 전에 아래 자산을 먼저 모으는 편이 안전하다:
+  - 거래소별 정상 orderbook 응답
+  - 주문 생성/조회/취소 응답
+  - auth 실패 응답
+  - rate limit 응답
+  - partial fill / terminal fill 응답
+- 참고:
+  - `work_v6_claude/docs/exchange_adapter.md`
+  - `work_v6_claude/test/unit/exchange_auth.test.ts`
+
+## 7. 운영 알림 규칙 / 대시보드 구체화
+
+- 운영 문서에 관측성 원칙은 있지만, 실제 알림 임계치와 대시보드 패널은 더 구체화할 여지가 있다.
+- 최소 범위:
+  - heartbeat 누락
+  - circuit open 지속
+  - unhedged position
+  - API 에러 급증
+  - orderbook latency p95
+  - balance 급감
+- 참고:
+  - `work_v6_claude/docs/operations.md`
+
+## 8. backtest / replay 실행 도구
+
+- 현재 저장소 문서에도 backtesting / replay는 공백으로 남아 있다.
+- 최소 목표:
+  - 기록된 market/private event 재생 도구
+  - 전략 판단 회귀 검증용 replay runner
+  - 필요 시 csv export/import 또는 백업 보조 스크립트
+- 참고:
+  - `work_v6_claude/scripts/backtest.ts`
+  - `work_v6_claude/scripts/csv_export.ts`
+  - `work_v6_claude/scripts/csv_import.ts`
+
 ## 메모
 
 - `spool`, `status file` 같은 항목은 외부 저장소 구조에는 맞지만 현재 저장소 구조와 바로 같지 않아서 이번 TODO에는 넣지 않았다.
+- `trade lock`, `idempotency guard`는 중요하지만 현재 저장소 문서에도 관련 안전장치가 이미 흩어져 있어서, 이번 TODO에는 더 직접적인 공백만 남겼다.
 - 거래소별 실제 주문/체결 구현은 여전히 공식 API 버전 pinning 이후에 진행하는 것이 맞다.
