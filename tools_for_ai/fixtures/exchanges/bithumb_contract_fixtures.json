@@ -1,0 +1,40 @@
+{
+  "exchange": "bithumb",
+  "public_orderbook": {
+    "transport": "rest",
+    "response": {
+      "market": "KRW-BTC",
+      "asks": [{"price": "100000000", "quantity": "0.5"}],
+      "bids": [{"price": "99900000", "quantity": "0.4"}]
+    }
+  },
+  "order_create": {
+    "transport": "private_rest",
+    "response": {"order_id": "bithumb-order-001", "status": "pending"}
+  },
+  "order_status": {
+    "transport": "private_rest",
+    "response": {"order_id": "bithumb-order-001", "status": "pending"}
+  },
+  "order_cancel": {
+    "transport": "private_rest",
+    "response": {"order_id": "bithumb-order-001", "status": "cancelled"}
+  },
+  "auth_failed": {
+    "transport": "private_rest",
+    "response": {"status": "5600", "message": "invalid api key"}
+  },
+  "rate_limited": {
+    "transport": "private_rest",
+    "http_status": 429,
+    "response": {"status": "5601", "message": "too many requests"}
+  },
+  "partial_fill_event": {
+    "transport": "private_ws",
+    "response": {"type": "order", "status": "partial", "filled_qty": "0.1"}
+  },
+  "terminal_fill_event": {
+    "transport": "private_ws",
+    "response": {"type": "order", "status": "filled", "filled_qty": "0.5"}
+  }
+}

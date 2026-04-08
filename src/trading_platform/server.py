@@ -251,6 +251,7 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
             lambda: self._recovery_trace_action_response(path),
             lambda: self._evaluate_arbitrage_response(path),
             lambda: self._acknowledge_alert_response(path),
+            lambda: self._acknowledge_config_response(path),
             lambda: self._assign_config_response(path),
             lambda: self._strategy_run_action_response(path),
             lambda: self._record_heartbeat_response(path),

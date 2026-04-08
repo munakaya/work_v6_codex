@@ -20,3 +20,10 @@
 - private_exchange_ws_runtime_cases.py: runtime API가 거래소별 private websocket auth-ready 상태와 기본 제한 정보를 노출하는지 검증한다
 - arbitrage_replay_runner.py: 저장된 재정거래 입력 payload를 다시 평가해 accepted/reason_code 요약과 mismatch를 출력한다
 - arbitrage_replay_runner_cases.py: replay runner가 다건 payload를 다시 평가하고 mismatch를 올바르게 감지하는지 검증한다
+- hot_config_ack_cases.py: assign-config와 config-ack가 pending/applied/restart_required 계약으로 동작하는지 실제 서버 기준으로 검증한다
+- arbitrage_event_replay_runner.py: 이벤트 순서에 따라 orderbook/balance/runtime_state를 갱신하며 재정거래 판단을 다시 평가한다
+- arbitrage_event_replay_runner_cases.py: event replay runner가 이벤트 순서에 맞는 decision 변화를 재현하는지 검증한다
+- arbitrage_replay_csv_export.py: replay JSON 케이스를 CSV로 내보낸다
+- arbitrage_replay_csv_import.py: replay CSV를 다시 JSON 케이스로 복원한다
+- arbitrage_replay_csv_cases.py: replay CSV export/import가 roundtrip 되는지 검증한다
+- exchange_fixture_contract_cases.py: 거래소별 내부 contract fixture 자산이 필수 category를 모두 포함하는지 검증한다

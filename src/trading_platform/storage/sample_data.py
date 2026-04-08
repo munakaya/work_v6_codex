@@ -37,7 +37,17 @@ def build_sample_state(sample_time):
             "status": "running",
             "hostname": "trade-host-01",
             "last_seen_at": bot_1_heartbeat["created_at"],
-            "assigned_config_version": {"config_scope": "default", "version_no": 3},
+            "assigned_config_version": {
+                "config_scope": "default",
+                "version_no": 3,
+                "apply_status": "applied",
+                "acknowledged_at": sample_time(9),
+                "ack_message": "initial default config assignment",
+                "changed_sections": ["initial_assignment"],
+                "hot_reloadable_sections": [],
+                "restart_required_sections": ["initial_assignment"],
+                "apply_policy": "restart_required",
+            },
         },
         {
             "bot_id": bot_2_id,
@@ -47,7 +57,17 @@ def build_sample_state(sample_time):
             "status": "running",
             "hostname": "trade-host-02",
             "last_seen_at": bot_2_heartbeat["created_at"],
-            "assigned_config_version": {"config_scope": "default", "version_no": 2},
+            "assigned_config_version": {
+                "config_scope": "default",
+                "version_no": 2,
+                "apply_status": "applied",
+                "acknowledged_at": sample_time(12),
+                "ack_message": "initial default config assignment",
+                "changed_sections": ["initial_assignment"],
+                "hot_reloadable_sections": [],
+                "restart_required_sections": ["initial_assignment"],
+                "apply_policy": "restart_required",
+            },
         },
     ]
 

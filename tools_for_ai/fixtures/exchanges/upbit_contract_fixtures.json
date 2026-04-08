@@ -1,0 +1,40 @@
+{
+  "exchange": "upbit",
+  "public_orderbook": {
+    "transport": "rest",
+    "response": {
+      "market": "KRW-BTC",
+      "asks": [{"price": "100000000", "quantity": "0.5"}],
+      "bids": [{"price": "99900000", "quantity": "0.4"}]
+    }
+  },
+  "order_create": {
+    "transport": "private_rest",
+    "response": {"uuid": "upbit-order-001", "state": "wait"}
+  },
+  "order_status": {
+    "transport": "private_rest",
+    "response": {"uuid": "upbit-order-001", "state": "wait"}
+  },
+  "order_cancel": {
+    "transport": "private_rest",
+    "response": {"uuid": "upbit-order-001", "state": "cancel"}
+  },
+  "auth_failed": {
+    "transport": "private_rest",
+    "response": {"error": {"name": "invalid_authorization", "message": "auth failed"}}
+  },
+  "rate_limited": {
+    "transport": "private_rest",
+    "http_status": 429,
+    "response": {"error": {"name": "too_many_requests", "message": "rate limited"}}
+  },
+  "partial_fill_event": {
+    "transport": "private_ws",
+    "response": {"type": "myOrder", "state": "watch", "executed_volume": "0.1"}
+  },
+  "terminal_fill_event": {
+    "transport": "private_ws",
+    "response": {"type": "myOrder", "state": "done", "executed_volume": "0.5"}
+  }
+}

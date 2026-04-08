@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+from ..config_apply_policy import summarize_config_assignment_policy
 from .order_mutation_views import create_order as build_order_create
 from .order_mutation_views import create_fill as build_fill_create
 from .order_mutation_views import create_order_intent as build_order_intent_create
@@ -246,12 +247,39 @@ class MemoryMutableStore(MemoryReadStore):
             )
             if version is None:
                 return None
+            previous_version = None
+            assigned_current = detail.get("assigned_config_version")
+            if isinstance(assigned_current, dict):
+                previous_scope = str(assigned_current.get("config_scope") or "").strip()
+                previous_version_no = assigned_current.get("version_no")
+                if previous_scope and isinstance(previous_version_no, int):
+                    previous_version = next(
+                        (
+                            item
+                            for item in self.config_versions.get(previous_scope, [])
+                            if int(item.get("version_no") or -1) == previous_version_no
+                        ),
+                        None,
+                    )
+            policy = summarize_config_assignment_policy(
+                previous_version.get("config_json")
+                if isinstance(previous_version, dict)
+                else None,
+                version["config_json"],
+            )
 
             assigned = {
                 "config_scope": config_scope,
                 "version_no": version_no,
                 "config_version_id": version["config_version_id"],
                 "assigned_at": _sample_time(0),
+                "apply_status": "pending",
+                "acknowledged_at": None,
+                "ack_message": None,
+                "changed_sections": list(policy["changed_sections"]),
+                "hot_reloadable_sections": list(policy["hot_reloadable_sections"]),
+                "restart_required_sections": list(policy["restart_required_sections"]),
+                "apply_policy": str(policy["apply_policy"]),
             }
             detail["assigned_config_version"] = assigned
             for bot in self.bots:
@@ -264,6 +292,44 @@ class MemoryMutableStore(MemoryReadStore):
                 level="info",
                 code="CONFIG_ASSIGNED",
                 message=f"config {config_scope} v{version_no} assigned",
+            )
+            return _clone(assigned)
+
+    def acknowledge_config_assignment(
+        self,
+        *,
+        bot_id: str,
+        ack_status: str,
+        ack_message: str | None,
+    ) -> dict[str, object] | None:
+        with self._lock:
+            detail = self.bot_details.get(bot_id)
+            if detail is None:
+                return None
+            assigned = detail.get("assigned_config_version")
+            if not isinstance(assigned, dict):
+                return None
+            normalized_status = ack_status.strip().lower()
+            if normalized_status not in {"applied", "rejected", "restart_required"}:
+                return None
+            assigned["apply_status"] = normalized_status
+            assigned["ack_message"] = ack_message
+            assigned["acknowledged_at"] = _sample_time(0)
+            for bot in self.bots:
+                if bot["bot_id"] == bot_id:
+                    bot["assigned_config_version"] = assigned
+                    break
+            self.emit_alert(
+                bot_id=bot_id,
+                level="info" if normalized_status == "applied" else "warn",
+                code={
+                    "applied": "CONFIG_APPLIED",
+                    "rejected": "CONFIG_REJECTED",
+                    "restart_required": "CONFIG_RESTART_REQUIRED",
+                }[normalized_status],
+                message=(
+                    f"config {assigned['config_scope']} v{assigned['version_no']} {normalized_status}"
+                ),
             )
             return _clone(assigned)
 
@@ -295,9 +361,26 @@ class MemoryMutableStore(MemoryReadStore):
                     "config_scope": "default",
                     "version_no": latest_default["version_no"],
                     "config_version_id": latest_default["config_version_id"],
+                    "apply_status": "applied",
+                    "acknowledged_at": _sample_time(0),
+                    "ack_message": "initial default config assignment",
+                    "changed_sections": ["initial_assignment"],
+                    "hot_reloadable_sections": [],
+                    "restart_required_sections": ["initial_assignment"],
+                    "apply_policy": "restart_required",
                 }
                 if latest_default is not None
-                else {"config_scope": "default", "version_no": 1}
+                else {
+                    "config_scope": "default",
+                    "version_no": 1,
+                    "apply_status": "applied",
+                    "acknowledged_at": _sample_time(0),
+                    "ack_message": "initial default config assignment",
+                    "changed_sections": ["initial_assignment"],
+                    "hot_reloadable_sections": [],
+                    "restart_required_sections": ["initial_assignment"],
+                    "apply_policy": "restart_required",
+                }
             )
 
             existing = next((bot for bot in self.bots if bot["bot_key"] == bot_key), None)

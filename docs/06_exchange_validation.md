@@ -15,6 +15,9 @@
 - simulation test: fake connector로 strategy 판단 검증
 - live smoke test: 최소 권한 실계정으로 잔고 조회, 주문 가능 정보 조회, 주문 생성/취소 소액 검증
 
+현재 저장소에는 `tools_for_ai/fixtures/exchanges/*_contract_fixtures.json`에 내부 contract fixture 자산이 추가되어 있다.
+이 fixture는 공식 live capture가 아니라 adapter 구현 전에 request/response category를 고정하는 최소 mock 자산이다.
+
 ### 40.2 거래소별 필수 검증 항목
 
 공통:

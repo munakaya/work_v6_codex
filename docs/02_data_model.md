@@ -72,6 +72,12 @@ create table bot_config_assignments (
     config_version_id uuid not null references config_versions(id),
     applied boolean not null default false,
     applied_at timestamptz,
+    ack_status varchar(32) not null default 'pending',
+    ack_message text,
+    acked_at timestamptz,
+    changed_sections jsonb not null default '[]'::jsonb,
+    hot_reloadable_sections jsonb not null default '[]'::jsonb,
+    restart_required_sections jsonb not null default '[]'::jsonb,
     created_at timestamptz not null default now()
 );
 

@@ -23,6 +23,10 @@ When application code is introduced, add the corresponding setup, run, and test 
 - `PYTHONPATH=src ./.venv/bin/python tools_for_ai/exchange_auth_cases.py`: Upbit/Bithumb/Coinone auth helper의 JWT/payload/signature 생성 규칙을 검증
 - `PYTHONPATH=src ./.venv/bin/python tools_for_ai/private_exchange_ws_runtime_cases.py`: runtime API가 거래소별 private websocket auth-ready 상태를 조회하는지 검증
 - `PYTHONPATH=src ./.venv/bin/python tools_for_ai/arbitrage_replay_runner_cases.py`: replay runner가 저장된 재정거래 입력 payload를 다시 평가하고 mismatch를 감지하는지 검증
+- `PYTHONPATH=src ./.venv/bin/python tools_for_ai/hot_config_ack_cases.py`: assign-config와 config-ack가 pending/applied/restart_required 계약으로 동작하는지 검증
+- `PYTHONPATH=src ./.venv/bin/python tools_for_ai/arbitrage_event_replay_runner_cases.py`: event replay runner가 이벤트 순서에 맞는 decision 변화를 재현하는지 검증
+- `PYTHONPATH=src ./.venv/bin/python tools_for_ai/arbitrage_replay_csv_cases.py`: replay CSV export/import가 roundtrip 되는지 검증
+- `PYTHONPATH=src ./.venv/bin/python tools_for_ai/exchange_fixture_contract_cases.py`: 거래소별 내부 contract fixture 자산이 필수 category를 모두 포함하는지 검증
 
 ## Coding Style & Naming Conventions
 Use concise Markdown with clear section headings and short paragraphs. Prefer bullet lists for requirements, constraints, and decisions. Name new docs by purpose, not by date alone, for example `docs/architecture_overview.md` or `docs/exchange_adapter_notes.md`. Keep file and directory names lowercase with underscores.

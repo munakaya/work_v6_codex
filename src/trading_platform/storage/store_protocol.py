@@ -167,6 +167,14 @@ class ControlPlaneStoreProtocol(Protocol):
         version_no: int,
     ) -> dict[str, object] | None: ...
 
+    def acknowledge_config_assignment(
+        self,
+        *,
+        bot_id: str,
+        ack_status: str,
+        ack_message: str | None,
+    ) -> dict[str, object] | None: ...
+
     def acknowledge_alert(self, alert_id: str) -> dict[str, object] | None: ...
 
     def register_bot(

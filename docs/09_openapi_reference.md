@@ -860,8 +860,35 @@ paths:
       responses:
         '202':
           description: Assignment accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigAssignmentResponse'
         '404':
           description: Bot or config not found
+
+  /api/v1/bots/{bot_id}/config-ack:
+    post:
+      tags: [Configs]
+      summary: Acknowledge latest config assignment result
+      operationId: acknowledgeBotConfigAssignment
+      parameters:
+        - $ref: '#/components/parameters/BotId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigAssignmentAckRequest'
+      responses:
+        '202':
+          description: Config assignment acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigAssignmentResponse'
+        '404':
+          description: Bot or config assignment not found
 
   /api/v1/strategy-runs:
     post:
@@ -1461,9 +1488,9 @@ components:
 
     BotSummary:
       type: object
-      required: [id, bot_key, strategy_name, mode, status]
+      required: [bot_id, bot_key, strategy_name, mode, status]
       properties:
-        id:
+        bot_id:
           type: string
           format: uuid
         bot_key:
@@ -1479,12 +1506,16 @@ components:
         last_seen_at:
           type: string
           format: date-time
+        assigned_config_version:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/AssignedConfigVersion'
 
     ConfigVersionSummary:
       type: object
-      required: [id, config_scope, version_no, checksum, created_at]
+      required: [config_version_id, config_scope, version_no, checksum, created_at]
       properties:
-        id:
+        config_version_id:
           type: string
           format: uuid
         config_scope:
@@ -1518,10 +1549,15 @@ components:
         data:
           type: object
           properties:
-            bot:
-              $ref: '#/components/schemas/BotSummary'
-            assigned_config:
-              $ref: '#/components/schemas/ConfigVersionSummary'
+            bot_id:
+              type: string
+              format: uuid
+            assigned_config_version:
+              oneOf:
+                - type: 'null'
+                - $ref: '#/components/schemas/AssignedConfigVersion'
+            status:
+              type: string
         error:
           oneOf:
             - type: 'null'
@@ -1573,11 +1609,72 @@ components:
 
     AssignConfigRequest:
       type: object
-      required: [config_version_id]
+      required: [config_scope, version_no]
       properties:
+        config_scope:
+          type: string
+        version_no:
+          type: integer
+
+    AssignedConfigVersion:
+      type: object
+      properties:
+        config_scope:
+          type: string
+        version_no:
+          type: integer
         config_version_id:
           type: string
-          format: uuid
+        assigned_at:
+          type: string
+          format: date-time
+        apply_status:
+          type: string
+        acknowledged_at:
+          oneOf:
+            - type: 'null'
+            - type: string
+              format: date-time
+        ack_message:
+          oneOf:
+            - type: 'null'
+            - type: string
+        changed_sections:
+          type: array
+          items:
+            type: string
+        hot_reloadable_sections:
+          type: array
+          items:
+            type: string
+        restart_required_sections:
+          type: array
+          items:
+            type: string
+        apply_policy:
+          type: string
+
+    ConfigAssignmentAckRequest:
+      type: object
+      required: [ack_status]
+      properties:
+        ack_status:
+          type: string
+          enum: [APPLIED, REJECTED, RESTART_REQUIRED]
+        ack_message:
+          type: string
+
+    ConfigAssignmentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/AssignedConfigVersion'
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
 
     ConfigVersionResponse:
       type: object

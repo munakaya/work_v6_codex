@@ -376,6 +376,82 @@ class ControlPlaneWriteRouteMixin:
         self._sync_bot_state(bot_id)
         return HTTPStatus.ACCEPTED, self._response(data=result)
 
+    def _acknowledge_config_response(
+        self, path: str
+    ) -> tuple[HTTPStatus, dict[str, object]] | None:
+        prefix = "/api/v1/bots/"
+        suffix = "/config-ack"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+
+        bot_id = path[len(prefix) : -len(suffix)]
+        if not bot_id:
+            return None
+
+        unsupported = self._ensure_mutation_supported()
+        if unsupported is not None:
+            return unsupported
+
+        body, error = self._read_json_body()
+        if error is not None:
+            return error
+
+        ack_status = json_string(body.get("ack_status"))
+        ack_message = json_string(body.get("ack_message"))
+        invalid_fields = []
+        if "ack_status" in body and ack_status is None:
+            invalid_fields.append("ack_status")
+        if "ack_message" in body and ack_message is None:
+            invalid_fields.append("ack_message")
+        if invalid_fields:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": (
+                            "fields must be strings: "
+                            + ", ".join(sorted(set(invalid_fields)))
+                        ),
+                    }
+                ),
+            )
+
+        normalized_status = (ack_status or "").strip().upper()
+        if normalized_status not in {"APPLIED", "REJECTED", "RESTART_REQUIRED"}:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                self._response(
+                    error={
+                        "code": "INVALID_REQUEST",
+                        "message": (
+                            "ack_status must be one of APPLIED, REJECTED, RESTART_REQUIRED"
+                        ),
+                    }
+                ),
+            )
+
+        result = self.server.read_store.acknowledge_config_assignment(
+            bot_id=bot_id,
+            ack_status=normalized_status,
+            ack_message=ack_message,
+        )
+        if result is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "BOT_OR_CONFIG_ASSIGNMENT_NOT_FOUND",
+                        "message": "bot_id or latest config assignment not found",
+                    }
+                ),
+            )
+        self.server.metrics.observe_alert_emitted(
+            "info" if normalized_status == "APPLIED" else "warn"
+        )
+        self._sync_bot_state(bot_id)
+        return HTTPStatus.ACCEPTED, self._response(data=result)
+
     def _strategy_run_action_response(
         self, path: str
     ) -> tuple[HTTPStatus, dict[str, object]] | None:

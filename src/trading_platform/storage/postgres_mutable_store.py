@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .postgres_mutation_ops import (
+    acknowledge_config_assignment,
     acknowledge_alert,
     assign_config,
     create_config_version,
@@ -61,6 +62,9 @@ class PostgresMutableStore(PostgresReadStore):
 
     def assign_config(self, **kwargs) -> dict[str, object] | None:
         return assign_config(self.adapter, **kwargs)
+
+    def acknowledge_config_assignment(self, **kwargs) -> dict[str, object] | None:
+        return acknowledge_config_assignment(self.adapter, **kwargs)
 
     def acknowledge_alert(self, alert_id: str) -> dict[str, object] | None:
         return acknowledge_alert(self.adapter, alert_id)

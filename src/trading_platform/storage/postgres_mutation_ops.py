@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from ..config_apply_policy import summarize_config_assignment_policy
 from .postgres_bot_views import (
     bot_exists,
     get_bot_detail,
@@ -245,29 +246,93 @@ def assign_config(
     )
     if version_row is None:
         return None
+    current_detail = get_bot_detail(adapter, bot_id)
+    previous_version_row: dict[str, object] | None = None
+    if isinstance(current_detail, dict):
+        assigned = current_detail.get("assigned_config_version")
+        if isinstance(assigned, dict):
+            previous_scope = str(assigned.get("config_scope") or "").strip()
+            previous_version_no = assigned.get("version_no")
+            if previous_scope and isinstance(previous_version_no, int):
+                previous_version_row = adapter.fetch_one(
+                    """
+                    select
+                        id::text as config_version_id,
+                        config_scope,
+                        version_no,
+                        config_json,
+                        checksum,
+                        created_by,
+                        created_at
+                    from config_versions
+                    where config_scope = %s
+                      and version_no = %s
+                    limit 1
+                    """,
+                    (previous_scope, previous_version_no),
+                )
+    policy = summarize_config_assignment_policy(
+        previous_version_row.get("config_json")
+        if isinstance(previous_version_row, dict)
+        else None,
+        version_row["config_json"],
+    )
     row = adapter.fetch_one(
         """
         insert into bot_config_assignments (
             bot_id,
             config_version_id,
             applied,
-            applied_at
+            applied_at,
+            ack_status,
+            ack_message,
+            acked_at,
+            changed_sections,
+            hot_reloadable_sections,
+            restart_required_sections
         )
         values (
             %s::uuid,
             %s::uuid,
-            true,
-            now()
+            false,
+            null,
+            'pending',
+            null,
+            null,
+            %s::jsonb,
+            %s::jsonb,
+            %s::jsonb
         )
         returning
             %s as config_scope,
             %s as version_no,
             config_version_id::text as config_version_id,
-            coalesce(applied_at, created_at) as assigned_at
+            created_at as assigned_at,
+            ack_status as apply_status,
+            ack_message,
+            acked_at,
+            changed_sections,
+            hot_reloadable_sections,
+            restart_required_sections
         """,
         (
             bot_uuid,
             version_row["config_version_id"],
+            json.dumps(
+                list(policy["changed_sections"]),
+                separators=(",", ":"),
+                ensure_ascii=True,
+            ),
+            json.dumps(
+                list(policy["hot_reloadable_sections"]),
+                separators=(",", ":"),
+                ensure_ascii=True,
+            ),
+            json.dumps(
+                list(policy["restart_required_sections"]),
+                separators=(",", ":"),
+                ensure_ascii=True,
+            ),
             version_row["config_scope"],
             version_row["version_no"],
         ),
@@ -286,6 +351,89 @@ def assign_config(
         "version_no": int(version_no),
         "config_version_id": row["config_version_id"],
         "assigned_at": iso_text(row.get("assigned_at")),
+        "apply_status": row.get("apply_status"),
+        "ack_message": row.get("ack_message"),
+        "acknowledged_at": iso_text(row.get("acked_at")),
+        "changed_sections": row.get("changed_sections") or [],
+        "hot_reloadable_sections": row.get("hot_reloadable_sections") or [],
+        "restart_required_sections": row.get("restart_required_sections") or [],
+        "apply_policy": policy["apply_policy"],
+    }
+
+
+def acknowledge_config_assignment(
+    adapter: PostgresDriverAdapter,
+    *,
+    bot_id: str,
+    ack_status: str,
+    ack_message: str | None,
+) -> dict[str, object] | None:
+    bot_uuid = uuid_or_none(bot_id)
+    if bot_uuid is None or not bot_exists(adapter, bot_uuid):
+        return None
+    normalized_status = ack_status.strip().lower()
+    if normalized_status not in {"applied", "rejected", "restart_required"}:
+        return None
+    row = adapter.fetch_one(
+        """
+        with latest_assignment as (
+            select id
+            from bot_config_assignments
+            where bot_id = %s::uuid
+            order by created_at desc
+            limit 1
+        )
+        update bot_config_assignments bca
+        set
+            applied = case when %s = 'applied' then true else false end,
+            applied_at = case when %s = 'applied' then now() else null end,
+            ack_status = %s,
+            ack_message = %s,
+            acked_at = now()
+        from latest_assignment
+        where bca.id = latest_assignment.id
+        returning
+            config_version_id::text as config_version_id,
+            created_at as assigned_at,
+            ack_status as apply_status,
+            ack_message,
+            acked_at,
+            changed_sections,
+            hot_reloadable_sections,
+            restart_required_sections
+        """,
+        (bot_uuid, normalized_status, normalized_status, normalized_status, ack_message),
+    )
+    if row is None:
+        return None
+    detail = get_bot_detail(adapter, bot_id)
+    assigned = detail.get("assigned_config_version") if isinstance(detail, dict) else None
+    emit_alert(
+        adapter,
+        bot_id=bot_id,
+        level="info" if normalized_status == "applied" else "warn",
+        code={
+            "applied": "CONFIG_APPLIED",
+            "rejected": "CONFIG_REJECTED",
+            "restart_required": "CONFIG_RESTART_REQUIRED",
+        }[normalized_status],
+        message=(
+            f"config {assigned.get('config_scope')} v{assigned.get('version_no')} {normalized_status}"
+            if isinstance(assigned, dict)
+            else f"config assignment {normalized_status}"
+        ),
+    )
+    return {
+        "config_scope": assigned.get("config_scope") if isinstance(assigned, dict) else None,
+        "version_no": assigned.get("version_no") if isinstance(assigned, dict) else None,
+        "config_version_id": row["config_version_id"],
+        "assigned_at": iso_text(row.get("assigned_at")),
+        "apply_status": row.get("apply_status"),
+        "ack_message": row.get("ack_message"),
+        "acknowledged_at": iso_text(row.get("acked_at")),
+        "changed_sections": row.get("changed_sections") or [],
+        "hot_reloadable_sections": row.get("hot_reloadable_sections") or [],
+        "restart_required_sections": row.get("restart_required_sections") or [],
     }
 
 
@@ -374,13 +522,25 @@ def register_bot(
             bot_id,
             config_version_id,
             applied,
-            applied_at
+            applied_at,
+            ack_status,
+            ack_message,
+            acked_at,
+            changed_sections,
+            hot_reloadable_sections,
+            restart_required_sections
         )
         select
             %s::uuid,
             latest_default.id,
             true,
-            now()
+            now(),
+            'applied',
+            'initial default config assignment',
+            now(),
+            '["initial_assignment"]'::jsonb,
+            '[]'::jsonb,
+            '["initial_assignment"]'::jsonb
         from latest_default
         where not exists (
             select 1

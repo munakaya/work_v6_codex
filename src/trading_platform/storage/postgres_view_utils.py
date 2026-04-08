@@ -70,10 +70,28 @@ def assigned_config(row: dict[str, object]) -> dict[str, object] | None:
     }
     config_version_id = row.get("assigned_config_version_id")
     assigned_at = row.get("assigned_at")
+    apply_status = row.get("assigned_apply_status")
+    acknowledged_at = row.get("assigned_acknowledged_at")
+    ack_message = row.get("assigned_ack_message")
+    changed_sections = row.get("assigned_changed_sections")
+    hot_reloadable_sections = row.get("assigned_hot_reloadable_sections")
+    restart_required_sections = row.get("assigned_restart_required_sections")
     if config_version_id is not None:
         payload["config_version_id"] = config_version_id
     if assigned_at is not None:
         payload["assigned_at"] = iso_text(assigned_at)
+    if apply_status is not None:
+        payload["apply_status"] = apply_status
+    if acknowledged_at is not None:
+        payload["acknowledged_at"] = iso_text(acknowledged_at)
+    if ack_message is not None:
+        payload["ack_message"] = ack_message
+    if isinstance(changed_sections, list):
+        payload["changed_sections"] = list(changed_sections)
+    if isinstance(hot_reloadable_sections, list):
+        payload["hot_reloadable_sections"] = list(hot_reloadable_sections)
+    if isinstance(restart_required_sections, list):
+        payload["restart_required_sections"] = list(restart_required_sections)
     return payload
 
 

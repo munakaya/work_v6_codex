@@ -44,18 +44,30 @@ def list_bots(
             assigned.config_scope as assigned_config_scope,
             assigned.version_no as assigned_version_no,
             assigned.config_version_id as assigned_config_version_id,
-            assigned.assigned_at
+            assigned.assigned_at,
+            assigned.apply_status as assigned_apply_status,
+            assigned.acknowledged_at as assigned_acknowledged_at,
+            assigned.ack_message as assigned_ack_message,
+            assigned.changed_sections as assigned_changed_sections,
+            assigned.hot_reloadable_sections as assigned_hot_reloadable_sections,
+            assigned.restart_required_sections as assigned_restart_required_sections
         from bots b
         left join lateral (
             select
                 cv.config_scope,
                 cv.version_no,
                 cv.id::text as config_version_id,
-                coalesce(bca.applied_at, bca.created_at) as assigned_at
+                bca.created_at as assigned_at,
+                bca.ack_status as apply_status,
+                bca.acked_at as acknowledged_at,
+                bca.ack_message,
+                bca.changed_sections,
+                bca.hot_reloadable_sections,
+                bca.restart_required_sections
             from bot_config_assignments bca
             join config_versions cv on cv.id = bca.config_version_id
             where bca.bot_id = b.id
-            order by coalesce(bca.applied_at, bca.created_at) desc
+            order by bca.created_at desc
             limit 1
         ) assigned on true
         {where_clause}
@@ -85,18 +97,30 @@ def get_bot_detail(
             assigned.config_scope as assigned_config_scope,
             assigned.version_no as assigned_version_no,
             assigned.config_version_id as assigned_config_version_id,
-            assigned.assigned_at
+            assigned.assigned_at,
+            assigned.apply_status as assigned_apply_status,
+            assigned.acknowledged_at as assigned_acknowledged_at,
+            assigned.ack_message as assigned_ack_message,
+            assigned.changed_sections as assigned_changed_sections,
+            assigned.hot_reloadable_sections as assigned_hot_reloadable_sections,
+            assigned.restart_required_sections as assigned_restart_required_sections
         from bots b
         left join lateral (
             select
                 cv.config_scope,
                 cv.version_no,
                 cv.id::text as config_version_id,
-                coalesce(bca.applied_at, bca.created_at) as assigned_at
+                bca.created_at as assigned_at,
+                bca.ack_status as apply_status,
+                bca.acked_at as acknowledged_at,
+                bca.ack_message,
+                bca.changed_sections,
+                bca.hot_reloadable_sections,
+                bca.restart_required_sections
             from bot_config_assignments bca
             join config_versions cv on cv.id = bca.config_version_id
             where bca.bot_id = b.id
-            order by coalesce(bca.applied_at, bca.created_at) desc
+            order by bca.created_at desc
             limit 1
         ) assigned on true
         where b.id = %s::uuid

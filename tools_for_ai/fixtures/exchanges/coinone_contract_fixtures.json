@@ -1,0 +1,41 @@
+{
+  "exchange": "coinone",
+  "public_orderbook": {
+    "transport": "rest",
+    "response": {
+      "target_currency": "BTC",
+      "quote_currency": "KRW",
+      "asks": [{"price": "100000000", "qty": "0.5"}],
+      "bids": [{"price": "99900000", "qty": "0.4"}]
+    }
+  },
+  "order_create": {
+    "transport": "private_rest",
+    "response": {"result": "success", "order_id": "coinone-order-001"}
+  },
+  "order_status": {
+    "transport": "private_rest",
+    "response": {"result": "success", "order_id": "coinone-order-001", "status": "live"}
+  },
+  "order_cancel": {
+    "transport": "private_rest",
+    "response": {"result": "success", "order_id": "coinone-order-001", "status": "cancel"}
+  },
+  "auth_failed": {
+    "transport": "private_rest",
+    "response": {"result": "error", "error_code": "4", "error_msg": "auth failed"}
+  },
+  "rate_limited": {
+    "transport": "private_rest",
+    "http_status": 429,
+    "response": {"result": "error", "error_code": "104", "error_msg": "rate limited"}
+  },
+  "partial_fill_event": {
+    "transport": "private_ws",
+    "response": {"topic": "MYORDER", "status": "PARTIAL", "filled_qty": "0.1"}
+  },
+  "terminal_fill_event": {
+    "transport": "private_ws",
+    "response": {"topic": "MYORDER", "status": "FILLED", "filled_qty": "0.5"}
+  }
+}

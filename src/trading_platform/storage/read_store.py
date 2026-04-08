@@ -356,6 +356,15 @@ class MemoryReadStore:
     ) -> dict[str, object] | None:
         raise RuntimeError("mutation not supported for base memory store")
 
+    def acknowledge_config_assignment(
+        self,
+        *,
+        bot_id: str,
+        ack_status: str,
+        ack_message: str | None,
+    ) -> dict[str, object] | None:
+        raise RuntimeError("mutation not supported for base memory store")
+
     def acknowledge_alert(self, alert_id: str) -> dict[str, object] | None:
         raise RuntimeError("mutation not supported for base memory store")
 

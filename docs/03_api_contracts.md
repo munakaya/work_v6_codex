@@ -353,6 +353,27 @@
 
 - bot에 특정 config version 할당
 
+핵심 필드:
+
+- `config_scope`
+- `version_no`
+- `apply_status`
+- `apply_policy`
+- `changed_sections`
+- `hot_reloadable_sections`
+- `restart_required_sections`
+
+#### `POST /api/v1/bots/{bot_id}/config-ack`
+
+목적:
+
+- bot 또는 worker가 latest config assignment의 적용 결과를 ack
+
+핵심 필드:
+
+- `ack_status`: `APPLIED`, `REJECTED`, `RESTART_REQUIRED`
+- `ack_message`
+
 ### 18.6 Strategy Run API
 
 #### `POST /api/v1/strategy-runs`
@@ -603,13 +624,18 @@
 
 ```json
 {
-  "id": "uuid",
+  "bot_id": "uuid",
   "bot_key": "arb-upbit-bithumb-001",
   "strategy_name": "arbitrage",
   "mode": "shadow",
   "status": "running",
   "hostname": "trade-host-01",
-  "last_seen_at": "2026-04-03T14:12:00Z"
+  "last_seen_at": "2026-04-03T14:12:00Z",
+  "assigned_config_version": {
+    "config_scope": "default",
+    "version_no": 3,
+    "apply_status": "applied"
+  }
 }
 ```
 
