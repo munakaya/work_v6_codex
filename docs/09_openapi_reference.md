@@ -615,6 +615,27 @@ paths:
         '404':
           description: Requested private connector exchange not found
 
+  /api/v1/runtime/private-ws:
+    get:
+      tags: [Runtime]
+      summary: List private websocket monitor states
+      operationId: listPrivateExchangeWebsocketStates
+      parameters:
+        - in: query
+          name: exchange
+          schema:
+            type: string
+            enum: [upbit, bithumb, coinone]
+      responses:
+        '200':
+          description: Private websocket monitor states
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateExchangeWebsocketListResponse'
+        '404':
+          description: Requested private websocket exchange not found
+
   /api/v1/bots/events:
     get:
       tags: [Bots]
@@ -2918,6 +2939,81 @@ components:
             configured_count:
               type: integer
             ready_count:
+              type: integer
+            overall_state:
+              type: string
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ApiError'
+
+    PrivateExchangeWebsocketItem:
+      type: object
+      properties:
+        exchange:
+          type: string
+        configured:
+          type: boolean
+        auth_ready:
+          type: boolean
+        connection_state:
+          type: string
+        disconnect_count:
+          type: integer
+        last_connected_at:
+          oneOf:
+            - type: 'null'
+            - type: string
+              format: date-time
+        last_failed_at:
+          oneOf:
+            - type: 'null'
+            - type: string
+              format: date-time
+        last_close_code:
+          oneOf:
+            - type: 'null'
+            - type: integer
+        last_close_category:
+          oneOf:
+            - type: 'null'
+            - type: string
+        endpoint:
+          oneOf:
+            - type: 'null'
+            - type: string
+        ping_interval_seconds:
+          oneOf:
+            - type: 'null'
+            - type: integer
+        idle_timeout_seconds:
+          oneOf:
+            - type: 'null'
+            - type: integer
+        connection_limit:
+          oneOf:
+            - type: 'null'
+            - type: integer
+
+    PrivateExchangeWebsocketListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/PrivateExchangeWebsocketItem'
+            count:
+              type: integer
+            configured_count:
+              type: integer
+            auth_ready_count:
+              type: integer
+            connected_count:
               type: integer
             overall_state:
               type: string

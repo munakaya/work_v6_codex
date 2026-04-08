@@ -3,6 +3,7 @@
 이 문서는 관측성, 배포, 운영 보안, 장애 대응 원칙을 정리한다. 운영 도구와 runbook 변경은 이 문서를 기준으로 맞춘다.
 
 `private_http` 실연결 직전 준비와 운영 체크는 `04_private_http_go_live_checklist.md`를 함께 본다.
+PostgreSQL smoke는 `04_postgres_smoke_runbook.md`, 거래소 live smoke는 `04_live_smoke_checklist.md`, RC 점검은 `04_release_candidate_checklist.md`, 알림/대시보드 구체화는 `04_operational_alerts_dashboard.md`를 함께 본다.
 
 
 ## 23. Observability Spec

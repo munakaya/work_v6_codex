@@ -219,6 +219,50 @@ class ControlPlaneRuntimeReadRouteMixin:
             }
         )
 
+    def _runtime_private_ws_response(self, query: str) -> tuple[HTTPStatus, dict[str, object]]:
+        params = parse_qs(query)
+        exchange = (single_query_value(params, "exchange") or "").strip().lower()
+        items = [
+            connector.private_ws_monitor.as_dict()
+            for connector in self.server.private_exchange_connectors.values()
+        ]
+        if exchange:
+            items = [item for item in items if str(item.get("exchange") or "") == exchange]
+            if not items:
+                return (
+                    HTTPStatus.NOT_FOUND,
+                    self._response(
+                        error={
+                            "code": "EXCHANGE_NOT_FOUND",
+                            "message": "private websocket exchange not found",
+                        }
+                    ),
+                )
+        configured_count = sum(1 for item in items if bool(item.get("configured")))
+        auth_ready_count = sum(1 for item in items if bool(item.get("auth_ready")))
+        connected_count = sum(
+            1 for item in items if str(item.get("connection_state") or "") == "connected"
+        )
+        overall_state = (
+            "connected"
+            if connected_count == len(items) and items
+            else "not_connected"
+            if auth_ready_count > 0
+            else "missing"
+            if items
+            else "empty"
+        )
+        return HTTPStatus.OK, self._response(
+            data={
+                "items": items,
+                "count": len(items),
+                "configured_count": configured_count,
+                "auth_ready_count": auth_ready_count,
+                "connected_count": connected_count,
+                "overall_state": overall_state,
+            }
+        )
+
     def _limit_value(self, params: dict[str, list[str]]) -> int | None:
         raw = (single_query_value(params, "limit") or "").strip()
         if not raw:

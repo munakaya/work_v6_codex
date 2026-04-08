@@ -136,6 +136,10 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
             status, payload = self._runtime_private_connectors_response(query)
             return status, payload, False
 
+        if path == "/api/v1/runtime/private-ws":
+            status, payload = self._runtime_private_ws_response(query)
+            return status, payload, False
+
         if path == "/api/v1/recovery-traces":
             status, payload = self._recovery_traces_response(query)
             return status, payload, False

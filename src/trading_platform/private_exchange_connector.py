@@ -46,12 +46,49 @@ class PrivateExchangeConnectorInfo:
         }
 
 
+@dataclass(frozen=True)
+class PrivateExchangeWebsocketMonitorInfo:
+    exchange: str
+    configured: bool
+    auth_ready: bool
+    connection_state: str
+    disconnect_count: int
+    last_connected_at: str | None
+    last_failed_at: str | None
+    last_close_code: int | None
+    last_close_category: str | None
+    endpoint: str | None
+    ping_interval_seconds: int | None
+    idle_timeout_seconds: int | None
+    connection_limit: int | None
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "exchange": self.exchange,
+            "configured": self.configured,
+            "auth_ready": self.auth_ready,
+            "connection_state": self.connection_state,
+            "disconnect_count": self.disconnect_count,
+            "last_connected_at": self.last_connected_at,
+            "last_failed_at": self.last_failed_at,
+            "last_close_code": self.last_close_code,
+            "last_close_category": self.last_close_category,
+            "endpoint": self.endpoint,
+            "ping_interval_seconds": self.ping_interval_seconds,
+            "idle_timeout_seconds": self.idle_timeout_seconds,
+            "connection_limit": self.connection_limit,
+        }
+
+
 class PrivateExchangeConnectorProtocol(Protocol):
     exchange: str
     name: str
 
     @property
     def info(self) -> PrivateExchangeConnectorInfo: ...
+
+    @property
+    def private_ws_monitor(self) -> PrivateExchangeWebsocketMonitorInfo: ...
 
     def get_balances(self) -> PrivateExchangeResult: ...
 
@@ -81,6 +118,14 @@ class MissingCredentialsPrivateExchangeConnector:
             credential_source_path=(
                 None if self._status.source_path is None else str(self._status.source_path)
             ),
+        )
+
+    @property
+    def private_ws_monitor(self) -> PrivateExchangeWebsocketMonitorInfo:
+        return build_private_exchange_ws_monitor(
+            exchange=self.exchange,
+            configured=self._status.configured,
+            auth_ready=False,
         )
 
     def get_balances(self) -> PrivateExchangeResult:
@@ -122,6 +167,14 @@ class PlaceholderPrivateExchangeConnector:
             ready=True,
             state="ready_not_implemented",
             credential_source_path=str(self._credentials.source_path),
+        )
+
+    @property
+    def private_ws_monitor(self) -> PrivateExchangeWebsocketMonitorInfo:
+        return build_private_exchange_ws_monitor(
+            exchange=self.exchange,
+            configured=True,
+            auth_ready=True,
         )
 
     def get_balances(self) -> PrivateExchangeResult:
@@ -168,3 +221,46 @@ def build_private_exchange_connectors(
         exchange: build_private_exchange_connector(exchange, config=config)
         for exchange in exchanges
     }
+
+
+def build_private_exchange_ws_monitor(
+    *,
+    exchange: str,
+    configured: bool,
+    auth_ready: bool,
+) -> PrivateExchangeWebsocketMonitorInfo:
+    endpoint_by_exchange = {
+        "upbit": "wss://api.upbit.com/websocket/v1/private",
+        "bithumb": None,
+        "coinone": "wss://stream.coinone.co.kr/v1/private",
+    }
+    ping_interval_by_exchange = {
+        "upbit": None,
+        "bithumb": None,
+        "coinone": 900,
+    }
+    idle_timeout_by_exchange = {
+        "upbit": None,
+        "bithumb": None,
+        "coinone": 1800,
+    }
+    connection_limit_by_exchange = {
+        "upbit": None,
+        "bithumb": None,
+        "coinone": 20,
+    }
+    return PrivateExchangeWebsocketMonitorInfo(
+        exchange=exchange,
+        configured=configured,
+        auth_ready=auth_ready,
+        connection_state="not_connected" if auth_ready else "not_configured",
+        disconnect_count=0,
+        last_connected_at=None,
+        last_failed_at=None,
+        last_close_code=None,
+        last_close_category=None,
+        endpoint=endpoint_by_exchange.get(exchange),
+        ping_interval_seconds=ping_interval_by_exchange.get(exchange),
+        idle_timeout_seconds=idle_timeout_by_exchange.get(exchange),
+        connection_limit=connection_limit_by_exchange.get(exchange),
+    )

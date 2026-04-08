@@ -9,9 +9,9 @@
 - `02_data_model.md`: PostgreSQL, Redis, migration 정책
 - `03_api_contracts.md`: API 명세와 OpenAPI 초안
 - `04_operations.md`: observability, deployment, auth/RBAC, 장애 대응
-  관련 상세 문서: `04_private_http_go_live_checklist.md`
+  관련 상세 문서: `04_private_http_go_live_checklist.md`, `04_postgres_smoke_runbook.md`, `04_live_smoke_checklist.md`, `04_release_candidate_checklist.md`, `04_operational_alerts_dashboard.md`
 - `05_strategy_and_risk.md`: 전략/리스크 설계 인덱스
-  관련 상세 문서: `05_strategy_records.md`, `05_arbitrage_algorithm_review.md`, `05_arbitrage_algorithm_execution_spec.md`, `05_arbitrage_algorithm_validation_cases.md`, `05_arbitrage_reason_code_precedence.md`, `05_arbitrage_lifecycle_state_machine.md`, `05_arbitrage_recovery_trace_contract.md`, `05_arbitrage_runtime_invariants.md`, `05_arbitrage_invariant_code_catalog.md`, `05_arbitrage_shadow_live_gate.md`, `05_arbitrage_observability_spec.md`, `05_arbitrage_replay_restore_accounting.md`, `05_arbitrage_incident_taxonomy.md`, `05_arbitrage_test_matrix.md`, `05_trade_recovery.md`, `05_risk_and_config.md`
+  관련 상세 문서: `05_strategy_records.md`, `05_arbitrage_algorithm_review.md`, `05_arbitrage_algorithm_execution_spec.md`, `05_arbitrage_algorithm_validation_cases.md`, `05_arbitrage_reason_code_precedence.md`, `05_arbitrage_lifecycle_state_machine.md`, `05_arbitrage_recovery_trace_contract.md`, `05_arbitrage_runtime_invariants.md`, `05_arbitrage_invariant_code_catalog.md`, `05_arbitrage_shadow_live_gate.md`, `05_arbitrage_observability_spec.md`, `05_arbitrage_replay_restore_accounting.md`, `05_arbitrage_incident_taxonomy.md`, `05_arbitrage_test_matrix.md`, `05_trade_recovery.md`, `05_risk_and_config.md`, `05_arbitrage_replay_runner.md`
 - `06_exchange_adapters.md`: 거래소 설계 인덱스
   관련 상세 문서: `06_exchange_adapter_core.md`, `06_exchange_protocol_reference.md`, `06_exchange_validation.md`
 - `07_ui_and_control_plane.md`: UI 설계 인덱스

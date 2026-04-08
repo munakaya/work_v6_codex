@@ -148,6 +148,9 @@
 
 문서상 Upbit는 API Key 기반 인증 가이드를 제공하며, Exchange REST와 private WebSocket 모두 인증이 필요하다.
 
+현재 코드에는 `src/trading_platform/strategy/exchange_auth.py`에 Upbit JWT helper가 추가되어 있다.
+이 helper는 repeated query order를 유지한 query string과 `query_hash` 생성 계약을 고정하는 용도다.
+
 권장 구현 흐름:
 
 1. worker가 secure store에서 access key / secret key 로드
@@ -166,6 +169,9 @@
 
 빗썸은 private API와 private websocket이 분리되어 있고, 버전 변화가 있으므로 auth flow 구현 전 최종 문서 버전을 잠가야 한다.
 
+현재 코드에는 `src/trading_platform/strategy/exchange_auth.py`에 Bithumb JWT helper가 추가되어 있다.
+다만 Bithumb는 문서 버전별 auth field 차이가 있으므로, 이 helper는 `access_key`, `nonce`, `timestamp`, `query_hash` 계약을 검증하는 최소 공통 골격으로만 본다.
+
 권장 구현 흐름:
 
 1. worker가 local/secure source에서 `access_key` / `secret_key` 로드
@@ -182,6 +188,9 @@
 ### 35.4 Coinone Auth Flow
 
 코인원은 private REST와 private websocket 모두 인증이 필요하며, request signing / nonce 관리가 핵심이다.
+
+현재 코드에는 `src/trading_platform/strategy/exchange_auth.py`에 Coinone payload/signature helper가 추가되어 있다.
+이 helper는 `access_token`, `nonce`, payload base64, `X-COINONE-SIGNATURE` 계산을 공통화하는 용도다.
 
 권장 구현 흐름:
 

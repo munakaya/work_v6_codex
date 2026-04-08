@@ -9,6 +9,7 @@
 
 ### 40.1 테스트 계층
 
+- auth unit test: 거래소별 서명/query_hash/payload/header 생성 규칙 검증
 - contract test: 공식 문서와 샘플 payload 기준의 request/response schema 검증
 - replay test: 저장된 orderbook / trade / order event를 재생
 - simulation test: fake connector로 strategy 판단 검증
@@ -18,6 +19,7 @@
 
 공통:
 
+- 거래소 auth helper 서명 규칙 검증
 - public REST orderbook 정상 수신
 - public WS orderbook reconnect
 - private balance 조회

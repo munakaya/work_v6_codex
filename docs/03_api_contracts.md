@@ -701,6 +701,7 @@
 
 - `GET /api/v1/runtime/streams`
 - `GET /api/v1/runtime/private-connectors`
+- `GET /api/v1/runtime/private-ws`
 
 #### Bots
 
@@ -1019,6 +1020,38 @@
 - `items[].ready`
 - `items[].state`
 - `items[].credential_source_path`
+
+#### `GET /api/v1/runtime/private-ws`
+
+목적:
+
+- 거래소별 private websocket 인증 준비 상태와 운영 메타데이터를 조회
+- 아직 실제 WS connector가 없더라도, 어느 거래소가 `auth_ready` 인지와 기본 연결 제한 정보를 운영 화면에서 확인
+
+쿼리:
+
+- `exchange`: 선택. `upbit`, `bithumb`, `coinone` 중 하나
+
+응답 핵심 필드:
+
+- `count`
+- `configured_count`
+- `auth_ready_count`
+- `connected_count`
+- `overall_state`
+- `items[].exchange`
+- `items[].configured`
+- `items[].auth_ready`
+- `items[].connection_state`
+- `items[].disconnect_count`
+- `items[].last_connected_at`
+- `items[].last_failed_at`
+- `items[].last_close_code`
+- `items[].last_close_category`
+- `items[].endpoint`
+- `items[].ping_interval_seconds`
+- `items[].idle_timeout_seconds`
+- `items[].connection_limit`
 
 #### `GET /api/v1/bots/events`
 
