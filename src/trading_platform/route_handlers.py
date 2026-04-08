@@ -41,8 +41,13 @@ class ControlPlaneRouteMixin(
             error=error,
         )
 
-    def _write_json(self, status: HTTPStatus, payload: dict[str, object]) -> None:
-        write_json(self, status, payload)
+    def _write_json(
+        self,
+        status: HTTPStatus,
+        payload: dict[str, object],
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        write_json(self, status, payload, headers=headers)
 
     def _write_text(
         self,

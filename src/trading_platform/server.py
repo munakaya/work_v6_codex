@@ -16,6 +16,7 @@ from .private_exchange_connector import (
     PrivateExchangeConnectorProtocol,
     build_private_exchange_connectors,
 )
+from .request_guard import WriteRequestGuard, WriteRequestGuardConfig
 from .recovery_runtime import RecoveryRuntime
 from .redis_runtime import RedisRuntime
 from .rate_limit import ExponentialBackoffPolicy, RateLimitPolicy
@@ -58,6 +59,13 @@ class ControlPlaneServer(ThreadingHTTPServer):
         self.market_data_runtime = market_data_runtime
         self.strategy_runtime = strategy_runtime
         self.recovery_runtime = recovery_runtime
+        self.write_request_guard = WriteRequestGuard(
+            WriteRequestGuardConfig(
+                admin_token=config.admin_token,
+                window_ms=config.control_plane_write_rate_limit_window_ms,
+                max_requests=config.control_plane_write_rate_limit_max_requests,
+            )
+        )
 
 
 class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler):
@@ -83,10 +91,15 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
         started = perf_counter()
         parsed = urlparse(self.path)
         status = HTTPStatus.NOT_FOUND
+        headers: dict[str, str] | None = None
 
         try:
-            status, payload = self._dispatch_post(parsed.path)
-            self._write_json(status, payload)
+            blocked = self._write_request_block_response(parsed.path)
+            if blocked is not None:
+                status, payload, headers = blocked
+            else:
+                status, payload = self._dispatch_post(parsed.path)
+            self._write_json(status, payload, headers=headers)
         finally:
             self.server.metrics.observe_request(
                 "POST", status.value, perf_counter() - started
@@ -245,6 +258,48 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
         return HTTPStatus.NOT_FOUND, self._response(
             error={"code": "NOT_FOUND", "message": "route not found"}
         )
+
+    def _write_request_block_response(
+        self, path: str
+    ) -> tuple[HTTPStatus, dict[str, object], dict[str, str] | None] | None:
+        if not self._is_guarded_post_route(path):
+            return None
+
+        retry_after_ms = self.server.write_request_guard.check_rate_limit(
+            self.client_address[0]
+        )
+        if retry_after_ms is not None:
+            retry_after_seconds = max(1, (retry_after_ms + 999) // 1000)
+            return (
+                HTTPStatus.TOO_MANY_REQUESTS,
+                self._response(
+                    error={
+                        "code": "WRITE_RATE_LIMITED",
+                        "message": "too many write requests",
+                        "retry_after_ms": retry_after_ms,
+                    }
+                ),
+                {"Retry-After": str(retry_after_seconds)},
+            )
+
+        if not self.server.write_request_guard.authenticate(
+            self.headers.get("Authorization")
+        ):
+            return (
+                HTTPStatus.UNAUTHORIZED,
+                self._response(
+                    error={
+                        "code": "ADMIN_AUTH_REQUIRED",
+                        "message": "write API requires a valid bearer token",
+                    }
+                ),
+                {"WWW-Authenticate": "Bearer"},
+            )
+
+        return None
+
+    def _is_guarded_post_route(self, path: str) -> bool:
+        return path.startswith("/api/v1/")
 
 
 def build_server(config: AppConfig) -> ControlPlaneServer:

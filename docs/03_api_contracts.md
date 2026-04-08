@@ -15,6 +15,8 @@
 - `request_id`를 응답 헤더 또는 body에 포함
 - 시간 필드는 `ISO 8601 UTC` 문자열 사용
 - 운영 명령 API는 비동기 처리 기준으로 `accepted` 상태를 반환 가능
+- `TP_ADMIN_TOKEN`이 설정되면 모든 write API(`POST /api/v1/*`)는 `Authorization: Bearer <token>`을 요구
+- `TP_CONTROL_PLANE_WRITE_RATE_LIMIT_*`가 설정되면 write API는 `429`와 `retry_after_ms`를 반환할 수 있음
 
 응답 예시:
 
@@ -71,6 +73,7 @@
 - `strategy_runtime`에는 evaluation/persist/submit 카운터와 execution 모드(`simulate_success`, `simulate_failure`, `simulate_fill`, `private_stub`, `private_http`)도 포함
 - `strategy_runtime`에는 현재 연결된 execution adapter 이름도 포함
 - `recovery_runtime`에는 active trace 처리, submit-timeout watchdog, terminal evaluation close sync, auto resolve, manual handoff 승격 카운터가 포함
+- `write_api_guard`에는 write API bearer token 보호와 per-IP rate limit 활성 여부가 포함
 - `strategy_runtime.execution_mode=private_http`이고 execution이 켜져 있으면 `dependencies.private_execution`도 함께 검사
 - `dependencies.exchange_trading_keys`에는 upbit/bithumb/coinone 키 파일 상태와 primary/fallback 경로가 포함
 - 이때 `TP_STRATEGY_PRIVATE_EXECUTION_HEALTH_URL`이 없거나 health probe가 실패하면 ready는 `degraded`
@@ -1137,8 +1140,10 @@
 - `200`: 정상 조회/처리
 - `202`: 비동기 명령 접수
 - `400`: 잘못된 요청
+- `401`: write API 인증 실패
 - `404`: 리소스 없음
 - `409`: 상태 충돌
+- `429`: write API 요청 제한 초과
 - `422`: 도메인 검증 실패
 - `500`: 서버 내부 오류
 
@@ -1148,3 +1153,7 @@
 
 - 1단계: 내부망 + static admin token
 - 2단계: service-to-service token 또는 mTLS
+- 구현 기준:
+  - `TP_ADMIN_TOKEN`이 비어 있으면 local/dev에서는 write API 인증을 생략할 수 있음
+  - `TP_ADMIN_TOKEN`이 설정되면 write API는 `Authorization: Bearer <token>`이 없거나 틀릴 때 `401`을 반환
+  - 선택적으로 `TP_CONTROL_PLANE_WRITE_RATE_LIMIT_WINDOW_MS`, `TP_CONTROL_PLANE_WRITE_RATE_LIMIT_MAX_REQUESTS`로 write API per-IP 기본 제한을 켤 수 있음

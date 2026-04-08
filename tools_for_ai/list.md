@@ -15,3 +15,4 @@
 - private_exchange_runtime_cases.py: runtime API가 private 거래소 connector 상태를 조회/필터링할 수 있는지 검증한다
 - market_data_rate_limit_cases.py: 공통 token bucket limiter와 market data retry/backoff가 설정대로 동작하는지 검증한다
 - market_data_runtime_rate_limit_cases.py: market-data/runtime API가 rate limit과 retry/backoff 설정을 노출하는지 검증한다
+- control_plane_write_guard_cases.py: write API bearer token 보호와 per-IP 기본 rate limit이 401/429로 동작하는지 실제 서버 기준으로 검증한다

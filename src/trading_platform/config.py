@@ -68,6 +68,9 @@ class AppConfig:
     market_data_poll_exchange: str
     market_data_poll_markets: tuple[str, ...]
     market_data_poll_interval_ms: int
+    admin_token: str | None
+    control_plane_write_rate_limit_window_ms: int
+    control_plane_write_rate_limit_max_requests: int
     strategy_runtime_enabled: bool
     strategy_runtime_interval_ms: int
     strategy_runtime_persist_intent: bool
@@ -149,6 +152,13 @@ def load_config() -> AppConfig:
         market_data_poll_exchange=os.getenv("TP_MARKET_DATA_POLL_EXCHANGE", "upbit"),
         market_data_poll_markets=_env_csv("TP_MARKET_DATA_POLL_MARKETS"),
         market_data_poll_interval_ms=_env_int("TP_MARKET_DATA_POLL_INTERVAL_MS", 3000),
+        admin_token=os.getenv("TP_ADMIN_TOKEN"),
+        control_plane_write_rate_limit_window_ms=_env_int(
+            "TP_CONTROL_PLANE_WRITE_RATE_LIMIT_WINDOW_MS", 0
+        ),
+        control_plane_write_rate_limit_max_requests=_env_int(
+            "TP_CONTROL_PLANE_WRITE_RATE_LIMIT_MAX_REQUESTS", 0
+        ),
         strategy_runtime_enabled=_env_bool("TP_STRATEGY_RUNTIME_ENABLED", False),
         strategy_runtime_interval_ms=_env_int("TP_STRATEGY_RUNTIME_INTERVAL_MS", 3000),
         strategy_runtime_persist_intent=_env_bool(

@@ -20,10 +20,17 @@ def response_payload(
     }
 
 
-def write_json(handler, status: HTTPStatus, payload: dict[str, object]) -> None:
+def write_json(
+    handler,
+    status: HTTPStatus,
+    payload: dict[str, object],
+    headers: dict[str, str] | None = None,
+) -> None:
     encoded = json.dumps(payload).encode("utf-8")
     handler.send_response(status.value)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
+    for header_name, header_value in (headers or {}).items():
+        handler.send_header(header_name, header_value)
     handler.send_header("Content-Length", str(len(encoded)))
     handler.end_headers()
     handler.wfile.write(encoded)

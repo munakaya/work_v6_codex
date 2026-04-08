@@ -153,6 +153,22 @@ class ControlPlaneReadRouteMixin:
                 "strategy_runtime": self.server.strategy_runtime.info.as_dict(),
                 "recovery_runtime": self.server.recovery_runtime.info.as_dict(),
                 "read_store": self.server.store_bootstrap.as_dict(),
+                "write_api_guard": {
+                    "auth_enabled": self.server.write_request_guard.config.auth_enabled,
+                    "rate_limit_enabled": (
+                        self.server.write_request_guard.config.rate_limit_enabled
+                    ),
+                    "rate_limit_window_ms": (
+                        self.server.write_request_guard.config.window_ms
+                        if self.server.write_request_guard.config.rate_limit_enabled
+                        else 0
+                    ),
+                    "rate_limit_max_requests": (
+                        self.server.write_request_guard.config.max_requests
+                        if self.server.write_request_guard.config.rate_limit_enabled
+                        else 0
+                    ),
+                },
                 "dependencies": dependencies,
                 "readiness_checks": {
                     "dependencies_ready": dependency_ready,

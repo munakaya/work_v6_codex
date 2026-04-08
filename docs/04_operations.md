@@ -163,6 +163,9 @@
 - `DATABASE_URL`
 - `REDIS_URL`
 - `ADMIN_TOKEN`
+- `TP_ADMIN_TOKEN`
+- `TP_CONTROL_PLANE_WRITE_RATE_LIMIT_WINDOW_MS`
+- `TP_CONTROL_PLANE_WRITE_RATE_LIMIT_MAX_REQUESTS`
 
 #### Strategy Worker
 
@@ -194,12 +197,15 @@
 - `.env`는 저장소에 커밋하지 않는다.
 - 운영 secret은 vault 또는 배포 환경 secret store를 우선 사용한다.
 - local 개발 시에만 `.env.local` 또는 별도 local secret file 허용
+- control plane write API 보호에 쓰는 `TP_ADMIN_TOKEN`도 일반 env가 아니라 secret로 취급한다.
 - bot API key/secret은 strategy worker가 직접 읽되 Control Plane DB에는 평문 저장 금지
 - local trading key file 조회 순서는 `/dev/shm/keys/{exchange}_trading.json` 후 `~/.key/{exchange}.json` fallback으로 둔다.
 - `/dev/shm/keys`는 RAM 디스크이므로 재부팅 시 사라질 수 있다.
 - worker 또는 bot 부팅 시 `fetch-keys.sh`가 `/dev/shm/keys`를 다시 채운다는 전제를 운영 문서에 포함한다.
 - local trading key file JSON은 모든 거래소에서 `{"access_key": "...", "secret_key": "..."}`를 기본 형식으로 사용한다.
 - key file이 아직 없는 상태는 배포 전 또는 미등록 상태로 보고, worker는 이를 명시적으로 처리해야 한다.
+- write API 보호가 필요하면 `TP_ADMIN_TOKEN`을 설정하고, public read는 유지하되 write API만 bearer token으로 보호한다.
+- 필요 시 `TP_CONTROL_PLANE_WRITE_RATE_LIMIT_WINDOW_MS`, `TP_CONTROL_PLANE_WRITE_RATE_LIMIT_MAX_REQUESTS`로 per-IP write 요청 제한을 켠다.
 
 ### 25.5 초기 배포 순서
 

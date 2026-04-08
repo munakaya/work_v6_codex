@@ -16,6 +16,8 @@ info:
   description: >
     Automated trading platform control plane for bot registry,
     config management, strategy runs, order intents, orders, fills, and alerts.
+    When TP_ADMIN_TOKEN is configured, write endpoints require Bearer auth and
+    may return 401 or 429.
 
 servers:
   - url: https://api.example.com
@@ -462,6 +464,8 @@ paths:
       tags: [MarketData]
       summary: Refresh market snapshots now
       operationId: pollMarketSnapshots
+      security:
+        - AdminBearerAuth: []
       parameters:
         - in: header
           name: X-Trace-Id
@@ -489,6 +493,10 @@ paths:
                 $ref: '#/components/schemas/MarketDataPollResponse'
         '400':
           description: Invalid request
+        '401':
+          $ref: '#/components/responses/UnauthorizedWrite'
+        '429':
+          $ref: '#/components/responses/WriteRateLimited'
 
   /api/v1/market-data/events:
     get:
@@ -654,6 +662,8 @@ paths:
       tags: [Bots]
       summary: Register a bot instance
       operationId: registerBot
+      security:
+        - AdminBearerAuth: []
       requestBody:
         required: true
         content:
@@ -667,6 +677,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BotRegisterResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedWrite'
+        '429':
+          $ref: '#/components/responses/WriteRateLimited'
         '409':
           description: Bot key already registered
 
@@ -718,6 +732,8 @@ paths:
       tags: [Bots]
       summary: Submit bot heartbeat
       operationId: submitHeartbeat
+      security:
+        - AdminBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/BotId'
       requestBody:
@@ -733,6 +749,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HeartbeatResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedWrite'
+        '429':
+          $ref: '#/components/responses/WriteRateLimited'
         '404':
           description: Bot not found
 
@@ -741,6 +761,8 @@ paths:
       tags: [Configs]
       summary: Create config version
       operationId: createConfigVersion
+      security:
+        - AdminBearerAuth: []
       requestBody:
         required: true
         content:
@@ -754,6 +776,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConfigVersionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedWrite'
+        '429':
+          $ref: '#/components/responses/WriteRateLimited'
 
   /api/v1/configs/{config_scope}/latest:
     get:
@@ -1353,6 +1379,12 @@ paths:
           description: Alert not found
 
 components:
+  securitySchemes:
+    AdminBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+
   parameters:
     BotId:
       in: path
@@ -2742,6 +2774,17 @@ components:
                   oneOf:
                     - type: 'null'
                     - type: string
+            write_api_guard:
+              type: object
+              properties:
+                auth_enabled:
+                  type: boolean
+                rate_limit_enabled:
+                  type: boolean
+                rate_limit_window_ms:
+                  type: integer
+                rate_limit_max_requests:
+                  type: integer
             dependencies:
               type: object
               properties:
@@ -3701,4 +3744,10 @@ components:
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/ApiError'
+
+  responses:
+    UnauthorizedWrite:
+      description: Missing or invalid bearer token for write API
+    WriteRateLimited:
+      description: Too many write requests from the same client IP
 ```

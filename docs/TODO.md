@@ -1,7 +1,7 @@
 # TODO
 
 이 문서는 아직 남아 있는 구현/운영 보강 항목을 짧게 적어두는 메모다.
-이번 목록은 `/home/user/git_work/work_v6_gpt-pro`를 검토해서 현재 저장소에 바로 도움이 되는 항목만 추렸다.
+이번 목록은 여러 참고 저장소를 검토해서 현재 저장소에 바로 도움이 되는 항목만 추렸다.
 
 ## 1. Hot config 적용/ack 계약
 
@@ -102,19 +102,7 @@
   - `work_v6_claude/scripts/csv_export.ts`
   - `work_v6_claude/scripts/csv_import.ts`
 
-## 9. control-plane write API 인증 / 기본 rate limit
-
-- 현재 문서에는 static admin token 방향이 있지만, 실제 write route 보호와 회귀 테스트는 더 보강할 여지가 있다.
-- 최소 범위:
-  - 쓰기 API에 bearer token 요구
-  - 읽기 API는 공개 범위 유지 여부를 명시
-  - 잘못된 토큰/누락 토큰에 대한 401 검증
-  - 과도한 요청에 대한 기본 429 보호 여부 검토
-- 참고:
-  - `work_v4.1/test/integration/server_auth.test.ts`
-  - `work_v4.1/packages/server/src/middleware/rate_limit.ts`
-
-## 10. private WS 연결 상태 모니터링 표면
+## 9. private WS 연결 상태 모니터링 표면
 
 - 현재 문서에는 close code, ping scheduler, reconnect 정책이 있지만 런타임 표면은 더 구체화할 수 있다.
 - 최소 범위:
