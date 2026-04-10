@@ -1077,12 +1077,12 @@ def main() -> None:
     terminal_trace = redis_runtime.get_recovery_trace(recovery_trace_id=terminal_trace_id)
     _assert(terminal_trace is not None, "terminal intent trace missing")
     _assert(
-        terminal_trace.get("status") == "resolved",
-        "terminal intent case status mismatch",
+        terminal_trace.get("status") == "handoff_required",
+        "terminal intent without residual evidence should hand off",
     )
     _assert(
-        terminal_trace.get("resolution_reason") == "terminal_intent_and_no_active_orders",
-        "terminal intent resolution reason mismatch",
+        terminal_trace.get("handoff_reason") == "recovery_timeout_exceeded",
+        "terminal intent handoff reason mismatch",
     )
 
     stale_eval_run_id = "run_submit_timeout_case"
@@ -1295,6 +1295,7 @@ def main() -> None:
             "lifecycle_state": "unwind_in_progress",
             "manual_handoff_required": False,
             "incident_code": "ARB-202 UNWIND_IN_PROGRESS",
+            "residual_exposure_quote": "0",
             "created_at": _iso(datetime.now(UTC) - timedelta(seconds=3)),
             "updated_at": _iso(datetime.now(UTC)),
         },
@@ -1430,6 +1431,89 @@ def main() -> None:
     _assert(
         failed_unwind_eval.get("lifecycle_preview") == "manual_handoff",
         "failed unwind latest evaluation should switch to manual_handoff",
+    )
+
+    failed_unwind_zero_run_id = "run_unwind_failure_zero_residual_case"
+    failed_unwind_zero_bot_id = bot_id
+    store.strategy_runs[failed_unwind_zero_run_id] = {
+        "run_id": failed_unwind_zero_run_id,
+        "bot_id": failed_unwind_zero_bot_id,
+        "strategy_name": "arbitrage",
+        "mode": "shadow",
+        "status": "running",
+        "created_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "started_at": _iso(datetime.now(UTC) - timedelta(seconds=10)),
+        "stopped_at": None,
+        "decision_count": 1,
+    }
+    failed_unwind_zero_outcome, failed_unwind_zero_intent = store.create_order_intent(
+        strategy_run_id=failed_unwind_zero_run_id,
+        market="KRW-BTC",
+        buy_exchange="sample",
+        sell_exchange="upbit",
+        side_pair="buy_then_sell",
+        target_qty="0.09",
+        expected_profit=None,
+        expected_profit_ratio=None,
+        status="submitted",
+        decision_context={"source": "unwind_failure_zero_case"},
+    )
+    _assert(
+        failed_unwind_zero_outcome == "created" and failed_unwind_zero_intent is not None,
+        "failed unwind zero residual intent create failed",
+    )
+    failed_unwind_zero_order_outcome, failed_unwind_zero_order = store.create_order(
+        order_intent_id=str(failed_unwind_zero_intent["intent_id"]),
+        exchange_name="sample",
+        exchange_order_id="unwind-failure-zero-buy-1",
+        market="KRW-BTC",
+        side="buy",
+        requested_price="100000",
+        requested_qty="0.09",
+        status="cancelled",
+        raw_payload={"source": "unwind_failure_zero_case"},
+    )
+    _assert(
+        failed_unwind_zero_order_outcome == "created"
+        and failed_unwind_zero_order is not None,
+        "failed unwind zero residual order create failed",
+    )
+    failed_unwind_zero_trace_id = "rt_unwind_failure_zero_residual_case"
+    redis_runtime.sync_recovery_trace(
+        recovery_trace_id=failed_unwind_zero_trace_id,
+        payload={
+            "recovery_trace_id": failed_unwind_zero_trace_id,
+            "run_id": failed_unwind_zero_run_id,
+            "bot_id": failed_unwind_zero_bot_id,
+            "intent_id": "original_entry_intent_failure_zero_case",
+            "linked_unwind_action_id": str(failed_unwind_zero_intent["intent_id"]),
+            "linked_unwind_order_id": str(failed_unwind_zero_order["order_id"]),
+            "status": "active",
+            "lifecycle_state": "unwind_in_progress",
+            "manual_handoff_required": False,
+            "incident_code": "ARB-202 UNWIND_IN_PROGRESS",
+            "residual_exposure_quote": "0",
+            "created_at": _iso(datetime.now(UTC) - timedelta(seconds=1)),
+            "updated_at": _iso(datetime.now(UTC)),
+        },
+        trace_id=None,
+    )
+    runtime.run_once()
+    failed_unwind_zero_trace = redis_runtime.get_recovery_trace(
+        recovery_trace_id=failed_unwind_zero_trace_id
+    )
+    _assert(
+        failed_unwind_zero_trace is not None,
+        "failed unwind zero residual recovery trace missing",
+    )
+    _assert(
+        failed_unwind_zero_trace.get("status") == "handoff_required",
+        "failed unwind zero residual trace should require manual handoff",
+    )
+    _assert(
+        failed_unwind_zero_trace.get("handoff_reason")
+        == "unwind_order_terminal_without_resolution",
+        "failed unwind zero residual handoff reason mismatch",
     )
 
     stale_unwind_run_id = "run_unwind_timeout_case"
@@ -2199,7 +2283,7 @@ def main() -> None:
     )
 
     print("PASS recovery runtime resolves zero-exposure traces")
-    print("PASS recovery runtime resolves terminal intents without active orders")
+    print("PASS recovery runtime hands off terminal intents without residual evidence")
     print("PASS recovery runtime opens submit-timeout recovery traces")
     print("PASS recovery runtime closes terminal latest evaluations")
     print("PASS recovery runtime hands off matched reconciliation without evidence")

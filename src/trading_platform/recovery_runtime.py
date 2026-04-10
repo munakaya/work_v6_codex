@@ -439,7 +439,6 @@ class RecoveryRuntime:
             str(order.get("status") or "").strip().lower() not in TERMINAL_ORDER_STATUSES
             for order in related_orders
         )
-        intent_terminal = self._intent_is_terminal(intent_id=intent_id)
         residual_exposure_quote = _parse_decimal(trace.get("residual_exposure_quote"))
         reconciliation_invalid_result_handoff = self._reconciliation_invalid_result_handoff_reason(
             trace
@@ -512,12 +511,6 @@ class RecoveryRuntime:
                 summary=summary,
             )
             return
-        if not has_active_orders and residual_exposure_quote == Decimal("0"):
-            self._resolve_trace(trace, resolution_reason="no_active_orders_and_zero_residual")
-            return
-        if not has_active_orders and intent_terminal:
-            self._resolve_trace(trace, resolution_reason="terminal_intent_and_no_active_orders")
-            return
         unwind_failure_status = self._linked_unwind_terminal_failure_status(trace)
         if unwind_failure_status is not None:
             self._mark_handoff_required(
@@ -537,6 +530,9 @@ class RecoveryRuntime:
                     f"status={unwind_status} age_seconds={age_seconds}"
                 ),
             )
+            return
+        if not has_active_orders and residual_exposure_quote == Decimal("0"):
+            self._resolve_trace(trace, resolution_reason="no_active_orders_and_zero_residual")
             return
         age_seconds = self._trace_age_seconds(trace)
         if (
