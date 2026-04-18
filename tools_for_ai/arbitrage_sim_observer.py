@@ -26,9 +26,11 @@ from trading_platform.strategy.arbitrage_simulation import (
     SimulationBalanceSettings,
     SimulationRiskSettings,
     SimulationStatsTracker,
+    derive_pair_timing_gates,
     evaluate_directional_opportunities,
     normalize_exchange_intervals,
     normalize_simulation_pairs,
+    risk_with_pair_timing_gates,
 )
 
 
@@ -91,6 +93,12 @@ def _parse_args() -> argparse.Namespace:
         nargs="*",
         default=[],
         help="Optional per-exchange fetch cadence overrides. Example: upbit=3 bithumb=1 coinone=1",
+    )
+    parser.add_argument("--timing-grace-ms", type=int, default=250)
+    parser.add_argument(
+        "--disable-interval-gate-alignment",
+        action="store_true",
+        help="Disable pair timing gate alignment based on per-exchange fetch cadence.",
     )
     parser.add_argument("--quote-balance", type=Decimal, default=Decimal("200000000"))
     parser.add_argument("--base-balance", type=Decimal, default=Decimal("3"))
@@ -168,10 +176,18 @@ def _collect_tick_summary(
     fetch_error_by_code: Counter[str],
     pair_skip_by_reason: Counter[str],
     exchange_intervals: dict[str, float],
+    pair_timing_gates: dict[str, dict[str, int]],
+    interval_gate_alignment_enabled: bool,
+    timing_grace_ms: int,
 ) -> dict[str, object]:
     summary = tracker.snapshot()
     summary["configured_exchange_intervals"] = {
         exchange: interval for exchange, interval in sorted(exchange_intervals.items())
+    }
+    summary["interval_gate_alignment_enabled"] = interval_gate_alignment_enabled
+    summary["timing_grace_ms"] = timing_grace_ms
+    summary["effective_pair_timing_gates"] = {
+        pair: gates for pair, gates in sorted(pair_timing_gates.items())
     }
     summary["refresh_count_by_exchange"] = {
         exchange: count for exchange, count in sorted(refresh_count_by_exchange.items())
@@ -210,6 +226,18 @@ def main() -> None:
     fetch_error_by_exchange: Counter[str] = Counter()
     fetch_error_by_code: Counter[str] = Counter()
     pair_skip_by_reason: Counter[str] = Counter()
+    interval_gate_alignment_enabled = not args.disable_interval_gate_alignment
+    pair_timing_gates = {
+        f"{first_exchange}:{second_exchange}": derive_pair_timing_gates(
+            risk=risk,
+            first_exchange=first_exchange,
+            second_exchange=second_exchange,
+            exchange_intervals=exchange_intervals,
+            timing_grace_ms=args.timing_grace_ms,
+            align_to_exchange_intervals=interval_gate_alignment_enabled,
+        )
+        for first_exchange, second_exchange in pairs
+    }
     output_path = _snapshot_path()
 
     LOGGER.info(
@@ -292,6 +320,14 @@ def main() -> None:
                 ):
                     pair_skip_by_reason["awaiting_refresh"] += 1
                     continue
+                pair_risk, _ = risk_with_pair_timing_gates(
+                    risk=risk,
+                    first_exchange=first_exchange,
+                    second_exchange=second_exchange,
+                    exchange_intervals=exchange_intervals,
+                    timing_grace_ms=args.timing_grace_ms,
+                    align_to_exchange_intervals=interval_gate_alignment_enabled,
+                )
                 forward, reverse = evaluate_directional_opportunities(
                     market=args.market,
                     canonical_symbol=args.canonical_symbol,
@@ -302,7 +338,7 @@ def main() -> None:
                     base_asset=args.base_asset,
                     quote_asset=args.quote_asset,
                     balances=balances,
-                    risk=risk,
+                    risk=pair_risk,
                     now=current_time,
                 )
                 for observation in (forward, reverse):
@@ -329,6 +365,9 @@ def main() -> None:
                 fetch_error_by_code=fetch_error_by_code,
                 pair_skip_by_reason=pair_skip_by_reason,
                 exchange_intervals=exchange_intervals,
+                pair_timing_gates=pair_timing_gates,
+                interval_gate_alignment_enabled=interval_gate_alignment_enabled,
+                timing_grace_ms=args.timing_grace_ms,
             )
             LOGGER.info(
                 "simulation summary %s",
@@ -345,6 +384,9 @@ def main() -> None:
         fetch_error_by_code=fetch_error_by_code,
         pair_skip_by_reason=pair_skip_by_reason,
         exchange_intervals=exchange_intervals,
+        pair_timing_gates=pair_timing_gates,
+        interval_gate_alignment_enabled=interval_gate_alignment_enabled,
+        timing_grace_ms=args.timing_grace_ms,
     )
     LOGGER.info(
         "simulation observer finished %s",

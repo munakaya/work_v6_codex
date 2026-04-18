@@ -26,6 +26,7 @@
 - public REST orderbook 정상 수신
 - public REST observer는 거래소별 fetch cadence를 따로 줄 수 있어야 한다. 예: `upbit=3s`, `bithumb=1s`, `coinone=1s`
 - public REST observer 요약에는 `reason_code`별 누적 분해가 포함되어야 하며, stale/skew/private health가 서로 다른 code로 구분돼야 한다
+- public REST observer가 비대칭 cadence를 사용할 때는 pair별 `max_clock_skew_ms`를 cadence에 맞춰 자동 보정하거나, 요약에 실제 적용된 timing gate를 드러내야 한다
 - public WS orderbook reconnect
 - private balance 조회
 - 주문 생성

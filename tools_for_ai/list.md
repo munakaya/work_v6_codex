@@ -26,6 +26,6 @@
 - arbitrage_replay_csv_export.py: replay JSON 케이스를 CSV로 내보낸다
 - arbitrage_replay_csv_import.py: replay CSV를 다시 JSON 케이스로 복원한다
 - arbitrage_replay_csv_cases.py: replay CSV export/import가 roundtrip 되는지 검증한다
-- arbitrage_sim_observer.py: 실제 공개 오더북을 1초 간격 기본 루프로 읽되 거래소별 fetch 주기(upbit=3초 등)를 따로 주고 reason_code breakdown까지 포함해 모의 재정거래 빈도와 추정 수익을 JSONL/로그로 집계한다
-- arbitrage_simulation_cases.py: sim observer용 거래소 쌍 정규화, 양방향 재정거래 평가, reason_code breakdown 포함 누적 집계가 올바른지 검증한다
+- arbitrage_sim_observer.py: 실제 공개 오더북을 1초 간격 기본 루프로 읽되 거래소별 fetch 주기(upbit=3초 등)를 따로 주고 pair timing gate 자동 보정과 reason_code breakdown까지 포함해 모의 재정거래 빈도와 추정 수익을 JSONL/로그로 집계한다
+- arbitrage_simulation_cases.py: sim observer용 거래소 쌍 정규화, pair timing gate 보정, 양방향 재정거래 평가, reason_code breakdown 포함 누적 집계가 올바른지 검증한다
 - exchange_fixture_contract_cases.py: 거래소별 내부 contract fixture 자산이 필수 category를 모두 포함하는지 검증한다

@@ -16,9 +16,11 @@ from trading_platform.strategy.arbitrage_simulation import (
     SimulationBalanceSettings,
     SimulationRiskSettings,
     SimulationStatsTracker,
+    derive_pair_timing_gates,
     evaluate_directional_opportunities,
     normalize_exchange_intervals,
     normalize_simulation_pairs,
+    risk_with_pair_timing_gates,
 )
 
 
@@ -199,11 +201,59 @@ def _case_exchange_intervals_and_scheduler() -> None:
     )
 
 
+def _case_pair_timing_gate_alignment() -> None:
+    risk = SimulationRiskSettings(
+        max_clock_skew_ms=1000,
+        max_orderbook_age_ms=1000,
+    )
+    intervals = normalize_exchange_intervals(
+        exchanges=("upbit", "bithumb"),
+        overrides=("upbit=3", "bithumb=1"),
+        default_interval_seconds=1.0,
+    )
+    gates = derive_pair_timing_gates(
+        risk=risk,
+        first_exchange="upbit",
+        second_exchange="bithumb",
+        exchange_intervals=intervals,
+        timing_grace_ms=250,
+        align_to_exchange_intervals=True,
+    )
+    _assert(
+        gates == {
+            "max_clock_skew_ms": 3250,
+            "max_orderbook_age_ms": 3250,
+        },
+        "pair timing gate alignment mismatch",
+    )
+    unchanged_risk, unchanged_gates = risk_with_pair_timing_gates(
+        risk=risk,
+        first_exchange="upbit",
+        second_exchange="bithumb",
+        exchange_intervals=intervals,
+        timing_grace_ms=250,
+        align_to_exchange_intervals=False,
+    )
+    _assert(
+        unchanged_gates == {
+            "max_clock_skew_ms": 1000,
+            "max_orderbook_age_ms": 1000,
+        },
+        "pair timing gate disable mismatch",
+    )
+    _assert(
+        unchanged_risk.max_clock_skew_ms == 1000
+        and unchanged_risk.max_orderbook_age_ms == 1000,
+        "pair timing gate disabled risk mismatch",
+    )
+
+
 def main() -> None:
     _case_pair_normalization()
     _case_directional_evaluation()
     _case_stats_tracker()
     _case_exchange_intervals_and_scheduler()
+    _case_pair_timing_gate_alignment()
     print("PASS arbitrage simulation observer helpers evaluate and aggregate correctly")
 
 

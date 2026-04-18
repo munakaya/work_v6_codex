@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Sequence
@@ -72,6 +72,66 @@ def normalize_exchange_intervals(
             raise ValueError(f"invalid exchange interval format: {override}") from exc
         normalized[exchange.strip()] = max(interval_seconds, 0.1)
     return normalized
+
+
+def derive_pair_timing_gates(
+    *,
+    risk: SimulationRiskSettings,
+    first_exchange: str,
+    second_exchange: str,
+    exchange_intervals: dict[str, float],
+    timing_grace_ms: int,
+    align_to_exchange_intervals: bool,
+) -> dict[str, int]:
+    base_gates = {
+        "max_clock_skew_ms": risk.max_clock_skew_ms,
+        "max_orderbook_age_ms": risk.max_orderbook_age_ms,
+    }
+    if not align_to_exchange_intervals:
+        return base_gates
+    first_interval_ms = int(
+        round(max(exchange_intervals.get(first_exchange.strip().lower(), 0.1), 0.1) * 1000)
+    )
+    second_interval_ms = int(
+        round(max(exchange_intervals.get(second_exchange.strip().lower(), 0.1), 0.1) * 1000)
+    )
+    aligned_skew_ms = max(
+        risk.max_clock_skew_ms,
+        max(first_interval_ms, second_interval_ms) + max(timing_grace_ms, 0),
+    )
+    aligned_orderbook_age_ms = max(
+        risk.max_orderbook_age_ms,
+        max(first_interval_ms, second_interval_ms) + max(timing_grace_ms, 0),
+    )
+    return {
+        "max_clock_skew_ms": aligned_skew_ms,
+        "max_orderbook_age_ms": aligned_orderbook_age_ms,
+    }
+
+
+def risk_with_pair_timing_gates(
+    *,
+    risk: SimulationRiskSettings,
+    first_exchange: str,
+    second_exchange: str,
+    exchange_intervals: dict[str, float],
+    timing_grace_ms: int,
+    align_to_exchange_intervals: bool,
+) -> tuple[SimulationRiskSettings, dict[str, int]]:
+    gates = derive_pair_timing_gates(
+        risk=risk,
+        first_exchange=first_exchange,
+        second_exchange=second_exchange,
+        exchange_intervals=exchange_intervals,
+        timing_grace_ms=timing_grace_ms,
+        align_to_exchange_intervals=align_to_exchange_intervals,
+    )
+    adjusted_risk = replace(
+        risk,
+        max_clock_skew_ms=gates["max_clock_skew_ms"],
+        max_orderbook_age_ms=gates["max_orderbook_age_ms"],
+    )
+    return adjusted_risk, gates
 
 
 class ExchangeFetchScheduler:
