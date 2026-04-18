@@ -72,9 +72,28 @@
 7j. arbitrage replay restore accounting
 7k. arbitrage incident taxonomy
 7l. arbitrage test matrix
+7m. multi-exchange candidate selection
+7n. pair-level trade lock / duplicate entry guard
+7o. per-exchange freshness / rate-limit aware scheduling
 8. order execution + reconciliation
 9. unwind + alert 강화
 10. shadow 운영 검증
+
+## 3.1 다거래소 재정거래 확장 메모
+
+- 현재 구현은 `base_exchange + hedge_exchange` 고정 2거래소 평가를 기본으로 둔다.
+- 다음 확장은 "3개 거래소 이상을 동시에 읽고, 이번 틱의 최적 pair를 고른 뒤 기존 2-leg execution으로 진입"하는 방향으로 본다.
+- 즉, execution을 3-leg로 바꾸는 작업이 아니라 candidate selection을 다거래소화하는 작업으로 정의한다.
+
+권장 세부 작업:
+
+- M1. `candidate_exchanges[]` 입력 계약 정의
+- M2. 거래소별 snapshot/balance/freshness 수집기 분리
+- M3. 유효 조합 생성과 양방향 평가
+- M4. `selected_pair` ranking 규칙 확정
+- M5. pair-level lock 추가
+- M6. shadow/live 비교 지표에 "미선택 후보와 선택 후보 차이" 추가
+- M7. API 계약과 runtime loader의 `base_exchange/hedge_exchange` 호환 전환안 정리
 
 ## 4. 작업선별 문서 진입점
 

@@ -6,6 +6,11 @@
 
 ## 실연결 전 우선
 
+- [ ] 3거래소 동시 비교용 candidate selection 설계 반영
+  지금 구조는 `base_exchange + hedge_exchange` 2거래소 고정 평가라서,
+  `upbit/bithumb/coinone`처럼 3개 거래소를 동시에 보고 가장 좋은 pair 하나를 고르는 런타임 계약이 필요하다.
+  목표는 execution을 3-leg로 바꾸는 게 아니라, "다거래소 후보 평가 -> `selected_pair` 1개 선택 -> 기존 2-leg 주문 제출"로 정리하는 것이다.
+
 - [ ] `/api/v1/ready` 판정을 더 엄격하게 만들기  
   지금은 runtime 정보를 보여주기만 하고 실제 ready 판정에는 거의 안 쓴다.  
   `market_data_runtime`, `strategy_runtime`, `recovery_runtime`의 `state`, `last_error_message`, `failure_count`를 기준으로 `ok/degraded`를 더 보수적으로 계산할 필요가 있다.
@@ -19,6 +24,7 @@
   `work_v6_claude/packages/server/src/services/trade_lock.ts`처럼
   같은 `market + exchange pair`에 대해 중복 진입을 막는 명시적 락이 필요하다.  
   지금은 recovery trace와 active intent로 많이 막고 있지만, 실 executor 연결 후에는 “같은 기회에 두 번 진입”을 더 직접 막는 게 안전하다.
+  특히 3거래소 동시 비교로 가면 `selected_pair` 기준 락과 "같은 틱 내 재선택 방지"가 같이 필요하다.
 
 ## 운영 안정성 보강
 
