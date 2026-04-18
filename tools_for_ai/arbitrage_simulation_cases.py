@@ -12,10 +12,12 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from trading_platform.strategy.arbitrage_simulation import (
+    ExchangeFetchScheduler,
     SimulationBalanceSettings,
     SimulationRiskSettings,
     SimulationStatsTracker,
     evaluate_directional_opportunities,
+    normalize_exchange_intervals,
     normalize_simulation_pairs,
 )
 
@@ -143,10 +145,48 @@ def _case_stats_tracker() -> None:
     )
 
 
+def _case_exchange_intervals_and_scheduler() -> None:
+    intervals = normalize_exchange_intervals(
+        exchanges=("upbit", "bithumb", "coinone"),
+        overrides=("upbit=3",),
+        default_interval_seconds=1.0,
+    )
+    _assert(intervals["upbit"] == 3.0, "upbit interval override mismatch")
+    _assert(intervals["bithumb"] == 1.0, "bithumb interval default mismatch")
+    scheduler = ExchangeFetchScheduler(intervals)
+    due_initial = scheduler.due_exchanges(
+        exchanges=("upbit", "bithumb", "coinone"),
+        now_monotonic=0.0,
+    )
+    _assert(
+        due_initial == ("upbit", "bithumb", "coinone"),
+        "initial due exchange mismatch",
+    )
+    for exchange in due_initial:
+        scheduler.mark_attempt(exchange=exchange, now_monotonic=0.0)
+    due_after_one_second = scheduler.due_exchanges(
+        exchanges=("upbit", "bithumb", "coinone"),
+        now_monotonic=1.0,
+    )
+    _assert(
+        due_after_one_second == ("bithumb", "coinone"),
+        "per-exchange interval scheduling mismatch",
+    )
+    due_after_three_seconds = scheduler.due_exchanges(
+        exchanges=("upbit", "bithumb", "coinone"),
+        now_monotonic=3.0,
+    )
+    _assert(
+        due_after_three_seconds == ("upbit", "bithumb", "coinone"),
+        "upbit interval should reopen after three seconds",
+    )
+
+
 def main() -> None:
     _case_pair_normalization()
     _case_directional_evaluation()
     _case_stats_tracker()
+    _case_exchange_intervals_and_scheduler()
     print("PASS arbitrage simulation observer helpers evaluate and aggregate correctly")
 
 

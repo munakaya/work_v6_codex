@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from decimal import Decimal
 import json
@@ -20,10 +22,12 @@ from trading_platform.logging_setup import configure_logging
 from trading_platform.market_data_connector import MarketDataError, PublicMarketDataConnector
 from trading_platform.rate_limit import ExponentialBackoffPolicy, RateLimitPolicy
 from trading_platform.strategy.arbitrage_simulation import (
+    ExchangeFetchScheduler,
     SimulationBalanceSettings,
     SimulationRiskSettings,
     SimulationStatsTracker,
     evaluate_directional_opportunities,
+    normalize_exchange_intervals,
     normalize_simulation_pairs,
 )
 
@@ -82,6 +86,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--iterations", type=int, default=0)
     parser.add_argument("--duration-seconds", type=int, default=0)
     parser.add_argument("--summary-every", type=int, default=10)
+    parser.add_argument(
+        "--exchange-intervals",
+        nargs="*",
+        default=[],
+        help="Optional per-exchange fetch cadence overrides. Example: upbit=3 bithumb=1 coinone=1",
+    )
     parser.add_argument("--quote-balance", type=Decimal, default=Decimal("200000000"))
     parser.add_argument("--base-balance", type=Decimal, default=Decimal("3"))
     parser.add_argument("--min-profit-quote", type=Decimal, default=Decimal("0"))
@@ -150,6 +160,34 @@ def _balance_settings(args: argparse.Namespace) -> SimulationBalanceSettings:
     )
 
 
+def _collect_tick_summary(
+    *,
+    tracker: SimulationStatsTracker,
+    refresh_count_by_exchange: Counter[str],
+    fetch_error_by_exchange: Counter[str],
+    fetch_error_by_code: Counter[str],
+    pair_skip_by_reason: Counter[str],
+    exchange_intervals: dict[str, float],
+) -> dict[str, object]:
+    summary = tracker.snapshot()
+    summary["configured_exchange_intervals"] = {
+        exchange: interval for exchange, interval in sorted(exchange_intervals.items())
+    }
+    summary["refresh_count_by_exchange"] = {
+        exchange: count for exchange, count in sorted(refresh_count_by_exchange.items())
+    }
+    summary["fetch_error_by_exchange"] = {
+        exchange: count for exchange, count in sorted(fetch_error_by_exchange.items())
+    }
+    summary["fetch_error_by_code"] = {
+        code: count for code, count in sorted(fetch_error_by_code.items())
+    }
+    summary["pair_skip_by_reason"] = {
+        reason: count for reason, count in sorted(pair_skip_by_reason.items())
+    }
+    return summary
+
+
 def main() -> None:
     config = load_config()
     log_path = configure_logging(config)
@@ -157,17 +195,29 @@ def main() -> None:
     interval_seconds = max(args.interval_seconds, 1.0)
     pairs = normalize_simulation_pairs(args.pairs)
     exchanges = sorted({exchange for pair in pairs for exchange in pair})
+    exchange_intervals = normalize_exchange_intervals(
+        exchanges=exchanges,
+        overrides=args.exchange_intervals,
+        default_interval_seconds=interval_seconds,
+    )
     risk = _risk_settings(args)
     balances = _balance_settings(args)
     connector = _build_connector()
     tracker = SimulationStatsTracker()
+    scheduler = ExchangeFetchScheduler(exchange_intervals)
+    latest_snapshots: dict[str, dict[str, object]] = {}
+    refresh_count_by_exchange: Counter[str] = Counter()
+    fetch_error_by_exchange: Counter[str] = Counter()
+    fetch_error_by_code: Counter[str] = Counter()
+    pair_skip_by_reason: Counter[str] = Counter()
     output_path = _snapshot_path()
 
     LOGGER.info(
-        "starting arbitrage sim observer market=%s pairs=%s interval_seconds=%s output=%s log=%s",
+        "starting arbitrage sim observer market=%s pairs=%s interval_seconds=%s exchange_intervals=%s output=%s log=%s",
         args.market,
         ",".join(f"{left}:{right}" for left, right in pairs),
         interval_seconds,
+        exchange_intervals,
         output_path,
         log_path,
         extra={"event_name": "arbitrage_sim_observer_started"},
@@ -183,25 +233,46 @@ def main() -> None:
             break
 
         current_time = datetime.now(UTC)
-        snapshots: dict[str, dict[str, object]] = {}
+        due_exchanges = scheduler.due_exchanges(
+            exchanges=exchanges,
+            now_monotonic=time.monotonic(),
+        )
+        refreshed_exchanges: set[str] = set()
         fetch_errors: list[dict[str, str]] = []
-        for exchange in exchanges:
-            try:
-                snapshots[exchange] = connector.get_orderbook_top(
+        with ThreadPoolExecutor(max_workers=max(len(due_exchanges), 1)) as executor:
+            futures = {
+                executor.submit(
+                    connector.get_orderbook_top,
                     exchange=exchange,
                     market=args.market,
+                ): exchange
+                for exchange in due_exchanges
+            }
+            for future in as_completed(futures):
+                exchange = futures[future]
+                scheduler.mark_attempt(
+                    exchange=exchange,
+                    now_monotonic=time.monotonic(),
                 )
-            except MarketDataError as exc:
-                fetch_errors.append(
-                    {
-                        "exchange": exchange,
-                        "code": exc.code,
-                        "message": exc.message,
-                    }
-                )
-        if fetch_errors:
+                try:
+                    latest_snapshots[exchange] = future.result()
+                except MarketDataError as exc:
+                    fetch_errors.append(
+                        {
+                            "exchange": exchange,
+                            "code": exc.code,
+                            "message": exc.message,
+                        }
+                    )
+                    fetch_error_by_exchange[exchange] += 1
+                    fetch_error_by_code[exc.code] += 1
+                    continue
+                refreshed_exchanges.add(exchange)
+                refresh_count_by_exchange[exchange] += 1
+
+        if fetch_errors and not refreshed_exchanges:
             LOGGER.warning(
-                "simulation tick skipped due to market data errors: %s",
+                "simulation tick fully skipped due to market data errors: %s",
                 fetch_errors,
                 extra={"event_name": "arbitrage_sim_tick_skipped"},
             )
@@ -212,11 +283,20 @@ def main() -> None:
 
         with output_path.open("a", encoding="utf-8") as handle:
             for first_exchange, second_exchange in pairs:
+                if first_exchange not in latest_snapshots or second_exchange not in latest_snapshots:
+                    pair_skip_by_reason["missing_snapshot"] += 1
+                    continue
+                if (
+                    first_exchange not in refreshed_exchanges
+                    or second_exchange not in refreshed_exchanges
+                ):
+                    pair_skip_by_reason["awaiting_refresh"] += 1
+                    continue
                 forward, reverse = evaluate_directional_opportunities(
                     market=args.market,
                     canonical_symbol=args.canonical_symbol,
-                    first_snapshot=snapshots[first_exchange],
-                    second_snapshot=snapshots[second_exchange],
+                    first_snapshot=latest_snapshots[first_exchange],
+                    second_snapshot=latest_snapshots[second_exchange],
                     first_exchange=first_exchange,
                     second_exchange=second_exchange,
                     base_asset=args.base_asset,
@@ -242,15 +322,30 @@ def main() -> None:
 
         iterations += 1
         if args.summary_every > 0 and iterations % args.summary_every == 0:
+            summary = _collect_tick_summary(
+                tracker=tracker,
+                refresh_count_by_exchange=refresh_count_by_exchange,
+                fetch_error_by_exchange=fetch_error_by_exchange,
+                fetch_error_by_code=fetch_error_by_code,
+                pair_skip_by_reason=pair_skip_by_reason,
+                exchange_intervals=exchange_intervals,
+            )
             LOGGER.info(
                 "simulation summary %s",
-                json.dumps(tracker.snapshot(), ensure_ascii=True),
+                json.dumps(summary, ensure_ascii=True),
                 extra={"event_name": "arbitrage_sim_summary"},
             )
         next_tick_at += interval_seconds
         time.sleep(max(0.0, next_tick_at - time.monotonic()))
 
-    summary = tracker.snapshot()
+    summary = _collect_tick_summary(
+        tracker=tracker,
+        refresh_count_by_exchange=refresh_count_by_exchange,
+        fetch_error_by_exchange=fetch_error_by_exchange,
+        fetch_error_by_code=fetch_error_by_code,
+        pair_skip_by_reason=pair_skip_by_reason,
+        exchange_intervals=exchange_intervals,
+    )
     LOGGER.info(
         "simulation observer finished %s",
         json.dumps(summary, ensure_ascii=True),

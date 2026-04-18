@@ -47,6 +47,58 @@ def normalize_simulation_pairs(pairs: Sequence[str]) -> tuple[tuple[str, str], .
     return tuple(normalized)
 
 
+def normalize_exchange_intervals(
+    *,
+    exchanges: Sequence[str],
+    overrides: Sequence[str],
+    default_interval_seconds: float,
+) -> dict[str, float]:
+    normalized = {
+        exchange.strip().lower(): max(default_interval_seconds, 0.1)
+        for exchange in exchanges
+        if exchange.strip()
+    }
+    for override in overrides:
+        raw = override.strip().lower()
+        if not raw:
+            continue
+        exchange, separator, value = raw.partition("=")
+        if separator != "=" or not exchange.strip() or not value.strip():
+            raise ValueError(f"invalid exchange interval format: {override}")
+        try:
+            interval_seconds = float(value)
+        except ValueError as exc:
+            raise ValueError(f"invalid exchange interval format: {override}") from exc
+        normalized[exchange.strip()] = max(interval_seconds, 0.1)
+    return normalized
+
+
+class ExchangeFetchScheduler:
+    def __init__(self, intervals: dict[str, float]) -> None:
+        self.intervals = dict(intervals)
+        self._last_attempt_at: dict[str, float] = {}
+
+    def due_exchanges(
+        self,
+        *,
+        exchanges: Sequence[str],
+        now_monotonic: float,
+    ) -> tuple[str, ...]:
+        due: list[str] = []
+        for exchange in exchanges:
+            normalized = exchange.strip().lower()
+            if not normalized:
+                continue
+            interval_seconds = max(self.intervals.get(normalized, 1.0), 0.1)
+            last_attempt_at = self._last_attempt_at.get(normalized)
+            if last_attempt_at is None or (now_monotonic - last_attempt_at) >= interval_seconds:
+                due.append(normalized)
+        return tuple(due)
+
+    def mark_attempt(self, *, exchange: str, now_monotonic: float) -> None:
+        self._last_attempt_at[exchange.strip().lower()] = now_monotonic
+
+
 @dataclass(frozen=True)
 class SimulationRiskSettings:
     min_profit_quote: Decimal = Decimal("0")

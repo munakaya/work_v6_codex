@@ -24,6 +24,7 @@
 
 - 거래소 auth helper 서명 규칙 검증
 - public REST orderbook 정상 수신
+- public REST observer는 거래소별 fetch cadence를 따로 줄 수 있어야 한다. 예: `upbit=3s`, `bithumb=1s`, `coinone=1s`
 - public WS orderbook reconnect
 - private balance 조회
 - 주문 생성
@@ -38,6 +39,7 @@
 - stale orderbook 입력 시 거래 차단
 - balance snapshot이 오래되면 order intent 생성 차단
 - 한 거래소만 부분 체결되면 `unwind_required`
+- 한 거래소 public REST가 `RATE_LIMITED`여도 나머지 거래소 쌍 관찰은 계속 가능해야 한다
 - websocket 단절 시 REST fallback 또는 degraded 전환
 - 동일 주문의 REST 조회 결과와 private WS 이벤트가 충돌하면 reconciliation job 수행
 
