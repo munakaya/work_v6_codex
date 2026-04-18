@@ -85,13 +85,21 @@
 ### C8. hedge confidence 부족
 
 - 조건:
-  - 한쪽 거래소 health 불안정
+  - private 주문 경로 또는 hedge confidence 입력이 불안정
   - 최근 private event lag 또는 체결 실패율 상승
 - 기대 결과:
   - `reject`
   - `reason_code=HEDGE_CONFIDENCE_TOO_LOW`
 
-### C9. 중복 intent 경쟁
+### C9. public connector degraded
+
+- 조건:
+  - public orderbook snapshot은 들어왔지만 connector health가 degraded로 표시됨
+- 기대 결과:
+  - `reject`
+  - `reason_code=PUBLIC_CONNECTOR_DEGRADED`
+
+### C10. 중복 intent 경쟁
 
 - 조건:
   - 같은 bot, 같은 symbol, 같은 방향의 판단이 이미 예약 또는 제출 대기 상태
@@ -102,7 +110,7 @@
 
 ## P2 운영 케이스
 
-### C10. stale 상태에서는 진입 금지, unwind는 허용
+### C11. stale 상태에서는 진입 금지, unwind는 허용
 
 - 조건:
   - 신규 진입 판단 시 balance stale
@@ -112,7 +120,7 @@
   - `reason_code=BALANCE_STALE`
   - unwind 경로는 별도 정책으로 계속 허용
 
-### C11. high spread outlier
+### C12. high spread outlier
 
 - 조건:
   - spread가 지나치게 커서 오히려 비정상 market 가능성 큼
@@ -121,7 +129,7 @@
   - `reject`
   - `reason_code=RISK_LIMIT_BLOCKED`
 
-### C12. reservation 성공 후 submit 실패
+### C13. reservation 성공 후 submit 실패
 
 - 조건:
   - 판단은 accept

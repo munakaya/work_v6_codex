@@ -140,8 +140,25 @@ def _case_stats_tracker() -> None:
     _assert(snapshot["accepted_count"] == 1, "accepted count mismatch")
     _assert(snapshot["rejected_count"] == 1, "rejected count mismatch")
     _assert(
+        snapshot["reason_code_breakdown"]
+        == {
+            "ARBITRAGE_OPPORTUNITY_FOUND": 1,
+            "EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH": 1,
+        },
+        "top-level reason breakdown mismatch",
+    )
+    _assert(
         Decimal(str(snapshot["cumulative_profit_quote"])) > Decimal("0"),
         "cumulative profit mismatch",
+    )
+    first_item = next(
+        item
+        for item in snapshot["items"]
+        if item["direction"] == "upbit->coinone"
+    )
+    _assert(
+        first_item["reason_code_breakdown"] == {"ARBITRAGE_OPPORTUNITY_FOUND": 1},
+        "direction reason breakdown mismatch",
     )
 
 

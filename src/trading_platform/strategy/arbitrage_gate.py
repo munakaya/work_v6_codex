@@ -15,21 +15,6 @@ def validate_gate_conditions(inputs: ArbitrageInputs) -> tuple[list[GateCheckRes
     config = inputs.risk_config
     state = inputs.runtime_state
 
-    public_connectors_ok = (
-        inputs.base_orderbook.connector_healthy and inputs.hedge_orderbook.connector_healthy
-    )
-    checks.append(
-        GateCheckResult(
-            name="connector_health",
-            passed=public_connectors_ok and state.connector_private_healthy,
-            detail=(
-                "all connectors healthy"
-                if public_connectors_ok and state.connector_private_healthy
-                else "public/private connector degraded"
-            ),
-        )
-    )
-
     base_orderbook_age_ms = _age_ms(now, inputs.base_orderbook.observed_at)
     hedge_orderbook_age_ms = _age_ms(now, inputs.hedge_orderbook.observed_at)
     orderbook_fresh = (
@@ -74,6 +59,33 @@ def validate_gate_conditions(inputs: ArbitrageInputs) -> tuple[list[GateCheckRes
             name="quote_pair_lock",
             passed=skew_ms <= config.max_clock_skew_ms,
             detail=f"skew_ms={skew_ms}",
+        )
+    )
+
+    public_connectors_ok = (
+        inputs.base_orderbook.connector_healthy and inputs.hedge_orderbook.connector_healthy
+    )
+    checks.append(
+        GateCheckResult(
+            name="public_connector_health",
+            passed=public_connectors_ok,
+            detail=(
+                "public connectors healthy"
+                if public_connectors_ok
+                else "public connector degraded"
+            ),
+        )
+    )
+
+    checks.append(
+        GateCheckResult(
+            name="private_connector_health",
+            passed=state.connector_private_healthy,
+            detail=(
+                "private connector healthy"
+                if state.connector_private_healthy
+                else "private connector unhealthy"
+            ),
         )
     )
 
@@ -127,11 +139,13 @@ def validate_gate_conditions(inputs: ArbitrageInputs) -> tuple[list[GateCheckRes
             return checks, "BALANCE_STALE"
         if check.name == "quote_pair_lock":
             return checks, "QUOTE_PAIR_SKEW_TOO_HIGH"
+        if check.name == "public_connector_health":
+            return checks, "PUBLIC_CONNECTOR_DEGRADED"
+        if check.name == "private_connector_health":
+            return checks, "HEDGE_CONFIDENCE_TOO_LOW"
         if check.name == "reentry_cooldown":
             return checks, "REENTRY_COOLDOWN_ACTIVE"
         if check.name == "duplicate_intent":
             return checks, "DUPLICATE_INTENT_BLOCKED"
-        if check.name == "connector_health":
-            return checks, "HEDGE_CONFIDENCE_TOO_LOW"
         return checks, "RISK_LIMIT_BLOCKED"
     return checks, None

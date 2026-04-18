@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Sequence
@@ -203,11 +204,13 @@ class SimulationDirectionStats:
     best_profit_bps: Decimal | None = None
     latest_reason_code: str | None = None
     last_observed_at: str | None = None
+    reason_counts: Counter[str] = field(default_factory=Counter)
 
     def record(self, observation: SimulationObservation) -> None:
         self.observed_count += 1
         self.last_observed_at = observation.observed_at
         self.latest_reason_code = observation.reason_code
+        self.reason_counts[observation.reason_code] += 1
         if observation.accepted:
             self.accepted_count += 1
             if observation.executable_profit_quote is not None:
@@ -260,6 +263,10 @@ class SimulationDirectionStats:
                 if self.best_profit_bps is not None
                 else None
             ),
+            "reason_code_breakdown": {
+                reason_code: count
+                for reason_code, count in sorted(self.reason_counts.items())
+            },
             "latest_reason_code": self.latest_reason_code,
             "last_observed_at": self.last_observed_at,
         }
@@ -299,6 +306,9 @@ class SimulationStatsTracker:
         total_profit = sum(
             Decimal(str(item["cumulative_profit_quote"])) for item in items
         )
+        total_reason_counts: Counter[str] = Counter()
+        for stats in self._stats.values():
+            total_reason_counts.update(stats.reason_counts)
         return {
             "started_at": self.started_at.isoformat().replace("+00:00", "Z"),
             "elapsed_seconds": round(elapsed_seconds, 3),
@@ -317,6 +327,10 @@ class SimulationStatsTracker:
                 6,
             ),
             "cumulative_profit_quote": _decimal_text(total_profit),
+            "reason_code_breakdown": {
+                reason_code: count
+                for reason_code, count in sorted(total_reason_counts.items())
+            },
             "items": items,
         }
 
@@ -367,7 +381,7 @@ def evaluate_directional_opportunities(
                     "quantity": str(first_snapshot["bid_volume"]),
                 }
             ],
-            "connector_healthy": not bool(first_snapshot.get("stale")),
+            "connector_healthy": bool(first_snapshot.get("connector_healthy", True)),
         },
         "hedge_orderbook": {
             "exchange_name": second_exchange,
@@ -389,7 +403,7 @@ def evaluate_directional_opportunities(
                     "quantity": str(second_snapshot["bid_volume"]),
                 }
             ],
-            "connector_healthy": not bool(second_snapshot.get("stale")),
+            "connector_healthy": bool(second_snapshot.get("connector_healthy", True)),
         },
         "base_balance": {
             "exchange_name": first_exchange,

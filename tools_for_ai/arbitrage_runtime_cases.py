@@ -175,6 +175,15 @@ def _case_hedge_confidence_low() -> dict[str, object]:
     return payload
 
 
+def _case_public_connector_degraded() -> dict[str, object]:
+    payload = _base_payload()
+    payload["hedge_orderbook"] = {
+        **dict(payload["hedge_orderbook"]),
+        "connector_healthy": False,
+    }
+    return payload
+
+
 def _case_duplicate_intent() -> dict[str, object]:
     payload = _base_payload()
     payload["runtime_state"] = {
@@ -263,9 +272,10 @@ CASES = [
     ("C6", _case_risk_blocked, False, "RISK_LIMIT_BLOCKED"),
     ("C7", _case_reentry_cooldown, False, "REENTRY_COOLDOWN_ACTIVE"),
     ("C8", _case_hedge_confidence_low, False, "HEDGE_CONFIDENCE_TOO_LOW"),
-    ("C9", _case_duplicate_intent, False, "DUPLICATE_INTENT_BLOCKED"),
-    ("C10", _case_balance_stale, False, "BALANCE_STALE"),
-    ("C11", _case_high_spread_outlier, False, "RISK_LIMIT_BLOCKED"),
+    ("C9", _case_public_connector_degraded, False, "PUBLIC_CONNECTOR_DEGRADED"),
+    ("C10", _case_duplicate_intent, False, "DUPLICATE_INTENT_BLOCKED"),
+    ("C11", _case_balance_stale, False, "BALANCE_STALE"),
+    ("C12", _case_high_spread_outlier, False, "RISK_LIMIT_BLOCKED"),
 ]
 
 
@@ -282,39 +292,39 @@ def main() -> int:
         if not ok:
             failed += 1
 
-    c12_ok, c12_state = _case_submit_failure_recovery()
-    c12_pass = c12_ok and c12_state == "recovery_required"
-    print(
-        f"C12 {'PASS' if c12_pass else 'FAIL'} "
-        f"recovery_required={c12_ok} next_state={c12_state}"
-    )
-    if not c12_pass:
-        failed += 1
-
-    c13_rejected, c13_reason, c13_rebalance = _case_rebalance_buffer_reject()
-    c13_pass = (
-        c13_rejected
-        and c13_reason == "EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH"
-        and c13_rebalance == "8"
-    )
+    c13_ok, c13_state = _case_submit_failure_recovery()
+    c13_pass = c13_ok and c13_state == "recovery_required"
     print(
         f"C13 {'PASS' if c13_pass else 'FAIL'} "
-        f"rejected={c13_rejected} reason={c13_reason} rebalance_buffer_quote={c13_rebalance}"
+        f"recovery_required={c13_ok} next_state={c13_state}"
     )
     if not c13_pass:
         failed += 1
 
-    c14_rejected, c14_reason, c14_depth_passed = _case_depth_insufficient()
+    c14_rejected, c14_reason, c14_rebalance = _case_rebalance_buffer_reject()
     c14_pass = (
         c14_rejected
-        and c14_reason == "ORDERBOOK_DEPTH_INSUFFICIENT"
-        and c14_depth_passed is False
+        and c14_reason == "EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH"
+        and c14_rebalance == "8"
     )
     print(
         f"C14 {'PASS' if c14_pass else 'FAIL'} "
-        f"rejected={c14_rejected} reason={c14_reason} depth_passed={c14_depth_passed}"
+        f"rejected={c14_rejected} reason={c14_reason} rebalance_buffer_quote={c14_rebalance}"
     )
     if not c14_pass:
+        failed += 1
+
+    c15_rejected, c15_reason, c15_depth_passed = _case_depth_insufficient()
+    c15_pass = (
+        c15_rejected
+        and c15_reason == "ORDERBOOK_DEPTH_INSUFFICIENT"
+        and c15_depth_passed is False
+    )
+    print(
+        f"C15 {'PASS' if c15_pass else 'FAIL'} "
+        f"rejected={c15_rejected} reason={c15_reason} depth_passed={c15_depth_passed}"
+    )
+    if not c15_pass:
         failed += 1
 
     return failed

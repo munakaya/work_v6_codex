@@ -25,6 +25,7 @@
 - 거래소 auth helper 서명 규칙 검증
 - public REST orderbook 정상 수신
 - public REST observer는 거래소별 fetch cadence를 따로 줄 수 있어야 한다. 예: `upbit=3s`, `bithumb=1s`, `coinone=1s`
+- public REST observer 요약에는 `reason_code`별 누적 분해가 포함되어야 하며, stale/skew/private health가 서로 다른 code로 구분돼야 한다
 - public WS orderbook reconnect
 - private balance 조회
 - 주문 생성

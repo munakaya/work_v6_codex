@@ -58,7 +58,7 @@ def _one_level_orderbook(snapshot: dict[str, object]) -> dict[str, object]:
                 "quantity": str(snapshot["bid_volume"]),
             }
         ],
-        "connector_healthy": not bool(snapshot.get("stale")),
+        "connector_healthy": bool(snapshot.get("connector_healthy", True)),
     }
 
 
