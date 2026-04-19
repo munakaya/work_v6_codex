@@ -54,3 +54,17 @@
 - auth refresh/reconnect 관련 치명 이슈 0건
 - error mapping 누락 0건
 - rate limit 위반 경고가 허용 기준 이하
+
+### 40.5 public REST 안전 프리셋
+
+실사용 기본 프리셋은 아래를 보수적 시작점으로 둔다.
+
+- Upbit: `5 rps`, `burst 5`
+- Bithumb: `100 rps`, `burst 100`
+- Coinone: `10 rps`, `burst 10`
+
+원칙:
+
+- 기본값은 "실측 한계"가 아니라 "위반 가능성을 낮추는 보수적 값"으로 둔다.
+- Coinone은 짧은 burst 측정치가 높더라도 sustained 기준이 불확실하므로 기본값은 `10 rps`를 유지한다.
+- 운영 중 다른 봇/프로세스가 같은 공인 IP를 공유하면 실제 여유는 더 줄어든다고 가정한다.

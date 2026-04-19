@@ -5,6 +5,14 @@ from pathlib import Path
 import os
 
 
+DEFAULT_UPBIT_PUBLIC_REST_RATE_LIMIT_PER_SEC = 5.0
+DEFAULT_UPBIT_PUBLIC_REST_BURST = 5
+DEFAULT_BITHUMB_PUBLIC_REST_RATE_LIMIT_PER_SEC = 100.0
+DEFAULT_BITHUMB_PUBLIC_REST_BURST = 100
+DEFAULT_COINONE_PUBLIC_REST_RATE_LIMIT_PER_SEC = 10.0
+DEFAULT_COINONE_PUBLIC_REST_BURST = 10
+
+
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name)
     if raw is None:
@@ -128,17 +136,26 @@ def load_config() -> AppConfig:
             "TP_MARKET_DATA_RETRY_BACKOFF_MAX_MS", 2000
         ),
         upbit_public_rest_rate_limit_per_sec=_env_float(
-            "TP_UPBIT_PUBLIC_REST_RATE_LIMIT_PER_SEC", 0.0
+            "TP_UPBIT_PUBLIC_REST_RATE_LIMIT_PER_SEC",
+            DEFAULT_UPBIT_PUBLIC_REST_RATE_LIMIT_PER_SEC,
         ),
-        upbit_public_rest_burst=_env_int("TP_UPBIT_PUBLIC_REST_BURST", 1),
+        upbit_public_rest_burst=_env_int(
+            "TP_UPBIT_PUBLIC_REST_BURST", DEFAULT_UPBIT_PUBLIC_REST_BURST
+        ),
         bithumb_public_rest_rate_limit_per_sec=_env_float(
-            "TP_BITHUMB_PUBLIC_REST_RATE_LIMIT_PER_SEC", 0.0
+            "TP_BITHUMB_PUBLIC_REST_RATE_LIMIT_PER_SEC",
+            DEFAULT_BITHUMB_PUBLIC_REST_RATE_LIMIT_PER_SEC,
         ),
-        bithumb_public_rest_burst=_env_int("TP_BITHUMB_PUBLIC_REST_BURST", 1),
+        bithumb_public_rest_burst=_env_int(
+            "TP_BITHUMB_PUBLIC_REST_BURST", DEFAULT_BITHUMB_PUBLIC_REST_BURST
+        ),
         coinone_public_rest_rate_limit_per_sec=_env_float(
-            "TP_COINONE_PUBLIC_REST_RATE_LIMIT_PER_SEC", 0.0
+            "TP_COINONE_PUBLIC_REST_RATE_LIMIT_PER_SEC",
+            DEFAULT_COINONE_PUBLIC_REST_RATE_LIMIT_PER_SEC,
         ),
-        coinone_public_rest_burst=_env_int("TP_COINONE_PUBLIC_REST_BURST", 1),
+        coinone_public_rest_burst=_env_int(
+            "TP_COINONE_PUBLIC_REST_BURST", DEFAULT_COINONE_PUBLIC_REST_BURST
+        ),
         upbit_quotation_base_url=os.getenv(
             "TP_UPBIT_QUOTATION_BASE_URL", "https://api.upbit.com"
         ),

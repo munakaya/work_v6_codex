@@ -187,6 +187,15 @@ PostgreSQL smoke는 `04_postgres_smoke_runbook.md`, 거래소 live smoke는 `04_
 - `TP_COINONE_PUBLIC_REST_RATE_LIMIT_PER_SEC`
 - `TP_COINONE_PUBLIC_REST_BURST`
 
+권장 public REST 안전 기본값:
+
+- Upbit: `TP_UPBIT_PUBLIC_REST_RATE_LIMIT_PER_SEC=5`, `TP_UPBIT_PUBLIC_REST_BURST=5`
+- Bithumb: `TP_BITHUMB_PUBLIC_REST_RATE_LIMIT_PER_SEC=100`, `TP_BITHUMB_PUBLIC_REST_BURST=100`
+- Coinone: `TP_COINONE_PUBLIC_REST_RATE_LIMIT_PER_SEC=10`, `TP_COINONE_PUBLIC_REST_BURST=10`
+
+이 저장소 기본값도 위 보수적 프리셋을 사용한다.
+더 공격적인 값은 실측 재검증 없이 기본값으로 올리지 않는다.
+
 #### Notification
 
 - `TELEGRAM_BOT_TOKEN`
