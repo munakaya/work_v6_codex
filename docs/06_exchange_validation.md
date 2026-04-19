@@ -30,7 +30,8 @@
 - public REST observer가 비대칭 cadence를 사용할 때는 pair별 `max_clock_skew_ms`를 cadence에 맞춰 자동 보정하거나, 요약에 실제 적용된 timing gate를 드러내야 한다
 - 거래소별 REST `timestamp` 의미가 완전히 같다고 가정하지 않는다. 같은 호가에도 timestamp가 계속 갱신되는 거래소가 있고, 오더북 변경 시에만 timestamp/id가 갱신되는 거래소도 있으므로 stale 해석은 거래소별 차이를 전제로 본다
 - public REST observer 요약에는 거래소별 `attempt_count`, `success_rate`, `error_rate`, `latency_ms(p50/p95/p99)`가 포함되어야 한다
-- public REST observer 요약에는 `market_opportunity_count`, `reservation_blocked_count`, `zero_profit_opportunity_count`를 포함해 "시장 기회"와 "실제 accepted"를 구분해야 한다
+- public REST observer 요약에는 `market_opportunity_count`, `actionable_opportunity_count`, `positive_profit_opportunity_count`, `reservation_blocked_count`, `zero_profit_opportunity_count`를 포함해 "시장 기회", "실제 실행 가능 기회", "0원/예약 실패 진단"을 구분해야 한다
+- public REST observer scheduler는 짧은 interval(`0.1s` 등)에서 tick 경계 오차 때문에 실제 cadence가 절반으로 떨어지지 않도록 tolerance를 둔다
 - public WS orderbook reconnect
 - private balance 조회
 - 주문 생성

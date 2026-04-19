@@ -110,6 +110,8 @@ def _case_directional_evaluation() -> None:
     _assert(forward.clock_skew_exceeded is False, "default skew diagnostic mismatch")
     _assert(
         forward.market_opportunity is True
+        and forward.actionable_opportunity is True
+        and forward.positive_profit_opportunity is True
         and forward.reservation_blocked is False
         and forward.zero_profit_opportunity is False,
         "forward opportunity flags mismatch",
@@ -177,6 +179,14 @@ def _case_stats_tracker() -> None:
     _assert(
         snapshot["market_opportunity_count"] == 1,
         "top-level market opportunity count mismatch",
+    )
+    _assert(
+        snapshot["actionable_opportunity_count"] == 1,
+        "top-level actionable opportunity count mismatch",
+    )
+    _assert(
+        snapshot["positive_profit_opportunity_count"] == 1,
+        "top-level positive profit opportunity count mismatch",
     )
 
 
@@ -295,6 +305,8 @@ def _case_reservation_blocked_diagnostic() -> None:
         forward.accepted is False
         and forward.reason_code == "RESERVATION_FAILED"
         and forward.market_opportunity is True
+        and forward.actionable_opportunity is False
+        and forward.positive_profit_opportunity is True
         and forward.reservation_blocked is True,
         "reservation blocked diagnostic mismatch",
     )
@@ -334,6 +346,24 @@ def _case_exchange_intervals_and_scheduler() -> None:
     _assert(
         due_after_three_seconds == ("upbit", "bithumb", "coinone"),
         "upbit interval should reopen after three seconds",
+    )
+    short_interval_scheduler = ExchangeFetchScheduler({"bithumb": 0.1})
+    _assert(
+        short_interval_scheduler.due_exchanges(
+            exchanges=("bithumb",),
+            now_monotonic=0.0,
+        )
+        == ("bithumb",),
+        "short interval scheduler initial due mismatch",
+    )
+    short_interval_scheduler.mark_attempt(exchange="bithumb", now_monotonic=0.0)
+    _assert(
+        short_interval_scheduler.due_exchanges(
+            exchanges=("bithumb",),
+            now_monotonic=0.095,
+        )
+        == ("bithumb",),
+        "scheduler tolerance should keep 100ms cadence from slipping to 200ms",
     )
 
 

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from decimal import Decimal
 import json
 import logging
 from pathlib import Path
+from queue import Empty, SimpleQueue
 import sys
 import time
 
@@ -267,36 +268,31 @@ def main() -> None:
     iterations = 0
     started_at = time.monotonic()
     next_tick_at = started_at
-    while True:
-        if args.iterations > 0 and iterations >= args.iterations:
-            break
-        if args.duration_seconds > 0 and (time.monotonic() - started_at) >= args.duration_seconds:
-            break
+    pending_requests: dict[object, tuple[str, float]] = {}
+    pending_by_exchange: dict[str, object] = {}
+    completed_requests: SimpleQueue[tuple[object, float]] = SimpleQueue()
+    executor = ThreadPoolExecutor(max_workers=max(len(exchanges), 1))
+    try:
+        while True:
+            if args.iterations > 0 and iterations >= args.iterations:
+                break
+            if args.duration_seconds > 0 and (time.monotonic() - started_at) >= args.duration_seconds:
+                break
 
-        current_time = datetime.now(UTC)
-        due_exchanges = scheduler.due_exchanges(
-            exchanges=exchanges,
-            now_monotonic=time.monotonic(),
-        )
-        refreshed_exchanges: set[str] = set()
-        fetch_errors: list[dict[str, str]] = []
-        with ThreadPoolExecutor(max_workers=max(len(due_exchanges), 1)) as executor:
-            futures = {}
-            for exchange in due_exchanges:
-                started_at_monotonic = time.monotonic()
-                scheduler.mark_attempt(
-                    exchange=exchange,
-                    now_monotonic=started_at_monotonic,
-                )
-                future = executor.submit(
-                    connector.get_orderbook_top,
-                    exchange=exchange,
-                    market=args.market,
-                )
-                futures[future] = (exchange, started_at_monotonic)
-            for future in as_completed(futures):
-                exchange, started_at_monotonic = futures[future]
-                completed_at = time.monotonic()
+            loop_monotonic = time.monotonic()
+            current_time = datetime.now(UTC)
+            refreshed_exchanges: set[str] = set()
+            fetch_errors: list[dict[str, str]] = []
+            while True:
+                try:
+                    future, completed_at = completed_requests.get_nowait()
+                except Empty:
+                    break
+                metadata = pending_requests.pop(future, None)
+                if metadata is None:
+                    continue
+                exchange, started_at_monotonic = metadata
+                pending_by_exchange.pop(exchange, None)
                 latency_ms = max((completed_at - started_at_monotonic) * 1000, 0.0)
                 try:
                     latest_snapshots[exchange] = future.result()
@@ -323,86 +319,116 @@ def main() -> None:
                     latency_ms=latency_ms,
                 )
 
-        if fetch_errors and not refreshed_exchanges:
-            LOGGER.warning(
-                "simulation tick fully skipped due to market data errors: %s",
-                fetch_errors,
-                extra={"event_name": "arbitrage_sim_tick_skipped"},
+            due_exchanges = scheduler.due_exchanges(
+                exchanges=exchanges,
+                now_monotonic=loop_monotonic,
             )
+            for exchange in due_exchanges:
+                if exchange in pending_by_exchange:
+                    pair_skip_by_reason["fetch_inflight"] += 1
+                    continue
+                started_at_monotonic = time.monotonic()
+                scheduler.mark_attempt(
+                    exchange=exchange,
+                    now_monotonic=started_at_monotonic,
+                )
+                future = executor.submit(
+                    connector.get_orderbook_top,
+                    exchange=exchange,
+                    market=args.market,
+                )
+                future.add_done_callback(
+                    lambda done_future, queue=completed_requests: queue.put(
+                        (done_future, time.monotonic())
+                    )
+                )
+                pending_requests[future] = (exchange, started_at_monotonic)
+                pending_by_exchange[exchange] = future
+
+            if fetch_errors and not refreshed_exchanges:
+                LOGGER.warning(
+                    "simulation tick fully skipped due to market data errors: %s",
+                    fetch_errors,
+                    extra={"event_name": "arbitrage_sim_tick_skipped"},
+                )
+                iterations += 1
+                next_tick_at += interval_seconds
+                time.sleep(max(0.0, next_tick_at - time.monotonic()))
+                continue
+
+            with output_path.open("a", encoding="utf-8") as handle:
+                for first_exchange, second_exchange in pairs:
+                    if first_exchange not in latest_snapshots or second_exchange not in latest_snapshots:
+                        pair_skip_by_reason["missing_snapshot"] += 1
+                        continue
+                    if (
+                        first_exchange not in refreshed_exchanges
+                        or second_exchange not in refreshed_exchanges
+                    ):
+                        pair_skip_by_reason["awaiting_refresh"] += 1
+                        continue
+                    pair_risk, _ = risk_with_pair_timing_gates(
+                        risk=risk,
+                        first_exchange=first_exchange,
+                        second_exchange=second_exchange,
+                        exchange_intervals=exchange_intervals,
+                        timing_grace_ms=args.timing_grace_ms,
+                        align_to_exchange_intervals=interval_gate_alignment_enabled,
+                    )
+                    forward, reverse = evaluate_directional_opportunities(
+                        market=args.market,
+                        canonical_symbol=args.canonical_symbol,
+                        first_snapshot=latest_snapshots[first_exchange],
+                        second_snapshot=latest_snapshots[second_exchange],
+                        first_exchange=first_exchange,
+                        second_exchange=second_exchange,
+                        base_asset=args.base_asset,
+                        quote_asset=args.quote_asset,
+                        balances=balances,
+                        risk=pair_risk,
+                        now=current_time,
+                    )
+                    for observation in (forward, reverse):
+                        tracker.record(observation)
+                        handle.write(
+                            json.dumps(observation.as_dict(), ensure_ascii=True) + "\n"
+                        )
+                        if observation.actionable_opportunity:
+                            LOGGER.info(
+                                "sim actionable opportunity direction=%s market=%s profit_quote=%s profit_bps=%s",
+                                observation.direction_key,
+                                observation.market,
+                                observation.executable_profit_quote,
+                                observation.executable_profit_bps,
+                                extra={"event_name": "arbitrage_sim_actionable_opportunity"},
+                            )
+
             iterations += 1
+            if args.summary_every > 0 and iterations % args.summary_every == 0:
+                summary = _collect_tick_summary(
+                    tracker=tracker,
+                    refresh_count_by_exchange=refresh_count_by_exchange,
+                    fetch_error_by_exchange=fetch_error_by_exchange,
+                    fetch_error_by_code=fetch_error_by_code,
+                    pair_skip_by_reason=pair_skip_by_reason,
+                    request_stats=request_stats,
+                    exchange_intervals=exchange_intervals,
+                    pair_timing_gates=pair_timing_gates,
+                    interval_gate_alignment_enabled=interval_gate_alignment_enabled,
+                    timing_grace_ms=args.timing_grace_ms,
+                    clock_skew_gate_enforced=args.enforce_clock_skew_gate,
+                )
+                LOGGER.info(
+                    "simulation summary %s",
+                    json.dumps(summary, ensure_ascii=True),
+                    extra={"event_name": "arbitrage_sim_summary"},
+                )
             next_tick_at += interval_seconds
             time.sleep(max(0.0, next_tick_at - time.monotonic()))
-            continue
-
-        with output_path.open("a", encoding="utf-8") as handle:
-            for first_exchange, second_exchange in pairs:
-                if first_exchange not in latest_snapshots or second_exchange not in latest_snapshots:
-                    pair_skip_by_reason["missing_snapshot"] += 1
-                    continue
-                if (
-                    first_exchange not in refreshed_exchanges
-                    or second_exchange not in refreshed_exchanges
-                ):
-                    pair_skip_by_reason["awaiting_refresh"] += 1
-                    continue
-                pair_risk, _ = risk_with_pair_timing_gates(
-                    risk=risk,
-                    first_exchange=first_exchange,
-                    second_exchange=second_exchange,
-                    exchange_intervals=exchange_intervals,
-                    timing_grace_ms=args.timing_grace_ms,
-                    align_to_exchange_intervals=interval_gate_alignment_enabled,
-                )
-                forward, reverse = evaluate_directional_opportunities(
-                    market=args.market,
-                    canonical_symbol=args.canonical_symbol,
-                    first_snapshot=latest_snapshots[first_exchange],
-                    second_snapshot=latest_snapshots[second_exchange],
-                    first_exchange=first_exchange,
-                    second_exchange=second_exchange,
-                    base_asset=args.base_asset,
-                    quote_asset=args.quote_asset,
-                    balances=balances,
-                    risk=pair_risk,
-                    now=current_time,
-                )
-                for observation in (forward, reverse):
-                    tracker.record(observation)
-                    handle.write(
-                        json.dumps(observation.as_dict(), ensure_ascii=True) + "\n"
-                    )
-                    if observation.accepted:
-                        LOGGER.info(
-                            "sim opportunity accepted direction=%s market=%s profit_quote=%s profit_bps=%s",
-                            observation.direction_key,
-                            observation.market,
-                            observation.executable_profit_quote,
-                            observation.executable_profit_bps,
-                            extra={"event_name": "arbitrage_sim_opportunity"},
-                        )
-
-        iterations += 1
-        if args.summary_every > 0 and iterations % args.summary_every == 0:
-            summary = _collect_tick_summary(
-                tracker=tracker,
-                refresh_count_by_exchange=refresh_count_by_exchange,
-                fetch_error_by_exchange=fetch_error_by_exchange,
-                fetch_error_by_code=fetch_error_by_code,
-                pair_skip_by_reason=pair_skip_by_reason,
-                request_stats=request_stats,
-                exchange_intervals=exchange_intervals,
-                pair_timing_gates=pair_timing_gates,
-                interval_gate_alignment_enabled=interval_gate_alignment_enabled,
-                timing_grace_ms=args.timing_grace_ms,
-                clock_skew_gate_enforced=args.enforce_clock_skew_gate,
-            )
-            LOGGER.info(
-                "simulation summary %s",
-                json.dumps(summary, ensure_ascii=True),
-                extra={"event_name": "arbitrage_sim_summary"},
-            )
-        next_tick_at += interval_seconds
-        time.sleep(max(0.0, next_tick_at - time.monotonic()))
+    finally:
+        for future in pending_requests:
+            future.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
 
     summary = _collect_tick_summary(
         tracker=tracker,

@@ -145,7 +145,11 @@ def risk_with_pair_timing_gates(
 class ExchangeFetchScheduler:
     def __init__(self, intervals: dict[str, float]) -> None:
         self.intervals = dict(intervals)
-        self._last_attempt_at: dict[str, float] = {}
+        self._next_due_at: dict[str, float] = {}
+
+    def _tolerance_seconds(self, *, exchange: str) -> float:
+        interval_seconds = max(self.intervals.get(exchange, 1.0), 0.1)
+        return min(interval_seconds * 0.1, 0.02)
 
     def due_exchanges(
         self,
@@ -158,14 +162,22 @@ class ExchangeFetchScheduler:
             normalized = exchange.strip().lower()
             if not normalized:
                 continue
-            interval_seconds = max(self.intervals.get(normalized, 1.0), 0.1)
-            last_attempt_at = self._last_attempt_at.get(normalized)
-            if last_attempt_at is None or (now_monotonic - last_attempt_at) >= interval_seconds:
+            next_due_at = self._next_due_at.get(normalized)
+            tolerance_seconds = self._tolerance_seconds(exchange=normalized)
+            if next_due_at is None or now_monotonic >= (next_due_at - tolerance_seconds):
                 due.append(normalized)
         return tuple(due)
 
     def mark_attempt(self, *, exchange: str, now_monotonic: float) -> None:
-        self._last_attempt_at[exchange.strip().lower()] = now_monotonic
+        normalized = exchange.strip().lower()
+        interval_seconds = max(self.intervals.get(normalized, 1.0), 0.1)
+        next_due_at = self._next_due_at.get(normalized)
+        if next_due_at is None:
+            self._next_due_at[normalized] = now_monotonic + interval_seconds
+            return
+        while next_due_at <= now_monotonic:
+            next_due_at += interval_seconds
+        self._next_due_at[normalized] = next_due_at
 
 
 @dataclass(frozen=True)
@@ -234,6 +246,8 @@ class SimulationObservation:
     clock_skew_ms: int
     clock_skew_exceeded: bool
     market_opportunity: bool
+    actionable_opportunity: bool
+    positive_profit_opportunity: bool
     reservation_blocked: bool
     zero_profit_opportunity: bool
 
@@ -266,6 +280,8 @@ class SimulationObservation:
             "clock_skew_ms": self.clock_skew_ms,
             "clock_skew_exceeded": self.clock_skew_exceeded,
             "market_opportunity": self.market_opportunity,
+            "actionable_opportunity": self.actionable_opportunity,
+            "positive_profit_opportunity": self.positive_profit_opportunity,
             "reservation_blocked": self.reservation_blocked,
             "zero_profit_opportunity": self.zero_profit_opportunity,
         }
@@ -289,6 +305,8 @@ class SimulationDirectionStats:
     max_clock_skew_ms: int = 0
     latest_clock_skew_ms: int = 0
     market_opportunity_count: int = 0
+    actionable_opportunity_count: int = 0
+    positive_profit_opportunity_count: int = 0
     reservation_blocked_count: int = 0
     zero_profit_opportunity_count: int = 0
 
@@ -303,6 +321,10 @@ class SimulationDirectionStats:
             self.clock_skew_exceeded_count += 1
         if observation.market_opportunity:
             self.market_opportunity_count += 1
+        if observation.actionable_opportunity:
+            self.actionable_opportunity_count += 1
+        if observation.positive_profit_opportunity:
+            self.positive_profit_opportunity_count += 1
         if observation.reservation_blocked:
             self.reservation_blocked_count += 1
         if observation.zero_profit_opportunity:
@@ -343,8 +365,28 @@ class SimulationDirectionStats:
             if self.observed_count > 0
             else 0.0
         )
+        actionable_opportunity_rate = (
+            float(self.actionable_opportunity_count / self.observed_count)
+            if self.observed_count > 0
+            else 0.0
+        )
+        positive_profit_opportunity_rate = (
+            float(self.positive_profit_opportunity_count / self.observed_count)
+            if self.observed_count > 0
+            else 0.0
+        )
         market_opportunity_per_hour = (
             float(self.market_opportunity_count * 3600 / elapsed_seconds)
+            if elapsed_seconds > 0
+            else 0.0
+        )
+        actionable_opportunity_per_hour = (
+            float(self.actionable_opportunity_count * 3600 / elapsed_seconds)
+            if elapsed_seconds > 0
+            else 0.0
+        )
+        positive_profit_opportunity_per_hour = (
+            float(self.positive_profit_opportunity_count * 3600 / elapsed_seconds)
             if elapsed_seconds > 0
             else 0.0
         )
@@ -361,6 +403,24 @@ class SimulationDirectionStats:
             "market_opportunity_count": self.market_opportunity_count,
             "market_opportunity_rate": round(market_opportunity_rate, 6),
             "market_opportunity_per_hour": round(market_opportunity_per_hour, 6),
+            "actionable_opportunity_count": self.actionable_opportunity_count,
+            "actionable_opportunity_rate": round(
+                actionable_opportunity_rate,
+                6,
+            ),
+            "actionable_opportunity_per_hour": round(
+                actionable_opportunity_per_hour,
+                6,
+            ),
+            "positive_profit_opportunity_count": self.positive_profit_opportunity_count,
+            "positive_profit_opportunity_rate": round(
+                positive_profit_opportunity_rate,
+                6,
+            ),
+            "positive_profit_opportunity_per_hour": round(
+                positive_profit_opportunity_per_hour,
+                6,
+            ),
             "cumulative_profit_quote": _decimal_text(self.cumulative_profit_quote),
             "best_profit_quote": (
                 _decimal_text(self.best_profit_quote)
@@ -424,6 +484,8 @@ class SimulationStatsTracker:
         total_clock_skew_exceeded = 0
         max_clock_skew_ms = 0
         total_market_opportunity_count = 0
+        total_actionable_opportunity_count = 0
+        total_positive_profit_opportunity_count = 0
         total_reservation_blocked_count = 0
         total_zero_profit_opportunity_count = 0
         for stats in self._stats.values():
@@ -431,6 +493,10 @@ class SimulationStatsTracker:
             total_clock_skew_exceeded += stats.clock_skew_exceeded_count
             max_clock_skew_ms = max(max_clock_skew_ms, stats.max_clock_skew_ms)
             total_market_opportunity_count += stats.market_opportunity_count
+            total_actionable_opportunity_count += stats.actionable_opportunity_count
+            total_positive_profit_opportunity_count += (
+                stats.positive_profit_opportunity_count
+            )
             total_reservation_blocked_count += stats.reservation_blocked_count
             total_zero_profit_opportunity_count += stats.zero_profit_opportunity_count
         return {
@@ -451,6 +517,20 @@ class SimulationStatsTracker:
                 else 0.0,
                 6,
             ),
+            "actionable_opportunity_count": total_actionable_opportunity_count,
+            "actionable_opportunity_rate": round(
+                float(total_actionable_opportunity_count / total_observed)
+                if total_observed > 0
+                else 0.0,
+                6,
+            ),
+            "positive_profit_opportunity_count": total_positive_profit_opportunity_count,
+            "positive_profit_opportunity_rate": round(
+                float(total_positive_profit_opportunity_count / total_observed)
+                if total_observed > 0
+                else 0.0,
+                6,
+            ),
             "accepted_per_hour": round(
                 float(total_accepted * 3600 / elapsed_seconds)
                 if elapsed_seconds > 0
@@ -459,6 +539,20 @@ class SimulationStatsTracker:
             ),
             "market_opportunity_per_hour": round(
                 float(total_market_opportunity_count * 3600 / elapsed_seconds)
+                if elapsed_seconds > 0
+                else 0.0,
+                6,
+            ),
+            "actionable_opportunity_per_hour": round(
+                float(total_actionable_opportunity_count * 3600 / elapsed_seconds)
+                if elapsed_seconds > 0
+                else 0.0,
+                6,
+            ),
+            "positive_profit_opportunity_per_hour": round(
+                float(
+                    total_positive_profit_opportunity_count * 3600 / elapsed_seconds
+                )
                 if elapsed_seconds > 0
                 else 0.0,
                 6,
@@ -642,11 +736,17 @@ def _evaluate_payload(
     )
     reservation_blocked = decision.reason_code == "RESERVATION_FAILED"
     market_opportunity = decision.accepted or reservation_blocked
+    positive_profit_opportunity = (
+        market_opportunity
+        and edge is not None
+        and edge.executable_profit_quote > Decimal("0")
+    )
     zero_profit_opportunity = (
         market_opportunity
         and edge is not None
         and edge.executable_profit_quote == Decimal("0")
     )
+    actionable_opportunity = decision.accepted and positive_profit_opportunity
     return SimulationObservation(
         market=market,
         buy_exchange=buy_exchange,
@@ -662,6 +762,8 @@ def _evaluate_payload(
         clock_skew_ms=clock_skew_ms,
         clock_skew_exceeded=clock_skew_ms > original_clock_skew_ms,
         market_opportunity=market_opportunity,
+        actionable_opportunity=actionable_opportunity,
+        positive_profit_opportunity=positive_profit_opportunity,
         reservation_blocked=reservation_blocked,
         zero_profit_opportunity=zero_profit_opportunity,
     )
