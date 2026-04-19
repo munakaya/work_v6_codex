@@ -352,6 +352,7 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         connector=market_data_connector,
         metrics=metrics,
         redis_runtime=redis_runtime,
+        read_store=bootstrap.store,
     )
     private_exchange_connectors = build_private_exchange_connectors(config=config)
     strategy_runtime = StrategyRuntime(

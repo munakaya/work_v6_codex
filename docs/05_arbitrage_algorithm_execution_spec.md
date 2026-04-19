@@ -48,7 +48,8 @@
 - 현재 전략 런타임은 우선 같은 프로세스의 `PublicMarketDataConnector` 최신 snapshot cache를 읽는다.
 - 같은 프로세스 cache가 없으면 Redis `market.orderbook_top` cached snapshot을 읽는다.
 - 즉, 운영용 기본 경로는 `cache reuse`이며, 전략 평가 단계가 다시 direct REST를 때리지 않도록 바뀌었다.
-- 다만 cache를 채우는 collector coverage가 부족하면 `MARKET_SNAPSHOT_NOT_FOUND`로 fail-closed될 수 있다.
+- `market_data_runtime`은 이제 고정 poll 대상뿐 아니라 실행 중 arbitrage run의 `(base_exchange, hedge_exchange, market)`도 자동으로 poll target에 합친다.
+- 다만 collector coverage가 완전하지 않으면 여전히 `MARKET_SNAPSHOT_NOT_FOUND`로 fail-closed될 수 있다.
 - Redis의 `market.orderbook_top`은 이제 운영 조회/대시보드용일 뿐 아니라, 전략 런타임이 재사용할 수 있는 보조 snapshot source다.
 - 따라서 현재 핫패스의 남은 실질 병목은 `DB read`보다 `collector coverage`, `REST fetch latency`, `rate limit`, `poll interval`이다.
 - 목표 구조는 `public WS 또는 단일 market-data collector -> 최신 snapshot cache -> strategy runtime 재사용` 순서로 완전히 단일화하는 것이다.
@@ -90,7 +91,7 @@
 
 - `candidate_exchanges[]`에서 이번 틱에 평가 가능한 거래소만 남긴다.
 - 현재 구현에서는 이 단계가 direct REST 재조회가 아니라 최근 snapshot cache를 고르는 단계로 먼저 동작한다.
-- 남은 과제는 다거래소/다심볼에서도 cache miss 없이 항상 최신 snapshot이 준비되도록 collector coverage를 넓히는 것이다.
+- 현재는 실행 중 arbitrage run에서 파생된 거래소/심볼은 선제 수집하지만, 장기적으로는 WS collector까지 포함한 더 넓은 coverage가 필요하다.
 - 각 거래소별로 아래를 먼저 걸러낸다.
   - latest orderbook snapshot 존재
   - latest balance snapshot 존재

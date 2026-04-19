@@ -81,9 +81,13 @@ class ControlPlaneMarketReadRouteMixin:
 
     def _market_runtime_response(self) -> tuple[HTTPStatus, dict[str, object]]:
         runtime = self.server.market_data_runtime.info
+        exchange_filter = runtime.exchange or None
+        snapshot_limit = max(runtime.target_count, len(runtime.markets), 1)
+        if runtime.target_groups and len(runtime.target_groups) > 1:
+            exchange_filter = None
         snapshots = self._list_market_snapshots(
-            exchange=runtime.exchange or None,
-            limit=max(len(runtime.markets), 1),
+            exchange=exchange_filter,
+            limit=snapshot_limit,
         )
         return HTTPStatus.OK, self._response(
             data={

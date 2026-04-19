@@ -17,6 +17,7 @@
 - market_data_runtime_rate_limit_cases.py: market-data/runtime API가 rate limit과 retry/backoff 설정을 노출하는지 검증한다
 - control_plane_write_guard_cases.py: write API bearer token 보호와 per-IP 기본 rate limit이 401/429로 동작하는지 실제 서버 기준으로 검증한다
 - exchange_auth_cases.py: Upbit/Bithumb/Coinone auth helper가 query_hash, JWT, payload/signature를 결정적으로 생성하는지 검증한다
+- market_data_runtime_target_cases.py: market_data_runtime가 고정 poll 대상과 실행 중 arbitrage run에서 파생된 거래소/심볼 target을 함께 수집하는지 검증한다
 - private_exchange_ws_runtime_cases.py: runtime API가 거래소별 private websocket auth-ready 상태와 기본 제한 정보를 노출하는지 검증한다
 - arbitrage_runtime_cache_cases.py: strategy runtime loader가 direct REST 대신 cached orderbook snapshot만 읽고, cache miss 시 fail-closed로 빠지는지 검증한다
 - arbitrage_replay_runner.py: 저장된 재정거래 입력 payload를 다시 평가해 accepted/reason_code 요약과 mismatch를 출력한다

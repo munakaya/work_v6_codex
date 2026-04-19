@@ -21,8 +21,8 @@
   특히 `fee`, `depth`, `slippage`, `rebalance_buffer_quote`가 실제 숫자로 어떻게 반영되는지 점검해야 한다.
 
 - [ ] 전략 핫패스 collector coverage 보강
-  같은 프로세스 cache/Redis cached snapshot 재사용은 반영됐지만, 다거래소/다심볼에서 cache를 안정적으로 채우는 collector coverage는 아직 부족하다.
-  목표는 `strategy_runtime`이 `MARKET_SNAPSHOT_NOT_FOUND` 없이 최신 snapshot만 읽도록, `market_data_runtime` 또는 WS collector가 필요한 거래소/심볼을 선제 수집하게 만드는 것이다.
+  같은 프로세스 cache/Redis cached snapshot 재사용과, 실행 중 arbitrage run에서 파생된 `(exchange, market)` 자동 poll target 확장은 반영됐다.
+  남은 과제는 다거래소/다심볼 전반에서 `MARKET_SNAPSHOT_NOT_FOUND`를 줄이도록, `market_data_runtime` coverage를 더 넓히고 최종적으로 WS collector까지 포함한 선제 수집 구조로 정리하는 것이다.
 
 - [ ] direct market read endpoint를 cached 우선으로 정리
   `/api/v1/market-data/orderbook-top` 같은 direct fetch 경로가 운영 화면/모니터링에서 자주 쓰이면 같은 공인 IP의 rate budget을 갉아먹는다.
