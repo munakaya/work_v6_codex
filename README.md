@@ -63,11 +63,40 @@
 - [arbitrage_simulation.py](src/trading_platform/strategy/arbitrage_simulation.py)
 - [market_data_connector.py](src/trading_platform/market_data_connector.py)
 
+## 핫패스 데이터 흐름
+
+실제 재정거래 판단 경로는 아래처럼 동작한다.
+
+1. `market_data_runtime`이 오더북을 선제 수집한다.
+2. 수집 대상은 아래 둘을 합친다.
+   - 운영자가 설정한 고정 poll 대상
+   - 현재 실행 중인 arbitrage run에서 파생된 `(base_exchange, hedge_exchange, market)`
+3. 수집한 snapshot은 아래 두 곳에 저장된다.
+   - 같은 프로세스 안의 `PublicMarketDataConnector` 최신 cache
+   - Redis `market.orderbook_top` cache
+4. `strategy_runtime`은 평가 시점에 direct REST를 다시 때리지 않는다.
+5. 대신 아래 순서로 cache만 읽는다.
+   - 같은 프로세스 cache
+   - Redis cached snapshot
+6. 둘 다 없으면 억지로 재조회하지 않고 `MARKET_SNAPSHOT_NOT_FOUND`로 즉시 skip한다.
+
+이 구조의 목적은 단순하다.
+
+- 같은 IP에서 REST를 두 번 치지 않기
+- 판단 경로를 더 짧게 만들기
+- 대시보드와 전략 런타임이 같은 snapshot을 보게 만들기
+- cache miss는 조용히 잘못 계산하지 말고 fail-closed로 처리하기
+
+쉽게 말하면:
+
+- 예전: `strategy_runtime -> 매 평가마다 REST 직접 호출`
+- 현재: `collector -> cache 적재 -> strategy_runtime은 cache만 읽음`
+
 ## 핵심 알고리즘
 
 아래 순서로 계산한다.
 
-1. 각 거래소 public REST orderbook에서 `상위 N레벨 depth`를 읽는다.
+1. `market_data_runtime` 또는 collector가 거래소 public REST orderbook에서 `상위 N레벨 depth`를 선제 수집한다.
 2. 매수 거래소 `asks[]`, 매도 거래소 `bids[]`를 준비한다.
 3. 주문 가능 수량 `q`를 계산한다.
    - buy side depth 총수량
@@ -87,6 +116,7 @@
    - 매수측 quote 잔고가 `매수원금 + 매수수수료 + 매수슬리피지버퍼 + 고정버퍼`를 감당하는지
    - 매도측 base 잔고가 `q`를 감당하는지
 10. 최소 이익, 최소 bps, freshness/stale, 리스크 한도를 통과하면 기회로 본다.
+11. accepted 되더라도 실제 주문 경로는 execution mode와 reservation 결과를 다시 따른다.
 
 ## 무엇을 질문해야 하나
 
