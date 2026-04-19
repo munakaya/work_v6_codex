@@ -133,16 +133,20 @@ def _case_skew() -> dict[str, object]:
     return payload
 
 
-def _case_reservation_failed() -> dict[str, object]:
+def _case_balance_limited_but_profitable() -> dict[str, object]:
     payload = _base_payload()
     payload["base_balance"] = {
         **dict(payload["base_balance"]),
         "available_quote": "95",
     }
+    payload["hedge_balance"] = {
+        **dict(payload["hedge_balance"]),
+        "available_base": "1.0",
+    }
     return payload
 
 
-def _case_risk_blocked() -> dict[str, object]:
+def _case_risk_limited_but_profitable() -> dict[str, object]:
     payload = _base_payload()
     payload["risk_config"] = {
         **dict(payload["risk_config"]),
@@ -247,6 +251,59 @@ def _case_rebalance_buffer_reject() -> tuple[bool, str, str]:
     )
 
 
+def _case_buy_fee_quote_requirement_shrinks_qty() -> tuple[bool, str, bool, str]:
+    payload = _base_payload()
+    payload["base_orderbook"] = {
+        **dict(payload["base_orderbook"]),
+        "asks": [{"price": "100", "quantity": "1.0"}],
+    }
+    payload["hedge_orderbook"] = {
+        **dict(payload["hedge_orderbook"]),
+        "bids": [{"price": "105", "quantity": "1.0"}],
+    }
+    payload["base_balance"] = {
+        **dict(payload["base_balance"]),
+        "available_quote": "100",
+    }
+    payload["hedge_balance"] = {
+        **dict(payload["hedge_balance"]),
+        "available_base": "1.0",
+    }
+    payload["risk_config"] = {
+        **dict(payload["risk_config"]),
+        "taker_fee_bps_buy": "10",
+    }
+    decision = evaluate_arbitrage(load_strategy_inputs(payload))
+    computed = dict(decision.decision_context.get("computed") or {})
+    reservation = dict(decision.decision_context.get("reservation") or {})
+    return (
+        decision.accepted is True,
+        str(decision.reason_code),
+        str(computed.get("target_qty")) != "1",
+        str(reservation.get("quote_required")),
+    )
+
+
+def _case_candidate_size_shrinks_to_balance() -> tuple[bool, str, str, str]:
+    payload = _base_payload()
+    payload["base_balance"] = {
+        **dict(payload["base_balance"]),
+        "available_quote": "95",
+    }
+    payload["hedge_balance"] = {
+        **dict(payload["hedge_balance"]),
+        "available_base": "1.0",
+    }
+    decision = evaluate_arbitrage(load_strategy_inputs(payload))
+    computed = dict(decision.decision_context.get("computed") or {})
+    return (
+        decision.accepted is True,
+        str(decision.reason_code),
+        str(computed.get("target_qty")),
+        str(computed.get("executable_profit_quote")),
+    )
+
+
 def _case_depth_insufficient() -> tuple[bool, str, bool]:
     payload = _base_payload()
     payload["risk_config"] = {
@@ -268,8 +325,8 @@ CASES = [
     ("C2", _case_depth_negative, False, "EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH"),
     ("C3", _case_orderbook_stale, False, "ORDERBOOK_STALE"),
     ("C4", _case_skew, False, "QUOTE_PAIR_SKEW_TOO_HIGH"),
-    ("C5", _case_reservation_failed, False, "RESERVATION_FAILED"),
-    ("C6", _case_risk_blocked, False, "RISK_LIMIT_BLOCKED"),
+    ("C5", _case_balance_limited_but_profitable, True, "ARBITRAGE_OPPORTUNITY_FOUND"),
+    ("C6", _case_risk_limited_but_profitable, True, "ARBITRAGE_OPPORTUNITY_FOUND"),
     ("C7", _case_reentry_cooldown, False, "REENTRY_COOLDOWN_ACTIVE"),
     ("C8", _case_hedge_confidence_low, False, "HEDGE_CONFIDENCE_TOO_LOW"),
     ("C9", _case_public_connector_degraded, False, "PUBLIC_CONNECTOR_DEGRADED"),
@@ -325,6 +382,34 @@ def main() -> int:
         f"rejected={c15_rejected} reason={c15_reason} depth_passed={c15_depth_passed}"
     )
     if not c15_pass:
+        failed += 1
+
+    c16_ok, c16_reason, c16_target_qty, c16_profit = _case_candidate_size_shrinks_to_balance()
+    c16_pass = (
+        c16_ok
+        and c16_reason == "ARBITRAGE_OPPORTUNITY_FOUND"
+        and c16_target_qty == "0.95"
+        and c16_profit == "4.75"
+    )
+    print(
+        f"C16 {'PASS' if c16_pass else 'FAIL'} "
+        f"accepted={c16_ok} reason={c16_reason} target_qty={c16_target_qty} profit={c16_profit}"
+    )
+    if not c16_pass:
+        failed += 1
+
+    c17_ok, c17_reason, c17_qty_shrunk, c17_quote_required = _case_buy_fee_quote_requirement_shrinks_qty()
+    c17_pass = (
+        c17_ok
+        and c17_reason == "ARBITRAGE_OPPORTUNITY_FOUND"
+        and c17_qty_shrunk is True
+        and c17_quote_required == "100.0000000000000000000000000"
+    )
+    print(
+        f"C17 {'PASS' if c17_pass else 'FAIL'} "
+        f"accepted={c17_ok} reason={c17_reason} qty_shrunk={c17_qty_shrunk} quote_required={c17_quote_required}"
+    )
+    if not c17_pass:
         failed += 1
 
     return failed

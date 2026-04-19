@@ -333,7 +333,7 @@ def _case_skew_diagnostic_only() -> None:
     )
 
 
-def _case_reservation_blocked_diagnostic() -> None:
+def _case_balance_limited_simulation() -> None:
     forward, _ = evaluate_directional_opportunities(
         market="KRW-BTC",
         canonical_symbol="KRW-BTC",
@@ -348,7 +348,7 @@ def _case_reservation_blocked_diagnostic() -> None:
             available_base=Decimal("0.1"),
         ),
         risk=SimulationRiskSettings(
-            min_profit_quote=Decimal("1"),
+            min_profit_quote=Decimal("0.1"),
             min_profit_bps=Decimal("1"),
             max_clock_skew_ms=1000,
             max_orderbook_age_ms=5000,
@@ -359,13 +359,15 @@ def _case_reservation_blocked_diagnostic() -> None:
         ),
     )
     _assert(
-        forward.accepted is False
-        and forward.reason_code == "RESERVATION_FAILED"
+        forward.accepted is True
+        and forward.reason_code == "ARBITRAGE_OPPORTUNITY_FOUND"
         and forward.market_opportunity is True
-        and forward.actionable_opportunity is False
+        and forward.actionable_opportunity is True
         and forward.positive_profit_opportunity is True
-        and forward.reservation_blocked is True,
-        "reservation blocked diagnostic mismatch",
+        and forward.reservation_blocked is False
+        and forward.zero_profit_opportunity is False
+        and forward.executable_profit_quote == Decimal("0.4"),
+        "balance-limited simulation mismatch",
     )
 
 
@@ -477,7 +479,7 @@ def main() -> None:
     _case_full_depth_profit_reject()
     _case_stats_tracker()
     _case_skew_diagnostic_only()
-    _case_reservation_blocked_diagnostic()
+    _case_balance_limited_simulation()
     _case_exchange_intervals_and_scheduler()
     _case_pair_timing_gate_alignment()
     print("PASS arbitrage simulation observer helpers evaluate and aggregate correctly")

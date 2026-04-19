@@ -15,7 +15,13 @@ def reserve_capacity(
     candidate_size: CandidateSizeResult,
     executable_edge: ExecutableEdgeResult,
 ) -> ReservationPlan:
-    quote_required = executable_edge.executable_buy_cost_quote
+    quote_required = (
+        executable_edge.executable_buy_cost_quote
+        + executable_edge.fee_buy_quote
+        + executable_edge.buy_slippage_buffer_quote
+        + executable_edge.unwind_buffer_quote
+        + executable_edge.rebalance_buffer_quote
+    )
     base_required = candidate_size.target_qty
     reserved_notional = executable_edge.executable_buy_cost_quote
 
