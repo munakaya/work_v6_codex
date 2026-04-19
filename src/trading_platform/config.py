@@ -60,6 +60,7 @@ class AppConfig:
     exchange_key_fallback_dir: Path
     market_data_timeout_ms: int
     market_data_stale_threshold_ms: int
+    market_data_orderbook_depth_levels: int
     market_data_retry_count: int
     market_data_retry_backoff_initial_ms: int
     market_data_retry_backoff_max_ms: int
@@ -128,6 +129,7 @@ def load_config() -> AppConfig:
         ),
         market_data_timeout_ms=_env_int("TP_MARKET_DATA_TIMEOUT_MS", 3000),
         market_data_stale_threshold_ms=_env_int("TP_MARKET_DATA_STALE_THRESHOLD_MS", 3000),
+        market_data_orderbook_depth_levels=_env_int("TP_MARKET_DATA_ORDERBOOK_DEPTH_LEVELS", 5),
         market_data_retry_count=_env_int("TP_MARKET_DATA_RETRY_COUNT", 0),
         market_data_retry_backoff_initial_ms=_env_int(
             "TP_MARKET_DATA_RETRY_BACKOFF_INITIAL_MS", 250

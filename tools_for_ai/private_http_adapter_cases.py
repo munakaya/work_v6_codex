@@ -22,18 +22,38 @@ def _iso_now() -> str:
 class DummyConnector:
     def get_orderbook_top(self, *, exchange: str, market: str) -> dict[str, object]:
         now = _iso_now()
-        prices = {
-            ("sample", "KRW-BTC"): ("99900", "100000"),
-            ("upbit", "KRW-BTC"): ("100500", "100550"),
+        orderbooks = {
+            ("sample", "KRW-BTC"): {
+                "bids": [
+                    {"price": "99900", "quantity": "2.49"},
+                    {"price": "99850", "quantity": "2.49"},
+                ],
+                "asks": [
+                    {"price": "100000", "quantity": "2.49"},
+                    {"price": "100050", "quantity": "2.49"},
+                ],
+            },
+            ("upbit", "KRW-BTC"): {
+                "bids": [
+                    {"price": "100500", "quantity": "2.49"},
+                    {"price": "100450", "quantity": "2.49"},
+                ],
+                "asks": [
+                    {"price": "100550", "quantity": "2.49"},
+                    {"price": "100600", "quantity": "2.49"},
+                ],
+            },
         }
-        best_bid, best_ask = prices[(exchange, market)]
+        orderbook = orderbooks[(exchange, market)]
         return {
             "exchange": exchange,
             "market": market,
-            "best_bid": best_bid,
-            "best_ask": best_ask,
-            "bid_volume": "5",
-            "ask_volume": "5",
+            "best_bid": orderbook["bids"][0]["price"],
+            "best_ask": orderbook["asks"][0]["price"],
+            "bid_volume": orderbook["bids"][0]["quantity"],
+            "ask_volume": orderbook["asks"][0]["quantity"],
+            "bids": list(orderbook["bids"]),
+            "asks": list(orderbook["asks"]),
             "exchange_timestamp": now,
             "received_at": now,
             "exchange_age_ms": 0,
@@ -50,7 +70,7 @@ def _assert(condition: bool, message: str) -> None:
 def _fresh_store(bot_key: str) -> tuple[object, str, str]:
     store = sample_read_store()
     latest_default = store.config_versions["default"][0]["config_json"]["arbitrage_runtime"]
-    latest_default["hedge_balance"]["available_base"] = "5.0"
+    latest_default["hedge_balance"]["available_base"] = "10.0"
     latest_default["base_balance"]["available_quote"] = "150000000"
     for run in store.strategy_runs.values():
         run["status"] = "stopped"
@@ -81,6 +101,11 @@ def _load_decision_and_intent(store: object, run_id: str) -> tuple[object, dict[
         run=run,
     )
     _assert(load_result.payload is not None, f"load failed: {load_result.skip_reason}")
+    _assert(
+        len(list(load_result.payload["base_orderbook"]["asks"])) == 2
+        and len(list(load_result.payload["hedge_orderbook"]["bids"])) == 2,
+        "runtime loader should preserve multi-level depth from connector snapshots",
+    )
     decision = evaluate_arbitrage(load_strategy_inputs(load_result.payload))
     _assert(decision.accepted, "decision should be accepted")
     outcome, intent = persist_order_intent_plan(

@@ -68,6 +68,7 @@ def main() -> None:
         connector = PublicMarketDataConnector(
             timeout_ms=1000,
             stale_threshold_ms=3000,
+            orderbook_depth_levels=7,
             retry_count=2,
             retry_backoff=ExponentialBackoffPolicy(initial_delay_ms=1, max_delay_ms=2),
             rate_limit_policies={
@@ -86,7 +87,13 @@ def main() -> None:
         _assert(isinstance(payload, list), "retry payload should succeed")
         _assert(_RetryHandler.call_count == 3, "retry path should call endpoint three times")
         _assert(elapsed >= 0.0, "retry elapsed should be measurable")
+        snapshot = connector.get_orderbook_top(exchange="upbit", market="KRW-BTC")
+        _assert(snapshot["asks"] == [{"price": "101", "quantity": "1"}], "ask levels mismatch")
+        _assert(snapshot["bids"] == [{"price": "100", "quantity": "1"}], "bid levels mismatch")
+        _assert(connector._coinone_request_depth_levels() == 10, "coinone supported depth rounding mismatch")
         print("PASS market data retry with backoff")
+        print("PASS market data snapshot includes normalized orderbook depth")
+        print("PASS coinone request depth rounds up to supported size")
     finally:
         server.shutdown()
         server.server_close()

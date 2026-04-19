@@ -33,6 +33,7 @@ def _build_connector() -> PublicMarketDataConnector:
     return PublicMarketDataConnector(
         timeout_ms=config.market_data_timeout_ms,
         stale_threshold_ms=config.market_data_stale_threshold_ms,
+        orderbook_depth_levels=config.market_data_orderbook_depth_levels,
         retry_count=config.market_data_retry_count,
         retry_backoff=ExponentialBackoffPolicy(
             initial_delay_ms=config.market_data_retry_backoff_initial_ms,

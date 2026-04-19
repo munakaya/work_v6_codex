@@ -38,7 +38,35 @@ def _assigned_config_version(
     return None
 
 
-def _one_level_orderbook(snapshot: dict[str, object]) -> dict[str, object]:
+def _snapshot_levels(
+    snapshot: dict[str, object],
+    *,
+    side: str,
+    fallback_price_key: str,
+    fallback_quantity_key: str,
+) -> list[dict[str, str]]:
+    raw_levels = snapshot.get(side)
+    if isinstance(raw_levels, list):
+        normalized: list[dict[str, str]] = []
+        for raw_level in raw_levels:
+            if not isinstance(raw_level, dict):
+                continue
+            price = raw_level.get("price")
+            quantity = raw_level.get("quantity")
+            if price is None or quantity is None:
+                continue
+            normalized.append({"price": str(price), "quantity": str(quantity)})
+        if normalized:
+            return normalized
+    return [
+        {
+            "price": str(snapshot[fallback_price_key]),
+            "quantity": str(snapshot[fallback_quantity_key]),
+        }
+    ]
+
+
+def _snapshot_orderbook(snapshot: dict[str, object]) -> dict[str, object]:
     observed_at = str(
         snapshot.get("exchange_timestamp") or snapshot.get("received_at") or _iso_now()
     )
@@ -46,18 +74,18 @@ def _one_level_orderbook(snapshot: dict[str, object]) -> dict[str, object]:
         "exchange_name": str(snapshot["exchange"]),
         "market": str(snapshot["market"]),
         "observed_at": observed_at,
-        "asks": [
-            {
-                "price": str(snapshot["best_ask"]),
-                "quantity": str(snapshot["ask_volume"]),
-            }
-        ],
-        "bids": [
-            {
-                "price": str(snapshot["best_bid"]),
-                "quantity": str(snapshot["bid_volume"]),
-            }
-        ],
+        "asks": _snapshot_levels(
+            snapshot,
+            side="asks",
+            fallback_price_key="best_ask",
+            fallback_quantity_key="ask_volume",
+        ),
+        "bids": _snapshot_levels(
+            snapshot,
+            side="bids",
+            fallback_price_key="best_bid",
+            fallback_quantity_key="bid_volume",
+        ),
         "connector_healthy": bool(snapshot.get("connector_healthy", True)),
     }
 
@@ -253,8 +281,8 @@ def load_arbitrage_runtime_payload(
             "market": required["market"],
             "base_exchange": required["base_exchange"],
             "hedge_exchange": required["hedge_exchange"],
-            "base_orderbook": _one_level_orderbook(base_snapshot),
-            "hedge_orderbook": _one_level_orderbook(hedge_snapshot),
+            "base_orderbook": _snapshot_orderbook(base_snapshot),
+            "hedge_orderbook": _snapshot_orderbook(hedge_snapshot),
             "base_balance": base_balance,
             "hedge_balance": hedge_balance,
             "risk_config": dict(risk_config),

@@ -32,6 +32,64 @@ def _decimal_text(value: Decimal) -> str:
     return format(value, "f")
 
 
+def _snapshot_levels(
+    snapshot: dict[str, object],
+    *,
+    side: str,
+    fallback_price_key: str,
+    fallback_quantity_key: str,
+) -> list[dict[str, str]]:
+    raw_levels = snapshot.get(side)
+    if isinstance(raw_levels, list):
+        normalized: list[dict[str, str]] = []
+        for raw_level in raw_levels:
+            if not isinstance(raw_level, dict):
+                continue
+            price = raw_level.get("price")
+            quantity = raw_level.get("quantity")
+            if price is None or quantity is None:
+                continue
+            normalized.append({"price": str(price), "quantity": str(quantity)})
+        if normalized:
+            return normalized
+    return [
+        {
+            "price": str(snapshot[fallback_price_key]),
+            "quantity": str(snapshot[fallback_quantity_key]),
+        }
+    ]
+
+
+def _snapshot_orderbook_payload(
+    *,
+    snapshot: dict[str, object],
+    exchange_name: str,
+    market: str,
+    fallback_observed_at: str,
+) -> dict[str, object]:
+    return {
+        "exchange_name": exchange_name,
+        "market": market,
+        "observed_at": _parse_iso_datetime(
+            snapshot.get("exchange_timestamp") or snapshot.get("received_at"),
+            fallback=fallback_observed_at,
+        ),
+        "asks": _snapshot_levels(
+            snapshot,
+            side="asks",
+            fallback_price_key="best_ask",
+            fallback_quantity_key="ask_volume",
+        ),
+        "bids": _snapshot_levels(
+            snapshot,
+            side="bids",
+            fallback_price_key="best_bid",
+            fallback_quantity_key="bid_volume",
+        ),
+        "connector_healthy": bool(snapshot.get("connector_healthy", True)),
+    }
+
+
 def normalize_simulation_pairs(pairs: Sequence[str]) -> tuple[tuple[str, str], ...]:
     normalized: list[tuple[str, str]] = []
     seen: set[tuple[str, str]] = set()
@@ -598,50 +656,18 @@ def evaluate_directional_opportunities(
         "market": market,
         "base_exchange": first_exchange,
         "hedge_exchange": second_exchange,
-        "base_orderbook": {
-            "exchange_name": first_exchange,
-            "market": market,
-            "observed_at": _parse_iso_datetime(
-                first_snapshot.get("exchange_timestamp")
-                or first_snapshot.get("received_at"),
-                fallback=observed_at,
-            ),
-            "asks": [
-                {
-                    "price": str(first_snapshot["best_ask"]),
-                    "quantity": str(first_snapshot["ask_volume"]),
-                }
-            ],
-            "bids": [
-                {
-                    "price": str(first_snapshot["best_bid"]),
-                    "quantity": str(first_snapshot["bid_volume"]),
-                }
-            ],
-            "connector_healthy": bool(first_snapshot.get("connector_healthy", True)),
-        },
-        "hedge_orderbook": {
-            "exchange_name": second_exchange,
-            "market": market,
-            "observed_at": _parse_iso_datetime(
-                second_snapshot.get("exchange_timestamp")
-                or second_snapshot.get("received_at"),
-                fallback=observed_at,
-            ),
-            "asks": [
-                {
-                    "price": str(second_snapshot["best_ask"]),
-                    "quantity": str(second_snapshot["ask_volume"]),
-                }
-            ],
-            "bids": [
-                {
-                    "price": str(second_snapshot["best_bid"]),
-                    "quantity": str(second_snapshot["bid_volume"]),
-                }
-            ],
-            "connector_healthy": bool(second_snapshot.get("connector_healthy", True)),
-        },
+        "base_orderbook": _snapshot_orderbook_payload(
+            snapshot=first_snapshot,
+            exchange_name=first_exchange,
+            market=market,
+            fallback_observed_at=observed_at,
+        ),
+        "hedge_orderbook": _snapshot_orderbook_payload(
+            snapshot=second_snapshot,
+            exchange_name=second_exchange,
+            market=market,
+            fallback_observed_at=observed_at,
+        ),
         "base_balance": {
             "exchange_name": first_exchange,
             "base_asset": base_asset,

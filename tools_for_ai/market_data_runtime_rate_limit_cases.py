@@ -66,6 +66,7 @@ def main() -> None:
             "TP_MARKET_DATA_RETRY_COUNT": "2",
             "TP_MARKET_DATA_RETRY_BACKOFF_INITIAL_MS": "100",
             "TP_MARKET_DATA_RETRY_BACKOFF_MAX_MS": "800",
+            "TP_MARKET_DATA_ORDERBOOK_DEPTH_LEVELS": "7",
         }
     )
     server = subprocess.Popen(
@@ -91,6 +92,7 @@ def main() -> None:
         _assert(items["upbit_public_rest"]["rate_per_sec"] == 5.0, "upbit rps mismatch")
         _assert(items["upbit_public_rest"]["burst"] == 2, "upbit burst mismatch")
         _assert(items["coinone_public_rest"]["enabled"] is False, "coinone enabled mismatch")
+        _assert(rate_limits["orderbook_depth_levels"] == 7, "orderbook depth level mismatch")
         print("PASS market data runtime exposes rate limit config")
     finally:
         server.terminate()

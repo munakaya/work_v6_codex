@@ -180,6 +180,7 @@ PostgreSQL smoke는 `04_postgres_smoke_runbook.md`, 거래소 live smoke는 `04_
 - `TP_MARKET_DATA_RETRY_COUNT`
 - `TP_MARKET_DATA_RETRY_BACKOFF_INITIAL_MS`
 - `TP_MARKET_DATA_RETRY_BACKOFF_MAX_MS`
+- `TP_MARKET_DATA_ORDERBOOK_DEPTH_LEVELS`
 - `TP_UPBIT_PUBLIC_REST_RATE_LIMIT_PER_SEC`
 - `TP_UPBIT_PUBLIC_REST_BURST`
 - `TP_BITHUMB_PUBLIC_REST_RATE_LIMIT_PER_SEC`
@@ -194,6 +195,7 @@ PostgreSQL smoke는 `04_postgres_smoke_runbook.md`, 거래소 live smoke는 `04_
 - Coinone: `TP_COINONE_PUBLIC_REST_RATE_LIMIT_PER_SEC=10`, `TP_COINONE_PUBLIC_REST_BURST=10`
 
 이 저장소 기본값도 위 보수적 프리셋을 사용한다.
+`TP_MARKET_DATA_ORDERBOOK_DEPTH_LEVELS` 기본값은 `5`이며, public REST에서 상위 5레벨을 읽어 executable VWAP 계산에 전달한다.
 더 공격적인 값은 실측 재검증 없이 기본값으로 올리지 않는다.
 
 #### Notification

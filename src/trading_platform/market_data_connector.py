@@ -58,6 +58,7 @@ class PublicMarketDataConnector:
         *,
         timeout_ms: int,
         stale_threshold_ms: int,
+        orderbook_depth_levels: int = 5,
         retry_count: int,
         retry_backoff: ExponentialBackoffPolicy,
         rate_limit_policies: dict[str, RateLimitPolicy] | None,
@@ -67,6 +68,7 @@ class PublicMarketDataConnector:
     ) -> None:
         self.timeout_seconds = max(timeout_ms, 100) / 1000
         self.stale_threshold_ms = max(stale_threshold_ms, 0)
+        self.orderbook_depth_levels = max(orderbook_depth_levels, 1)
         self.retry_count = max(retry_count, 0)
         self.retry_backoff = retry_backoff
         self.upbit_base_url = upbit_base_url.rstrip("/")
@@ -111,7 +113,7 @@ class PublicMarketDataConnector:
     def _get_upbit_orderbook_top(self, market: str) -> dict[str, object]:
         url = "%s/v1/orderbook?%s" % (
             self.upbit_base_url,
-            urlencode({"markets": market, "count": 1}),
+            urlencode({"markets": market, "count": self.orderbook_depth_levels}),
         )
         payload = self._fetch_json(url, exchange="upbit")
         if not isinstance(payload, list) or not payload:
@@ -136,23 +138,75 @@ class PublicMarketDataConnector:
                 "UPSTREAM_INVALID_RESPONSE",
                 "upbit orderbook response is missing orderbook_units",
             )
-        top = units[0]
+        asks = self._normalize_levels(
+            list(units[: self.orderbook_depth_levels]),
+            price_key="ask_price",
+            quantity_key="ask_size",
+        )
+        bids = self._normalize_levels(
+            list(units[: self.orderbook_depth_levels]),
+            price_key="bid_price",
+            quantity_key="bid_size",
+        )
         return self._build_snapshot(
             exchange="upbit",
             market=str(item.get("market") or market),
-            best_bid=top.get("bid_price"),
-            best_ask=top.get("ask_price"),
-            bid_volume=top.get("bid_size"),
-            ask_volume=top.get("ask_size"),
+            bids=bids,
+            asks=asks,
             exchange_timestamp=_iso_from_epoch_ms(item.get("timestamp")),
             source_type="rest",
         )
 
     def _get_sample_orderbook_top(self, market: str) -> dict[str, object]:
         sample_quotes = {
-            "KRW-BTC": ("101574000", "101598000", "0.00035401", "0.00623162"),
-            "KRW-ETH": ("4718000", "4719000", "0.1821", "0.2334"),
-            "BTC-KRW": ("101574000", "101598000", "0.00035401", "0.00623162"),
+            "KRW-BTC": {
+                "bids": [
+                    {"price": "101574000", "quantity": "0.00035401"},
+                    {"price": "101573000", "quantity": "0.00125"},
+                    {"price": "101572000", "quantity": "0.0025"},
+                    {"price": "101571000", "quantity": "0.00375"},
+                    {"price": "101570000", "quantity": "0.005"},
+                ],
+                "asks": [
+                    {"price": "101598000", "quantity": "0.00623162"},
+                    {"price": "101599000", "quantity": "0.0045"},
+                    {"price": "101600000", "quantity": "0.003"},
+                    {"price": "101601000", "quantity": "0.002"},
+                    {"price": "101602000", "quantity": "0.0015"},
+                ],
+            },
+            "KRW-ETH": {
+                "bids": [
+                    {"price": "4718000", "quantity": "0.1821"},
+                    {"price": "4717000", "quantity": "0.25"},
+                    {"price": "4716000", "quantity": "0.35"},
+                    {"price": "4715000", "quantity": "0.45"},
+                    {"price": "4714000", "quantity": "0.55"},
+                ],
+                "asks": [
+                    {"price": "4719000", "quantity": "0.2334"},
+                    {"price": "4720000", "quantity": "0.2"},
+                    {"price": "4721000", "quantity": "0.18"},
+                    {"price": "4722000", "quantity": "0.16"},
+                    {"price": "4723000", "quantity": "0.14"},
+                ],
+            },
+            "BTC-KRW": {
+                "bids": [
+                    {"price": "101574000", "quantity": "0.00035401"},
+                    {"price": "101573000", "quantity": "0.00125"},
+                    {"price": "101572000", "quantity": "0.0025"},
+                    {"price": "101571000", "quantity": "0.00375"},
+                    {"price": "101570000", "quantity": "0.005"},
+                ],
+                "asks": [
+                    {"price": "101598000", "quantity": "0.00623162"},
+                    {"price": "101599000", "quantity": "0.0045"},
+                    {"price": "101600000", "quantity": "0.003"},
+                    {"price": "101601000", "quantity": "0.002"},
+                    {"price": "101602000", "quantity": "0.0015"},
+                ],
+            },
         }
         quote = sample_quotes.get(market)
         if quote is None:
@@ -165,10 +219,8 @@ class PublicMarketDataConnector:
         return self._build_snapshot(
             exchange="sample",
             market=market,
-            best_bid=quote[0],
-            best_ask=quote[1],
-            bid_volume=quote[2],
-            ask_volume=quote[3],
+            bids=list(quote["bids"][: self.orderbook_depth_levels]),
+            asks=list(quote["asks"][: self.orderbook_depth_levels]),
             exchange_timestamp=exchange_timestamp,
             source_type="sample",
         )
@@ -218,14 +270,21 @@ class PublicMarketDataConnector:
                 "UPSTREAM_INVALID_RESPONSE",
                 "bithumb orderbook response is missing orderbook_units",
             )
-        top = units[0]
+        asks = self._normalize_levels(
+            list(units[: self.orderbook_depth_levels]),
+            price_key="ask_price",
+            quantity_key="ask_size",
+        )
+        bids = self._normalize_levels(
+            list(units[: self.orderbook_depth_levels]),
+            price_key="bid_price",
+            quantity_key="bid_size",
+        )
         return self._build_snapshot(
             exchange="bithumb",
             market=str(item.get("market") or market),
-            best_bid=top.get("bid_price"),
-            best_ask=top.get("ask_price"),
-            bid_volume=top.get("bid_size"),
-            ask_volume=top.get("ask_size"),
+            bids=bids,
+            asks=asks,
             exchange_timestamp=_iso_from_epoch_ms(item.get("timestamp")),
             source_type="rest",
         )
@@ -236,7 +295,7 @@ class PublicMarketDataConnector:
             self.coinone_base_url,
             quote_currency,
             target_currency,
-            urlencode({"size": 5}),
+            urlencode({"size": self._coinone_request_depth_levels()}),
         )
         payload = self._fetch_json(url, exchange="coinone")
         if not isinstance(payload, dict):
@@ -247,7 +306,9 @@ class PublicMarketDataConnector:
             )
         if str(payload.get("result") or "").strip().lower() != "success":
             error_code = str(payload.get("error_code") or "").strip()
-            error_message = str(payload.get("error_msg") or "coinone orderbook request failed").strip()
+            error_message = str(
+                payload.get("error_msg") or "coinone orderbook request failed"
+            ).strip()
             if error_code in {"108", "107"}:
                 raise MarketDataError(
                     HTTPStatus.NOT_FOUND,
@@ -274,15 +335,21 @@ class PublicMarketDataConnector:
                 "UPSTREAM_INVALID_RESPONSE",
                 "coinone orderbook response is missing bids or asks",
             )
-        best_bid = bids[0]
-        best_ask = asks[0]
+        normalized_bids = self._normalize_levels(
+            list(bids[: self.orderbook_depth_levels]),
+            price_key="price",
+            quantity_key="qty",
+        )
+        normalized_asks = self._normalize_levels(
+            list(asks[: self.orderbook_depth_levels]),
+            price_key="price",
+            quantity_key="qty",
+        )
         return self._build_snapshot(
             exchange="coinone",
             market=f"{quote_currency}-{target_currency}",
-            best_bid=best_bid.get("price"),
-            best_ask=best_ask.get("price"),
-            bid_volume=best_bid.get("qty"),
-            ask_volume=best_ask.get("qty"),
+            bids=normalized_bids,
+            asks=normalized_asks,
             exchange_timestamp=_iso_from_epoch_ms(payload.get("timestamp")),
             source_type="rest",
         )
@@ -297,39 +364,45 @@ class PublicMarketDataConnector:
             )
         return parts[0], parts[1]
 
+
+    def _coinone_request_depth_levels(self) -> int:
+        for supported_depth in (5, 10, 15):
+            if self.orderbook_depth_levels <= supported_depth:
+                return supported_depth
+        return 15
+
     def _build_snapshot(
         self,
         *,
         exchange: str,
         market: str,
-        best_bid: object,
-        best_ask: object,
-        bid_volume: object,
-        ask_volume: object,
+        bids: list[dict[str, str]],
+        asks: list[dict[str, str]],
         exchange_timestamp: str | None,
         source_type: str,
     ) -> dict[str, object]:
         received_at = _iso_now()
-        bid_text = _number_text(best_bid)
-        ask_text = _number_text(best_ask)
-        bid_volume_text = _number_text(bid_volume)
-        ask_volume_text = _number_text(ask_volume)
-        if not all((bid_text, ask_text, bid_volume_text, ask_volume_text, exchange_timestamp)):
+        if not bids or not asks or not exchange_timestamp:
             raise MarketDataError(
                 HTTPStatus.BAD_GATEWAY,
                 "UPSTREAM_INVALID_RESPONSE",
                 "market data payload is missing required fields",
             )
+        best_bid = bids[0]
+        best_ask = asks[0]
         exchange_dt = datetime.fromisoformat(exchange_timestamp.replace("Z", "+00:00"))
         received_dt = datetime.fromisoformat(received_at.replace("Z", "+00:00"))
         age_ms = max(int((received_dt - exchange_dt).total_seconds() * 1000), 0)
         return {
             "exchange": exchange,
             "market": market,
-            "best_bid": bid_text,
-            "best_ask": ask_text,
-            "bid_volume": bid_volume_text,
-            "ask_volume": ask_volume_text,
+            "best_bid": best_bid["price"],
+            "best_ask": best_ask["price"],
+            "bid_volume": best_bid["quantity"],
+            "ask_volume": best_ask["quantity"],
+            "bids": bids,
+            "asks": asks,
+            "depth_level_count": min(len(bids), len(asks)),
             "exchange_timestamp": exchange_timestamp,
             "received_at": received_at,
             "exchange_age_ms": age_ms,
@@ -337,16 +410,37 @@ class PublicMarketDataConnector:
             "source_type": source_type,
         }
 
+    def _normalize_levels(
+        self,
+        raw_levels: list[object],
+        *,
+        price_key: str,
+        quantity_key: str,
+    ) -> list[dict[str, str]]:
+        normalized: list[dict[str, str]] = []
+        for raw_level in raw_levels:
+            if not isinstance(raw_level, dict):
+                continue
+            price_text = _number_text(raw_level.get(price_key))
+            quantity_text = _number_text(raw_level.get(quantity_key))
+            if not price_text or not quantity_text:
+                continue
+            normalized.append({"price": price_text, "quantity": quantity_text})
+        return normalized
+
     def describe_rate_limits(self) -> dict[str, object]:
         items = [
             policy.as_dict()
-            for _exchange, policy in sorted(self.rate_limit_policies.items(), key=lambda item: item[0])
+            for _exchange, policy in sorted(
+                self.rate_limit_policies.items(), key=lambda item: item[0]
+            )
         ]
         return {
             "items": items,
             "count": len(items),
             "retry_count": self.retry_count,
             "retry_backoff": self.retry_backoff.as_dict(),
+            "orderbook_depth_levels": self.orderbook_depth_levels,
         }
 
     def _fetch_json(self, url: str, *, exchange: str) -> object:

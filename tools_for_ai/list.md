@@ -28,6 +28,6 @@
 - arbitrage_replay_csv_cases.py: replay CSV export/import가 roundtrip 되는지 검증한다
 - observer_request_stats_cases.py: public REST observer용 요청 통계가 거래소별 성공/실패 비율, latency p50/p95/p99, slow outlier 개수를 올바르게 집계하는지 검증한다
 - coinone_depth_gap_probe.py: Coinone 저유동성 알트의 best ask와 deeper ask를 분리 기록해 best-ask spike인지 깊은 ask 공백인지 재현 검증한다
-- arbitrage_sim_observer.py: 실제 공개 오더북을 1초 간격 기본 루프로 읽되 거래소별 fetch 주기(upbit=3초 등)를 따로 주고 REST sim에서는 stale을 hard gate, skew는 기본 진단값으로만 집계하며 필요 시 `--enforce-clock-skew-gate`로 다시 막을 수 있게 JSONL/로그를 남긴다
+- arbitrage_sim_observer.py: 실제 공개 오더북 상위 depth를 읽어 executable VWAP 기준으로 sim 평가를 수행하고, 거래소별 fetch 주기(upbit=3초 등)를 따로 주며 REST sim에서는 stale을 hard gate, skew는 기본 진단값으로만 집계하고 요청 통계/JSONL/로그를 남긴다
 - arbitrage_simulation_cases.py: sim observer용 거래소 쌍 정규화, cadence tolerance scheduler, pair timing gate 보정, skew diagnostic-only 모드, actionable/positive-profit/reservation blocked/zero-profit 진단, 양방향 재정거래 평가, reason_code breakdown 포함 누적 집계를 검증한다
 - exchange_fixture_contract_cases.py: 거래소별 내부 contract fixture 자산이 필수 category를 모두 포함하는지 검증한다

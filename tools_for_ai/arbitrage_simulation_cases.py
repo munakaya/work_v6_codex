@@ -36,6 +36,8 @@ def _snapshot(
     best_ask: str,
     bid_volume: str = "1.5",
     ask_volume: str = "1.5",
+    bids: list[dict[str, str]] | None = None,
+    asks: list[dict[str, str]] | None = None,
     observed_at: str | None = None,
 ) -> dict[str, object]:
     now_text = observed_at or datetime.now(UTC).isoformat().replace("+00:00", "Z")
@@ -46,6 +48,10 @@ def _snapshot(
         "best_ask": best_ask,
         "bid_volume": bid_volume,
         "ask_volume": ask_volume,
+        "bids": bids
+        or [{"price": best_bid, "quantity": bid_volume}],
+        "asks": asks
+        or [{"price": best_ask, "quantity": ask_volume}],
         "exchange_timestamp": now_text,
         "received_at": now_text,
         "exchange_age_ms": 0,
@@ -115,6 +121,57 @@ def _case_directional_evaluation() -> None:
         and forward.reservation_blocked is False
         and forward.zero_profit_opportunity is False,
         "forward opportunity flags mismatch",
+    )
+
+
+def _case_full_depth_profit_reject() -> None:
+    forward, _ = evaluate_directional_opportunities(
+        market="KRW-BTC",
+        canonical_symbol="KRW-BTC",
+        first_snapshot=_snapshot(
+            exchange="upbit",
+            best_bid="99",
+            best_ask="100",
+            bid_volume="1",
+            ask_volume="1",
+            asks=[
+                {"price": "100", "quantity": "1"},
+                {"price": "110", "quantity": "1"},
+            ],
+            bids=[{"price": "99", "quantity": "2"}],
+        ),
+        second_snapshot=_snapshot(
+            exchange="bithumb",
+            best_bid="105",
+            best_ask="106",
+            bid_volume="2",
+            ask_volume="1",
+            bids=[{"price": "105", "quantity": "2"}],
+            asks=[{"price": "106", "quantity": "2"}],
+        ),
+        first_exchange="upbit",
+        second_exchange="bithumb",
+        base_asset="BTC",
+        quote_asset="KRW",
+        balances=SimulationBalanceSettings(
+            available_quote=Decimal("500"),
+            available_base=Decimal("2"),
+        ),
+        risk=SimulationRiskSettings(
+            min_profit_quote=Decimal("1"),
+            min_profit_bps=Decimal("1"),
+            max_clock_skew_ms=1000,
+            max_orderbook_age_ms=5000,
+            max_balance_age_ms=5000,
+            max_notional_per_order=Decimal("500"),
+            max_total_notional_per_bot=Decimal("500"),
+            max_spread_bps=Decimal("1000"),
+        ),
+    )
+    _assert(
+        forward.accepted is False
+        and forward.reason_code == "EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH",
+        "full depth should reject when deeper asks erase edge",
     )
 
 
@@ -417,6 +474,7 @@ def _case_pair_timing_gate_alignment() -> None:
 def main() -> None:
     _case_pair_normalization()
     _case_directional_evaluation()
+    _case_full_depth_profit_reject()
     _case_stats_tracker()
     _case_skew_diagnostic_only()
     _case_reservation_blocked_diagnostic()
