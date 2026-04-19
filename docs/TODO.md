@@ -20,9 +20,9 @@
   현재 `arbitrage_pricing` 결과를 수동 계산과 비교하는 AI 전용 도구가 필요하다.
   특히 `fee`, `depth`, `slippage`, `rebalance_buffer_quote`가 실제 숫자로 어떻게 반영되는지 점검해야 한다.
 
-- [ ] 전략 핫패스에서 REST 중복 조회 제거
-  지금은 `market_data_runtime`이 Redis에 snapshot을 sync해도, `strategy_runtime`은 다시 거래소 REST를 직접 조회한다.
-  재정거래 봇의 핵심 경로는 `DB -> 재조회`가 아니라 `REST-only + 중복 fetch`가 병목이므로, `collector/cache 재사용`으로 단일화가 필요하다.
+- [ ] 전략 핫패스 collector coverage 보강
+  같은 프로세스 cache/Redis cached snapshot 재사용은 반영됐지만, 다거래소/다심볼에서 cache를 안정적으로 채우는 collector coverage는 아직 부족하다.
+  목표는 `strategy_runtime`이 `MARKET_SNAPSHOT_NOT_FOUND` 없이 최신 snapshot만 읽도록, `market_data_runtime` 또는 WS collector가 필요한 거래소/심볼을 선제 수집하게 만드는 것이다.
 
 - [ ] direct market read endpoint를 cached 우선으로 정리
   `/api/v1/market-data/orderbook-top` 같은 direct fetch 경로가 운영 화면/모니터링에서 자주 쓰이면 같은 공인 IP의 rate budget을 갉아먹는다.

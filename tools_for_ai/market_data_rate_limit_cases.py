@@ -90,9 +90,13 @@ def main() -> None:
         snapshot = connector.get_orderbook_top(exchange="upbit", market="KRW-BTC")
         _assert(snapshot["asks"] == [{"price": "101", "quantity": "1"}], "ask levels mismatch")
         _assert(snapshot["bids"] == [{"price": "100", "quantity": "1"}], "bid levels mismatch")
+        cached = connector.get_cached_orderbook_top(exchange="upbit", market="KRW-BTC")
+        _assert(cached is not None, "cached snapshot should be available after fetch")
+        _assert(cached["best_ask"] == "101", "cached snapshot best ask mismatch")
         _assert(connector._coinone_request_depth_levels() == 10, "coinone supported depth rounding mismatch")
         print("PASS market data retry with backoff")
         print("PASS market data snapshot includes normalized orderbook depth")
+        print("PASS market data connector caches latest snapshot")
         print("PASS coinone request depth rounds up to supported size")
     finally:
         server.shutdown()

@@ -45,11 +45,13 @@
 ## 현재 구현 기준 핫패스 메모
 
 - 현재 전략 런타임의 orderbook 입력은 PostgreSQL에서 읽지 않는다.
-- 현재 전략 런타임의 orderbook 입력은 Redis cached snapshot도 기본으로 읽지 않는다.
-- 현재 구현은 평가 시점마다 `PublicMarketDataConnector.get_orderbook_top()`으로 거래소 REST를 다시 호출해 snapshot을 만든다.
-- Redis의 `market.orderbook_top`은 운영 조회/대시보드/stream 관측용 캐시에 가깝고, 전략 진입 판단의 source of truth는 아니다.
-- 따라서 현재 핫패스의 실질 병목은 `DB read`보다 `REST fetch latency`, `rate limit`, `중복 조회`, `poll interval`이다.
-- 목표 구조는 `public WS 또는 단일 market-data collector -> 최신 snapshot cache -> strategy runtime 재사용` 순서로 단일화하는 것이다.
+- 현재 전략 런타임은 우선 같은 프로세스의 `PublicMarketDataConnector` 최신 snapshot cache를 읽는다.
+- 같은 프로세스 cache가 없으면 Redis `market.orderbook_top` cached snapshot을 읽는다.
+- 즉, 운영용 기본 경로는 `cache reuse`이며, 전략 평가 단계가 다시 direct REST를 때리지 않도록 바뀌었다.
+- 다만 cache를 채우는 collector coverage가 부족하면 `MARKET_SNAPSHOT_NOT_FOUND`로 fail-closed될 수 있다.
+- Redis의 `market.orderbook_top`은 이제 운영 조회/대시보드용일 뿐 아니라, 전략 런타임이 재사용할 수 있는 보조 snapshot source다.
+- 따라서 현재 핫패스의 남은 실질 병목은 `DB read`보다 `collector coverage`, `REST fetch latency`, `rate limit`, `poll interval`이다.
+- 목표 구조는 `public WS 또는 단일 market-data collector -> 최신 snapshot cache -> strategy runtime 재사용` 순서로 완전히 단일화하는 것이다.
 
 
 ## 출력
@@ -87,8 +89,8 @@
 ### B. Candidate Exchange Filter
 
 - `candidate_exchanges[]`에서 이번 틱에 평가 가능한 거래소만 남긴다.
-- 현재 구현처럼 평가 단계가 직접 REST를 다시 때리는 구조라면, 이 단계는 지연과 rate budget을 같이 소모한다.
-- 목표 구조에서는 이 단계가 live fetch가 아니라 최근 snapshot cache를 고르는 단계가 되도록 바꾼다.
+- 현재 구현에서는 이 단계가 direct REST 재조회가 아니라 최근 snapshot cache를 고르는 단계로 먼저 동작한다.
+- 남은 과제는 다거래소/다심볼에서도 cache miss 없이 항상 최신 snapshot이 준비되도록 collector coverage를 넓히는 것이다.
 - 각 거래소별로 아래를 먼저 걸러낸다.
   - latest orderbook snapshot 존재
   - latest balance snapshot 존재

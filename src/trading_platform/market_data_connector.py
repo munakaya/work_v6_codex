@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from http import HTTPStatus
 import json
+import threading
 import time
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -79,6 +80,8 @@ class PublicMarketDataConnector:
             exchange: TokenBucketRateLimiter(policy)
             for exchange, policy in self.rate_limit_policies.items()
         }
+        self._snapshot_lock = threading.Lock()
+        self._latest_snapshots: dict[tuple[str, str], dict[str, object]] = {}
 
     def get_orderbook_top(self, *, exchange: str, market: str) -> dict[str, object]:
         normalized_exchange = exchange.strip().lower()
@@ -97,18 +100,40 @@ class PublicMarketDataConnector:
             )
 
         if normalized_exchange == "upbit":
-            return self._get_upbit_orderbook_top(normalized_market)
-        if normalized_exchange == "bithumb":
-            return self._get_bithumb_orderbook_top(normalized_market)
-        if normalized_exchange == "coinone":
-            return self._get_coinone_orderbook_top(normalized_market)
-        if normalized_exchange == "sample":
-            return self._get_sample_orderbook_top(normalized_market)
-        raise MarketDataError(
-            HTTPStatus.BAD_REQUEST,
-            "EXCHANGE_NOT_SUPPORTED",
-            "exchange is not supported",
-        )
+            snapshot = self._get_upbit_orderbook_top(normalized_market)
+        elif normalized_exchange == "bithumb":
+            snapshot = self._get_bithumb_orderbook_top(normalized_market)
+        elif normalized_exchange == "coinone":
+            snapshot = self._get_coinone_orderbook_top(normalized_market)
+        elif normalized_exchange == "sample":
+            snapshot = self._get_sample_orderbook_top(normalized_market)
+        else:
+            raise MarketDataError(
+                HTTPStatus.BAD_REQUEST,
+                "EXCHANGE_NOT_SUPPORTED",
+                "exchange is not supported",
+            )
+        self.sync_cached_orderbook_top(snapshot=snapshot)
+        return dict(snapshot)
+
+    def get_cached_orderbook_top(self, *, exchange: str, market: str) -> dict[str, object] | None:
+        normalized_exchange = exchange.strip().lower()
+        normalized_market = market.strip().upper()
+        if not normalized_exchange or not normalized_market:
+            return None
+        with self._snapshot_lock:
+            snapshot = self._latest_snapshots.get((normalized_exchange, normalized_market))
+            if snapshot is None:
+                return None
+            return dict(snapshot)
+
+    def sync_cached_orderbook_top(self, *, snapshot: dict[str, object]) -> None:
+        exchange = str(snapshot.get("exchange") or "").strip().lower()
+        market = str(snapshot.get("market") or "").strip().upper()
+        if not exchange or not market:
+            return
+        with self._snapshot_lock:
+            self._latest_snapshots[(exchange, market)] = dict(snapshot)
 
     def _get_upbit_orderbook_top(self, market: str) -> dict[str, object]:
         url = "%s/v1/orderbook?%s" % (

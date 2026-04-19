@@ -258,6 +258,7 @@ class StrategyRuntime:
             store=self.read_store,
             connector=self.connector,
             run=run,
+            redis_runtime=self.redis_runtime,
         )
         if load_result.payload is None:
             self._record_skip(load_result.skip_reason or "SKIPPED", load_result.detail)

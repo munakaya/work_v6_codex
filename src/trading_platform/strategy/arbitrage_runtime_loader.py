@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from ..market_data_connector import MarketDataError, PublicMarketDataConnector
+from ..market_data_connector import PublicMarketDataConnector
+from ..redis_runtime import RedisRuntime
 from ..storage.store_protocol import ControlPlaneStoreProtocol
 
 
@@ -15,11 +16,65 @@ def _iso_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
+def _snapshot_sort_timestamp(snapshot: dict[str, object] | None) -> datetime | None:
+    if not isinstance(snapshot, dict):
+        return None
+    for key in ("received_at", "exchange_timestamp"):
+        value = snapshot.get(key)
+        if not isinstance(value, str) or not value:
+            continue
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
+    return None
+
+
+def _newer_snapshot(
+    left: dict[str, object] | None,
+    right: dict[str, object] | None,
+) -> dict[str, object] | None:
+    left_time = _snapshot_sort_timestamp(left)
+    right_time = _snapshot_sort_timestamp(right)
+    if left is None:
+        return right
+    if right is None:
+        return left
+    if left_time is None:
+        return right
+    if right_time is None:
+        return left
+    return left if left_time >= right_time else right
+
+
 @dataclass(frozen=True)
 class ArbitrageRuntimeLoadResult:
     payload: dict[str, object] | None
     skip_reason: str | None = None
     detail: str | None = None
+
+
+def _cached_orderbook_snapshot(
+    *,
+    connector: PublicMarketDataConnector,
+    redis_runtime: RedisRuntime | None,
+    exchange: str,
+    market: str,
+) -> dict[str, object] | None:
+    cached_reader = getattr(connector, "get_cached_orderbook_top", None)
+    if callable(cached_reader):
+        connector_snapshot = cached_reader(exchange=exchange, market=market)
+        redis_snapshot = None
+        if redis_runtime is not None and redis_runtime.info.enabled:
+            redis_snapshot = redis_runtime.get_market_orderbook_top(exchange=exchange, market=market)
+        return _newer_snapshot(
+            connector_snapshot if isinstance(connector_snapshot, dict) else None,
+            redis_snapshot if isinstance(redis_snapshot, dict) else None,
+        )
+    return connector.get_orderbook_top(exchange=exchange, market=market)
 
 
 def _assigned_config_version(
@@ -156,6 +211,7 @@ def load_arbitrage_runtime_payload(
     store: ControlPlaneStoreProtocol,
     connector: PublicMarketDataConnector,
     run: dict[str, object],
+    redis_runtime: RedisRuntime | None = None,
 ) -> ArbitrageRuntimeLoadResult:
     bot_id = str(run.get("bot_id") or "").strip()
     if not bot_id:
@@ -238,20 +294,31 @@ def load_arbitrage_runtime_payload(
             detail="runtime_state must be an object",
         )
 
-    try:
-        base_snapshot = connector.get_orderbook_top(
-            exchange=required["base_exchange"],
-            market=required["market"],
-        )
-        hedge_snapshot = connector.get_orderbook_top(
-            exchange=required["hedge_exchange"],
-            market=required["market"],
-        )
-    except MarketDataError as exc:
+    base_snapshot = _cached_orderbook_snapshot(
+        connector=connector,
+        redis_runtime=redis_runtime,
+        exchange=required["base_exchange"],
+        market=required["market"],
+    )
+    hedge_snapshot = _cached_orderbook_snapshot(
+        connector=connector,
+        redis_runtime=redis_runtime,
+        exchange=required["hedge_exchange"],
+        market=required["market"],
+    )
+    if base_snapshot is None or hedge_snapshot is None:
+        missing_exchanges: list[str] = []
+        if base_snapshot is None:
+            missing_exchanges.append(required["base_exchange"])
+        if hedge_snapshot is None:
+            missing_exchanges.append(required["hedge_exchange"])
         return ArbitrageRuntimeLoadResult(
             payload=None,
-            skip_reason=exc.code,
-            detail=exc.message,
+            skip_reason="MARKET_SNAPSHOT_NOT_FOUND",
+            detail=(
+                "cached orderbook snapshot not found for: "
+                + ", ".join(missing_exchanges)
+            ),
         )
 
     base_balance = _balance_payload(
