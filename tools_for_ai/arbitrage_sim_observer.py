@@ -20,6 +20,7 @@ if str(SRC_DIR) not in sys.path:
 from trading_platform.config import load_config
 from trading_platform.logging_setup import configure_logging
 from trading_platform.market_data_connector import MarketDataError, PublicMarketDataConnector
+from trading_platform.observer_request_stats import RequestStatsTracker
 from trading_platform.rate_limit import ExponentialBackoffPolicy, RateLimitPolicy
 from trading_platform.strategy.arbitrage_simulation import (
     ExchangeFetchScheduler,
@@ -181,6 +182,7 @@ def _collect_tick_summary(
     fetch_error_by_exchange: Counter[str],
     fetch_error_by_code: Counter[str],
     pair_skip_by_reason: Counter[str],
+    request_stats: RequestStatsTracker,
     exchange_intervals: dict[str, float],
     pair_timing_gates: dict[str, dict[str, int]],
     interval_gate_alignment_enabled: bool,
@@ -206,6 +208,7 @@ def _collect_tick_summary(
     summary["fetch_error_by_code"] = {
         code: count for code, count in sorted(fetch_error_by_code.items())
     }
+    summary["request_stats"] = request_stats.snapshot()
     summary["pair_skip_by_reason"] = {
         reason: count for reason, count in sorted(pair_skip_by_reason.items())
     }
@@ -216,7 +219,7 @@ def main() -> None:
     config = load_config()
     log_path = configure_logging(config)
     args = _parse_args()
-    interval_seconds = max(args.interval_seconds, 1.0)
+    interval_seconds = max(args.interval_seconds, 0.1)
     pairs = normalize_simulation_pairs(args.pairs)
     exchanges = sorted({exchange for pair in pairs for exchange in pair})
     exchange_intervals = normalize_exchange_intervals(
@@ -234,6 +237,7 @@ def main() -> None:
     fetch_error_by_exchange: Counter[str] = Counter()
     fetch_error_by_code: Counter[str] = Counter()
     pair_skip_by_reason: Counter[str] = Counter()
+    request_stats = RequestStatsTracker()
     interval_gate_alignment_enabled = not args.disable_interval_gate_alignment
     pair_timing_gates = {
         f"{first_exchange}:{second_exchange}": derive_pair_timing_gates(
@@ -282,15 +286,17 @@ def main() -> None:
                     connector.get_orderbook_top,
                     exchange=exchange,
                     market=args.market,
-                ): exchange
+                ): (exchange, time.monotonic())
                 for exchange in due_exchanges
             }
             for future in as_completed(futures):
-                exchange = futures[future]
+                exchange, started_at_monotonic = futures[future]
+                completed_at = time.monotonic()
                 scheduler.mark_attempt(
                     exchange=exchange,
-                    now_monotonic=time.monotonic(),
+                    now_monotonic=completed_at,
                 )
+                latency_ms = max((completed_at - started_at_monotonic) * 1000, 0.0)
                 try:
                     latest_snapshots[exchange] = future.result()
                 except MarketDataError as exc:
@@ -303,9 +309,18 @@ def main() -> None:
                     )
                     fetch_error_by_exchange[exchange] += 1
                     fetch_error_by_code[exc.code] += 1
+                    request_stats.record_error(
+                        exchange=exchange,
+                        code=exc.code,
+                        latency_ms=latency_ms,
+                    )
                     continue
                 refreshed_exchanges.add(exchange)
                 refresh_count_by_exchange[exchange] += 1
+                request_stats.record_success(
+                    exchange=exchange,
+                    latency_ms=latency_ms,
+                )
 
         if fetch_errors and not refreshed_exchanges:
             LOGGER.warning(
@@ -373,6 +388,7 @@ def main() -> None:
                 fetch_error_by_exchange=fetch_error_by_exchange,
                 fetch_error_by_code=fetch_error_by_code,
                 pair_skip_by_reason=pair_skip_by_reason,
+                request_stats=request_stats,
                 exchange_intervals=exchange_intervals,
                 pair_timing_gates=pair_timing_gates,
                 interval_gate_alignment_enabled=interval_gate_alignment_enabled,
@@ -393,6 +409,7 @@ def main() -> None:
         fetch_error_by_exchange=fetch_error_by_exchange,
         fetch_error_by_code=fetch_error_by_code,
         pair_skip_by_reason=pair_skip_by_reason,
+        request_stats=request_stats,
         exchange_intervals=exchange_intervals,
         pair_timing_gates=pair_timing_gates,
         interval_gate_alignment_enabled=interval_gate_alignment_enabled,
