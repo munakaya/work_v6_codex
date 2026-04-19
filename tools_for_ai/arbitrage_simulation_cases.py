@@ -108,6 +108,12 @@ def _case_directional_evaluation() -> None:
         "forward profit should be positive",
     )
     _assert(forward.clock_skew_exceeded is False, "default skew diagnostic mismatch")
+    _assert(
+        forward.market_opportunity is True
+        and forward.reservation_blocked is False
+        and forward.zero_profit_opportunity is False,
+        "forward opportunity flags mismatch",
+    )
 
 
 def _case_stats_tracker() -> None:
@@ -167,6 +173,10 @@ def _case_stats_tracker() -> None:
     _assert(
         snapshot["clock_skew_diagnostic"]["exceeded_count"] == 0,
         "clock skew diagnostic top-level mismatch",
+    )
+    _assert(
+        snapshot["market_opportunity_count"] == 1,
+        "top-level market opportunity count mismatch",
     )
 
 
@@ -253,6 +263,40 @@ def _case_skew_diagnostic_only() -> None:
     _assert(
         enforced_forward.reason_code == "QUOTE_PAIR_SKEW_TOO_HIGH",
         "skew enforced mode must still reject",
+    )
+
+
+def _case_reservation_blocked_diagnostic() -> None:
+    forward, _ = evaluate_directional_opportunities(
+        market="KRW-BTC",
+        canonical_symbol="KRW-BTC",
+        first_snapshot=_snapshot(exchange="upbit", best_bid="100", best_ask="101"),
+        second_snapshot=_snapshot(exchange="bithumb", best_bid="105", best_ask="106"),
+        first_exchange="upbit",
+        second_exchange="bithumb",
+        base_asset="BTC",
+        quote_asset="KRW",
+        balances=SimulationBalanceSettings(
+            available_quote=Decimal("500"),
+            available_base=Decimal("0.1"),
+        ),
+        risk=SimulationRiskSettings(
+            min_profit_quote=Decimal("1"),
+            min_profit_bps=Decimal("1"),
+            max_clock_skew_ms=1000,
+            max_orderbook_age_ms=5000,
+            max_balance_age_ms=5000,
+            max_notional_per_order=Decimal("1000"),
+            max_total_notional_per_bot=Decimal("1000"),
+            max_spread_bps=Decimal("1000"),
+        ),
+    )
+    _assert(
+        forward.accepted is False
+        and forward.reason_code == "RESERVATION_FAILED"
+        and forward.market_opportunity is True
+        and forward.reservation_blocked is True,
+        "reservation blocked diagnostic mismatch",
     )
 
 
@@ -345,6 +389,7 @@ def main() -> None:
     _case_directional_evaluation()
     _case_stats_tracker()
     _case_skew_diagnostic_only()
+    _case_reservation_blocked_diagnostic()
     _case_exchange_intervals_and_scheduler()
     _case_pair_timing_gate_alignment()
     print("PASS arbitrage simulation observer helpers evaluate and aggregate correctly")

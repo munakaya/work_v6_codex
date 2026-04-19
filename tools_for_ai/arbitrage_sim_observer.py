@@ -281,21 +281,22 @@ def main() -> None:
         refreshed_exchanges: set[str] = set()
         fetch_errors: list[dict[str, str]] = []
         with ThreadPoolExecutor(max_workers=max(len(due_exchanges), 1)) as executor:
-            futures = {
-                executor.submit(
+            futures = {}
+            for exchange in due_exchanges:
+                started_at_monotonic = time.monotonic()
+                scheduler.mark_attempt(
+                    exchange=exchange,
+                    now_monotonic=started_at_monotonic,
+                )
+                future = executor.submit(
                     connector.get_orderbook_top,
                     exchange=exchange,
                     market=args.market,
-                ): (exchange, time.monotonic())
-                for exchange in due_exchanges
-            }
+                )
+                futures[future] = (exchange, started_at_monotonic)
             for future in as_completed(futures):
                 exchange, started_at_monotonic = futures[future]
                 completed_at = time.monotonic()
-                scheduler.mark_attempt(
-                    exchange=exchange,
-                    now_monotonic=completed_at,
-                )
                 latency_ms = max((completed_at - started_at_monotonic) * 1000, 0.0)
                 try:
                     latest_snapshots[exchange] = future.result()

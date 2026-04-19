@@ -37,6 +37,9 @@ def _latency_summary(values: Iterable[float]) -> dict[str, float | int | None]:
             "p50": None,
             "p95": None,
             "p99": None,
+            "over_100ms": 0,
+            "over_500ms": 0,
+            "over_1000ms": 0,
         }
     average = sum(samples) / len(samples)
     return {
@@ -47,6 +50,9 @@ def _latency_summary(values: Iterable[float]) -> dict[str, float | int | None]:
         "p50": _round_or_none(_percentile(samples, 0.50)),
         "p95": _round_or_none(_percentile(samples, 0.95)),
         "p99": _round_or_none(_percentile(samples, 0.99)),
+        "over_100ms": sum(1 for sample in samples if sample > 100.0),
+        "over_500ms": sum(1 for sample in samples if sample > 500.0),
+        "over_1000ms": sum(1 for sample in samples if sample > 1000.0),
     }
 
 

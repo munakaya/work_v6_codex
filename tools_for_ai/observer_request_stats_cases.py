@@ -35,6 +35,7 @@ def main() -> None:
     _assert(total["error_rate"] == 0.25, "total error rate mismatch")
     _assert(total["latency_ms"]["p50"] == 25.0, "total p50 mismatch")
     _assert(total["latency_ms"]["p95"] == 47.0, "total p95 mismatch")
+    _assert(total["latency_ms"]["over_100ms"] == 0, "total over_100ms mismatch")
     _assert(
         total["error_code_breakdown"] == {"UPSTREAM_RATE_LIMITED": 1},
         "total error breakdown mismatch",
