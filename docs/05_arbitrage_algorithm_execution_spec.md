@@ -21,6 +21,7 @@
 - `canonical_symbol`
 - `candidate_exchanges[]`
 - 거래소별 latest orderbook snapshot
+  현재 구현은 이 snapshot을 런타임 시점에 직접 REST 조회로 만들고, 목표 구조는 collector/cache 재사용으로 옮기는 것이다.
 - 거래소별 balance snapshot
 - risk/config snapshot
 - open order / unwind / reservation 상태
@@ -40,6 +41,15 @@
 - 목표 구조는 `candidate_exchanges[]`를 입력으로 받아, 런타임 안에서 모든 유효 조합을 평가한 뒤 1개의 `selected_pair`를 고르는 방식이다.
 - 즉시 API 계약을 전면 변경하지 않더라도, 내부 설계 기준은 "다거래소 후보 평가 -> 최적 pair 선택 -> 기존 2-leg execution 진입"으로 맞춘다.
 - execution 자체는 여전히 `buy leg 1개 + sell leg 1개`의 2-leg 주문으로 유지한다.
+
+## 현재 구현 기준 핫패스 메모
+
+- 현재 전략 런타임의 orderbook 입력은 PostgreSQL에서 읽지 않는다.
+- 현재 전략 런타임의 orderbook 입력은 Redis cached snapshot도 기본으로 읽지 않는다.
+- 현재 구현은 평가 시점마다 `PublicMarketDataConnector.get_orderbook_top()`으로 거래소 REST를 다시 호출해 snapshot을 만든다.
+- Redis의 `market.orderbook_top`은 운영 조회/대시보드/stream 관측용 캐시에 가깝고, 전략 진입 판단의 source of truth는 아니다.
+- 따라서 현재 핫패스의 실질 병목은 `DB read`보다 `REST fetch latency`, `rate limit`, `중복 조회`, `poll interval`이다.
+- 목표 구조는 `public WS 또는 단일 market-data collector -> 최신 snapshot cache -> strategy runtime 재사용` 순서로 단일화하는 것이다.
 
 
 ## 출력
@@ -77,6 +87,8 @@
 ### B. Candidate Exchange Filter
 
 - `candidate_exchanges[]`에서 이번 틱에 평가 가능한 거래소만 남긴다.
+- 현재 구현처럼 평가 단계가 직접 REST를 다시 때리는 구조라면, 이 단계는 지연과 rate budget을 같이 소모한다.
+- 목표 구조에서는 이 단계가 live fetch가 아니라 최근 snapshot cache를 고르는 단계가 되도록 바꾼다.
 - 각 거래소별로 아래를 먼저 걸러낸다.
   - latest orderbook snapshot 존재
   - latest balance snapshot 존재

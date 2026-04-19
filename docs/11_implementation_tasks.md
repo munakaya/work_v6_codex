@@ -94,6 +94,9 @@
 - M5. pair-level lock 추가
 - M6. shadow/live 비교 지표에 "미선택 후보와 선택 후보 차이" 추가
 - M7. API 계약과 runtime loader의 `base_exchange/hedge_exchange` 호환 전환안 정리
+- M8. 전략 핫패스에서 direct REST 재조회 제거, `market-data collector -> snapshot cache -> strategy runtime` 단일 경로로 정리
+- M9. direct market read API와 strategy runtime이 같은 공인 IP rate budget을 잠식하지 않도록 cached read 우선 정책 정리
+- M10. public WS를 top priority source로 두고 REST는 fallback/보정으로 제한하는 전환안 정리
 
 ## 4. 작업선별 문서 진입점
 
