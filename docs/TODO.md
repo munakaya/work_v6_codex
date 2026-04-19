@@ -1,71 +1,97 @@
 # TODO
 
 이 문서는 아직 남아 있는 구현/운영 보강 항목을 짧게 적어두는 메모다.
-이번 목록은 `/home/user/git_work/work_v6_claude`, `/home/user/git_work/work_v4.1`를 다시 보고,
-현재 저장소에 바로 도움이 되는 항목만 추렸다.
+이번 목록은 `/tmp/1`, `/tmp/2`, `/tmp/3`, `/tmp/4` 검토 결과를 현재 저장소 상태와 대조한 뒤,
+실제로 아직 남아 있는 항목만 다시 추렸다.
 
-## 실연결 전 우선
+## 최우선
+
+- [ ] 실거래 private connector 구현
+  현재 `private_exchange_connector.py`는 키 상태를 읽어 `ready_not_implemented` placeholder만 만든다.
+  Upbit/Bithumb/Coinone의 private balance, place order, order status, open orders를 실제 API로 연결해야 한다.
+
+- [ ] `private_http` 의존을 임시 경로로 명확히 격하
+  지금 execution mode는 `simulate_*`, `private_http`, `private_stub` 중심이다.
+  외부 executor 위임을 당장 유지하더라도, 문서와 ready/runtime API에서 "임시 실연결 경로"임을 더 명확히 드러내야 한다.
+
+- [ ] Redis runtime을 `redis-cli` subprocess 의존에서 교체
+  현재 Redis 입출력은 `redis-cli` 호출 기반이라 지연, 실패 처리, 운영 관찰성 면에서 약하다.
+  connection pool 기반 정식 클라이언트로 바꾸고, 실패 시 no-op가 아니라 명시적 degraded/error 상태를 남겨야 한다.
+
+- [ ] 운영 환경에서 write API fail-closed 강제
+  bearer token / per-IP rate limit 자체는 이미 구현되어 있다.
+  남은 과제는 staging/production에서 `TP_ADMIN_TOKEN` 미설정 시 서버가 fail-open으로 뜨지 않도록 기동 정책과 문서를 함께 조정하는 것이다.
+
+- [ ] 설계 진척도 문서 현실화
+  `docs/08_progress_and_gaps.md`의 설계 진척률과 구현 준비도 표현이 현재 구현 공백보다 낙관적이다.
+  설계 완성도와 실거래 준비도를 분리해서 적고, "실거래 미구현 / Redis 교체 전 / WS-first 미완료" 상태를 명시해야 한다.
+
+## 실연결 전 보강
+
+- [ ] public WS 기반 collector를 우선 경로로 전환
+  전략 런타임의 direct REST 재조회 제거와 cache-only hot path는 이미 반영됐다.
+  이제 남은 건 `public WS -> 최신 snapshot cache -> strategy runtime`을 기본 경로로 올리고, REST는 fallback/보정으로 내리는 일이다.
+
+- [ ] market data collector coverage 확장
+  실행 중 arbitrage run에서 파생된 `(exchange, market)` poll target 확장은 들어갔다.
+  남은 과제는 다거래소/다심볼 전반에서 `MARKET_SNAPSHOT_NOT_FOUND`를 줄이도록 선제 수집 coverage와 target selection을 더 보강하는 것이다.
 
 - [ ] 3거래소 동시 비교용 candidate selection 설계 반영
-  지금 구조는 `base_exchange + hedge_exchange` 2거래소 고정 평가라서,
-  `upbit/bithumb/coinone`처럼 3개 거래소를 동시에 보고 가장 좋은 pair 하나를 고르는 런타임 계약이 필요하다.
-  목표는 execution을 3-leg로 바꾸는 게 아니라, "다거래소 후보 평가 -> `selected_pair` 1개 선택 -> 기존 2-leg 주문 제출"로 정리하는 것이다.
+  지금 구조는 `base_exchange + hedge_exchange` 2거래소 고정 평가다.
+  `upbit/bithumb/coinone`처럼 3개 거래소를 동시에 보고, 가장 좋은 `selected_pair` 1개를 고른 뒤 기존 2-leg execution으로 넘기는 계약이 필요하다.
 
-- [ ] `/api/v1/ready` 판정을 더 엄격하게 만들기
-  지금은 runtime 정보를 보여주기만 하고 실제 ready 판정에는 거의 안 쓴다.
-  `market_data_runtime`, `strategy_runtime`, `recovery_runtime`의 `state`, `last_error_message`, `failure_count`를 기준으로 `ok/degraded`를 더 보수적으로 계산할 필요가 있다.
+- [ ] pair-level trade lock 추가
+  현재는 active intent, recovery trace, open order count 중심으로 중복 진입을 막는다.
+  실 executor 연결 전에는 `(market, selected_pair)` 기준의 명시적 락을 넣어 같은 기회에 중복 진입하지 않도록 더 직접 막아야 한다.
 
-- [ ] 실호가 기반 손익 검증 도구 추가
-  `work_v4.1/tools_for_ai/test_profit_pipeline.ts`, `work_v6_claude/tools_for_ai/orderbook_test.ts`처럼 업비트/빗썸/코인원 실제 오더북으로
-  현재 `arbitrage_pricing` 결과를 수동 계산과 비교하는 AI 전용 도구가 필요하다.
-  특히 `fee`, `depth`, `slippage`, `rebalance_buffer_quote`가 실제 숫자로 어떻게 반영되는지 점검해야 한다.
+- [ ] 실제 잔고 연동으로 runtime balance spec 대체
+  현재 전략 입력의 `base_balance`, `hedge_balance`는 runtime payload 중심이다.
+  실연결 전에는 거래소 `get_balances()` 결과와 freshness 기준으로 balance snapshot을 구성하고, config/runtime 수동 잔고는 시뮬레이션 전용으로만 남겨야 한다.
 
-- [ ] 전략 핫패스 collector coverage 보강
-  같은 프로세스 cache/Redis cached snapshot 재사용과, 실행 중 arbitrage run에서 파생된 `(exchange, market)` 자동 poll target 확장은 반영됐다.
-  남은 과제는 다거래소/다심볼 전반에서 `MARKET_SNAPSHOT_NOT_FOUND`를 줄이도록, `market_data_runtime` coverage를 더 넓히고 최종적으로 WS collector까지 포함한 선제 수집 구조로 정리하는 것이다.
+## 검증 체계
 
-- [ ] direct market read endpoint를 cached 우선으로 정리
-  `/api/v1/market-data/orderbook-top` 같은 direct fetch 경로가 운영 화면/모니터링에서 자주 쓰이면 같은 공인 IP의 rate budget을 갉아먹는다.
-  운영 기본값은 cached read를 우선으로 하고, direct fetch는 디버깅 용도로만 남기는 쪽이 안전하다.
+- [ ] `tools_for_ai` 검증을 정식 테스트 스위트로 승격
+  현재 실행형 케이스는 충분히 쌓였지만 `pytest/tests/CI` 체계가 없다.
+  우선 핵심 케이스부터 정식 테스트로 승격해서 discoverability, 회귀 추적, 실패 집계를 확보해야 한다.
 
-- [ ] public WS 기반 핫패스 전환
-  현재 문서 목표는 WS가 빠른 orderbook 공급원인데, 실제 구현은 전략 판단이 REST 재조회에 의존한다.
-  `public WS -> 최신 snapshot cache -> strategy runtime`으로 바꾸고 REST는 reconnect/fallback 보정으로 제한해야 한다.
+- [ ] 실호가 기반 VWAP/fee 검증 도구 보강
+  현재 pricing은 top-N depth, fee, buffer를 잘 반영하지만 실호가 숫자 대조 도구는 더 보강할 가치가 있다.
+  거래소별 실제 orderbook으로 `arbitrage_pricing` 결과를 수동 계산과 비교하는 검증을 계속 강화한다.
 
-- [ ] 거래 락(`trade lock`)을 현재 구조에 맞게 추가
-  `work_v6_claude/packages/server/src/services/trade_lock.ts`처럼
-  같은 `market + exchange pair`에 대해 중복 진입을 막는 명시적 락이 필요하다.
-  지금은 recovery trace와 active intent로 많이 막고 있지만, 실 executor 연결 후에는 “같은 기회에 두 번 진입”을 더 직접 막는 게 안전하다.
-  특히 3거래소 동시 비교로 가면 `selected_pair` 기준 락과 "같은 틱 내 재선택 방지"가 같이 필요하다.
+- [ ] malformed `private_http` 응답의 서버 레벨 회귀 확대
+  direct adapter 검증은 강한 편이다.
+  남은 과제는 `evaluate-arbitrage` 등 실제 서버 경로까지 포함한 malformed response 회귀를 더 늘리는 것이다.
 
-## 운영 안정성 보강
+- [ ] live/shadow/sim 편차 계측 추가
+  다른 저장소들처럼 실행 모드별 판단 편차를 운영 지표로 보이게 해야 한다.
+  특히 "선택된 후보 vs 미선택 후보", "shadow profit vs live fill", "REST fallback 사용 빈도"를 같이 집계하는 쪽이 좋다.
 
-- [ ] reconciliation backlog 요약을 운영 API/메트릭으로 노출
-  `work_v6_claude/packages/bot/src/jobs/reconciliation.ts`처럼
-  “몇 건이 오래 unresolved인지”, “몇 번 보정했는지”, “계속 mismatch인 trace가 몇 개인지”를 따로 모아 보여줄 필요가 있다.
-  지금은 trace 단건 조회는 되지만 backlog 압축 요약은 약하다.
+## 운영 안정성
+
+- [ ] reconciliation backlog 요약 노출
+  trace 단건 조회는 가능하지만, 오래 unresolved인 건수나 반복 mismatch는 요약이 약하다.
+  운영 API/메트릭에서 backlog 압축 뷰를 제공해야 한다.
 
 - [ ] inventory skew / rebalance 제안 추가
-  `work_v6_claude/packages/bot/src/strategy/rebalancer.ts`처럼
-  거래소 간 `KRW`/코인 비율이 한쪽으로 쏠리면 “자동 전송”이 아니라 최소한 `알림 + 제안`은 있어야 한다.
-  현재는 `rebalance_buffer_quote`로 비용만 미리 빼고 있어서, 실제 inventory imbalance 운영 대응이 비어 있다.
+  현재는 `rebalance_buffer_quote`로 비용만 미리 차감한다.
+  거래소 간 KRW/코인 쏠림이 심할 때 운영자에게 알림과 action hint를 주는 레이어가 필요하다.
 
-- [ ] in-flight order/fill 추적 캐시 보강
-  `work_v4.1/packages/shared/src/order/order_tracker.ts`, `order_state.ts`처럼
-  최근 terminal 주문을 짧게 캐시해서 중복 fill, 늦게 도착한 fill, partial fill 재수신을 더 안정적으로 흡수하는 레이어를 검토할 가치가 있다.
-  지금도 store 검증은 강하지만, 실 executor/WS 연결 후에는 짧은 메모리 캐시가 운영상 도움이 될 수 있다.
+- [ ] in-flight order/fill 단기 캐시 검토
+  실 executor와 private WS를 붙이면 늦게 도착한 fill, duplicate fill, partial fill 재수신을 더 자주 다루게 된다.
+  store 검증 외에 짧은 메모리 캐시를 두는 방안을 검토한다.
 
-## 후순위
+## 문서 정리
 
-- [ ] 네트워크/외부 executor 상태를 backoff 포함 모니터로 분리
-  `work_v4.1/packages/shared/src/network_monitor.ts`처럼
-  private executor health를 단순 probe 한 번이 아니라 연속 실패/backoff 상태까지 가진 작은 monitor로 분리하는 방향을 검토한다.
+- [ ] `docs/04_operations.md`의 운영 기본값을 구현 현실에 맞게 조정
+  현재 문서는 write API 보호를 선택 사항처럼 적고 있다.
+  운영 환경에서는 필수, local 에서는 선택이라는 식으로 더 명확히 분리할 필요가 있다.
 
-- [ ] malformed private executor 응답의 서버 레벨 회귀를 더 늘리기
-  지금은 `private_http_adapter_cases.py` direct 검증은 강한 편인데,
-  `evaluate-arbitrage` HTTP 경로까지 포함한 malformed 응답 회귀는 아직 더 늘릴 수 있다.
+- [ ] `docs/11_implementation_tasks.md`의 우선순위를 실구현 기준으로 재정렬
+  현재 작업판은 설계 시작용 순서의 흔적이 강하다.
+  이제는 "private connector", "Redis runtime", "WS-first collector", "pair lock", "정식 테스트 승격" 순으로 더 직접적인 실행 우선순위를 드러내야 한다.
 
 ## 메모
 
-- `spool`, `status file` 같은 항목은 참고 저장소 구조에는 맞지만 현재 저장소 구조와 바로 같지 않아서 이번 TODO에는 넣지 않았다.
-- 실제 거래소별 주문/체결 구현은 여전히 공식 API 버전 pinning 이후에 진행하는 것이 맞다.
+- direct REST 재조회 제거와 cached snapshot 우선 로딩은 이미 반영됐다.
+- write API bearer token / rate limit guard도 이미 구현 및 실행 검증되어 있다.
+- 앞으로의 핵심 공백은 "문서 추가"보다 "실거래 경로 구현 + 운영 fail-closed + WS-first + 테스트 승격"이다.
