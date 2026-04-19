@@ -100,6 +100,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable pair timing gate alignment based on per-exchange fetch cadence.",
     )
+    parser.add_argument(
+        "--enforce-clock-skew-gate",
+        action="store_true",
+        help="Keep quote pair skew as a hard reject gate. Disabled by default for REST sim observation.",
+    )
     parser.add_argument("--quote-balance", type=Decimal, default=Decimal("200000000"))
     parser.add_argument("--base-balance", type=Decimal, default=Decimal("3"))
     parser.add_argument("--min-profit-quote", type=Decimal, default=Decimal("0"))
@@ -158,6 +163,7 @@ def _risk_settings(args: argparse.Namespace) -> SimulationRiskSettings:
         taker_fee_bps_buy=args.taker_fee_bps_buy,
         taker_fee_bps_sell=args.taker_fee_bps_sell,
         reentry_cooldown_seconds=args.reentry_cooldown_seconds,
+        enforce_clock_skew_gate=args.enforce_clock_skew_gate,
     )
 
 
@@ -179,6 +185,7 @@ def _collect_tick_summary(
     pair_timing_gates: dict[str, dict[str, int]],
     interval_gate_alignment_enabled: bool,
     timing_grace_ms: int,
+    clock_skew_gate_enforced: bool,
 ) -> dict[str, object]:
     summary = tracker.snapshot()
     summary["configured_exchange_intervals"] = {
@@ -186,6 +193,7 @@ def _collect_tick_summary(
     }
     summary["interval_gate_alignment_enabled"] = interval_gate_alignment_enabled
     summary["timing_grace_ms"] = timing_grace_ms
+    summary["clock_skew_gate_enforced"] = clock_skew_gate_enforced
     summary["effective_pair_timing_gates"] = {
         pair: gates for pair, gates in sorted(pair_timing_gates.items())
     }
@@ -241,11 +249,12 @@ def main() -> None:
     output_path = _snapshot_path()
 
     LOGGER.info(
-        "starting arbitrage sim observer market=%s pairs=%s interval_seconds=%s exchange_intervals=%s output=%s log=%s",
+        "starting arbitrage sim observer market=%s pairs=%s interval_seconds=%s exchange_intervals=%s skew_gate_enforced=%s output=%s log=%s",
         args.market,
         ",".join(f"{left}:{right}" for left, right in pairs),
         interval_seconds,
         exchange_intervals,
+        args.enforce_clock_skew_gate,
         output_path,
         log_path,
         extra={"event_name": "arbitrage_sim_observer_started"},
@@ -368,6 +377,7 @@ def main() -> None:
                 pair_timing_gates=pair_timing_gates,
                 interval_gate_alignment_enabled=interval_gate_alignment_enabled,
                 timing_grace_ms=args.timing_grace_ms,
+                clock_skew_gate_enforced=args.enforce_clock_skew_gate,
             )
             LOGGER.info(
                 "simulation summary %s",
@@ -387,6 +397,7 @@ def main() -> None:
         pair_timing_gates=pair_timing_gates,
         interval_gate_alignment_enabled=interval_gate_alignment_enabled,
         timing_grace_ms=args.timing_grace_ms,
+        clock_skew_gate_enforced=args.enforce_clock_skew_gate,
     )
     LOGGER.info(
         "simulation observer finished %s",

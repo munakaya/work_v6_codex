@@ -20,6 +20,14 @@ def _parse_iso_datetime(value: object, *, fallback: str) -> str:
     return fallback
 
 
+def _parse_observed_at_datetime(value: object, *, fallback: str) -> datetime:
+    normalized = _parse_iso_datetime(value, fallback=fallback).replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
 def _decimal_text(value: Decimal) -> str:
     return format(value, "f")
 
@@ -178,6 +186,7 @@ class SimulationRiskSettings:
     taker_fee_bps_buy: Decimal = Decimal("0")
     taker_fee_bps_sell: Decimal = Decimal("0")
     reentry_cooldown_seconds: int = 0
+    enforce_clock_skew_gate: bool = False
 
     def as_payload(self) -> dict[str, object]:
         return {
@@ -201,6 +210,7 @@ class SimulationRiskSettings:
             "taker_fee_bps_buy": _decimal_text(self.taker_fee_bps_buy),
             "taker_fee_bps_sell": _decimal_text(self.taker_fee_bps_sell),
             "reentry_cooldown_seconds": self.reentry_cooldown_seconds,
+            "enforce_clock_skew_gate": self.enforce_clock_skew_gate,
         }
 
 
@@ -221,6 +231,8 @@ class SimulationObservation:
     executable_profit_quote: Decimal | None
     executable_profit_bps: Decimal | None
     target_qty: Decimal | None
+    clock_skew_ms: int
+    clock_skew_exceeded: bool
 
     @property
     def direction_key(self) -> str:
@@ -248,6 +260,8 @@ class SimulationObservation:
             "target_qty": (
                 _decimal_text(self.target_qty) if self.target_qty is not None else None
             ),
+            "clock_skew_ms": self.clock_skew_ms,
+            "clock_skew_exceeded": self.clock_skew_exceeded,
         }
 
 
@@ -265,12 +279,19 @@ class SimulationDirectionStats:
     latest_reason_code: str | None = None
     last_observed_at: str | None = None
     reason_counts: Counter[str] = field(default_factory=Counter)
+    clock_skew_exceeded_count: int = 0
+    max_clock_skew_ms: int = 0
+    latest_clock_skew_ms: int = 0
 
     def record(self, observation: SimulationObservation) -> None:
         self.observed_count += 1
         self.last_observed_at = observation.observed_at
         self.latest_reason_code = observation.reason_code
         self.reason_counts[observation.reason_code] += 1
+        self.latest_clock_skew_ms = observation.clock_skew_ms
+        self.max_clock_skew_ms = max(self.max_clock_skew_ms, observation.clock_skew_ms)
+        if observation.clock_skew_exceeded:
+            self.clock_skew_exceeded_count += 1
         if observation.accepted:
             self.accepted_count += 1
             if observation.executable_profit_quote is not None:
@@ -327,6 +348,9 @@ class SimulationDirectionStats:
                 reason_code: count
                 for reason_code, count in sorted(self.reason_counts.items())
             },
+            "clock_skew_exceeded_count": self.clock_skew_exceeded_count,
+            "max_clock_skew_ms": self.max_clock_skew_ms,
+            "latest_clock_skew_ms": self.latest_clock_skew_ms,
             "latest_reason_code": self.latest_reason_code,
             "last_observed_at": self.last_observed_at,
         }
@@ -367,8 +391,12 @@ class SimulationStatsTracker:
             Decimal(str(item["cumulative_profit_quote"])) for item in items
         )
         total_reason_counts: Counter[str] = Counter()
+        total_clock_skew_exceeded = 0
+        max_clock_skew_ms = 0
         for stats in self._stats.values():
             total_reason_counts.update(stats.reason_counts)
+            total_clock_skew_exceeded += stats.clock_skew_exceeded_count
+            max_clock_skew_ms = max(max_clock_skew_ms, stats.max_clock_skew_ms)
         return {
             "started_at": self.started_at.isoformat().replace("+00:00", "Z"),
             "elapsed_seconds": round(elapsed_seconds, 3),
@@ -390,6 +418,10 @@ class SimulationStatsTracker:
             "reason_code_breakdown": {
                 reason_code: count
                 for reason_code, count in sorted(total_reason_counts.items())
+            },
+            "clock_skew_diagnostic": {
+                "exceeded_count": total_clock_skew_exceeded,
+                "max_clock_skew_ms": max_clock_skew_ms,
             },
             "items": items,
         }
@@ -532,12 +564,30 @@ def _evaluate_payload(
     sell_exchange: str,
     payload: dict[str, object],
 ) -> SimulationObservation:
-    decision = evaluate_arbitrage(load_strategy_inputs(payload))
+    risk_payload = dict(payload["risk_config"])  # type: ignore[arg-type]
+    original_clock_skew_ms = int(risk_payload.get("max_clock_skew_ms") or 0)
+    enforce_clock_skew_gate = bool(risk_payload.get("enforce_clock_skew_gate", False))
+    eval_payload = dict(payload)
+    eval_risk_payload = dict(risk_payload)
+    if not enforce_clock_skew_gate:
+        eval_risk_payload["max_clock_skew_ms"] = max(original_clock_skew_ms, 10**12)
+    eval_payload["risk_config"] = eval_risk_payload
+    decision = evaluate_arbitrage(load_strategy_inputs(eval_payload))
     edge = decision.executable_edge
     candidate = decision.candidate_size
-    observed_at = str(
-        dict(payload["base_orderbook"]).get("observed_at")  # type: ignore[arg-type]
-        or _iso_now()
+    base_orderbook = dict(payload["base_orderbook"])  # type: ignore[arg-type]
+    hedge_orderbook = dict(payload["hedge_orderbook"])  # type: ignore[arg-type]
+    observed_at = str(base_orderbook.get("observed_at") or _iso_now())
+    base_observed_at = _parse_observed_at_datetime(
+        base_orderbook.get("observed_at"),
+        fallback=observed_at,
+    )
+    hedge_observed_at = _parse_observed_at_datetime(
+        hedge_orderbook.get("observed_at"),
+        fallback=observed_at,
+    )
+    clock_skew_ms = abs(
+        int((base_observed_at - hedge_observed_at).total_seconds() * 1000)
     )
     return SimulationObservation(
         market=market,
@@ -551,4 +601,6 @@ def _evaluate_payload(
         ),
         executable_profit_bps=(edge.executable_profit_bps if edge is not None else None),
         target_qty=(candidate.target_qty if candidate is not None else None),
+        clock_skew_ms=clock_skew_ms,
+        clock_skew_exceeded=clock_skew_ms > original_clock_skew_ms,
     )

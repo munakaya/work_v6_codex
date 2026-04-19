@@ -36,8 +36,9 @@ def _snapshot(
     best_ask: str,
     bid_volume: str = "1.5",
     ask_volume: str = "1.5",
+    observed_at: str | None = None,
 ) -> dict[str, object]:
-    now_text = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    now_text = observed_at or datetime.now(UTC).isoformat().replace("+00:00", "Z")
     return {
         "exchange": exchange,
         "market": "KRW-BTC",
@@ -106,6 +107,7 @@ def _case_directional_evaluation() -> None:
         and forward.executable_profit_quote > Decimal("0"),
         "forward profit should be positive",
     )
+    _assert(forward.clock_skew_exceeded is False, "default skew diagnostic mismatch")
 
 
 def _case_stats_tracker() -> None:
@@ -161,6 +163,96 @@ def _case_stats_tracker() -> None:
     _assert(
         first_item["reason_code_breakdown"] == {"ARBITRAGE_OPPORTUNITY_FOUND": 1},
         "direction reason breakdown mismatch",
+    )
+    _assert(
+        snapshot["clock_skew_diagnostic"]["exceeded_count"] == 0,
+        "clock skew diagnostic top-level mismatch",
+    )
+
+
+def _case_skew_diagnostic_only() -> None:
+    base_time = "2026-04-19T00:00:00Z"
+    hedge_time = "2026-04-19T00:00:02Z"
+    forward, _ = evaluate_directional_opportunities(
+        market="KRW-BTC",
+        canonical_symbol="KRW-BTC",
+        first_snapshot=_snapshot(
+            exchange="upbit",
+            best_bid="100",
+            best_ask="101",
+            observed_at=base_time,
+        ),
+        second_snapshot=_snapshot(
+            exchange="bithumb",
+            best_bid="105",
+            best_ask="106",
+            observed_at=hedge_time,
+        ),
+        first_exchange="upbit",
+        second_exchange="bithumb",
+        base_asset="BTC",
+        quote_asset="KRW",
+        balances=SimulationBalanceSettings(
+            available_quote=Decimal("500"),
+            available_base=Decimal("2"),
+        ),
+        risk=SimulationRiskSettings(
+            min_profit_quote=Decimal("1"),
+            min_profit_bps=Decimal("1"),
+            max_clock_skew_ms=100,
+            max_orderbook_age_ms=10000,
+            max_balance_age_ms=5000,
+            max_notional_per_order=Decimal("1000"),
+            max_total_notional_per_bot=Decimal("1000"),
+            max_spread_bps=Decimal("1000"),
+            enforce_clock_skew_gate=False,
+        ),
+        now=datetime.fromisoformat("2026-04-19T00:00:03+00:00"),
+    )
+    _assert(forward.accepted is True, "skew diagnostic-only mode should accept")
+    _assert(
+        forward.clock_skew_ms == 2000 and forward.clock_skew_exceeded is True,
+        "skew diagnostic metadata mismatch",
+    )
+    enforced_forward, _ = evaluate_directional_opportunities(
+        market="KRW-BTC",
+        canonical_symbol="KRW-BTC",
+        first_snapshot=_snapshot(
+            exchange="upbit",
+            best_bid="100",
+            best_ask="101",
+            observed_at=base_time,
+        ),
+        second_snapshot=_snapshot(
+            exchange="bithumb",
+            best_bid="105",
+            best_ask="106",
+            observed_at=hedge_time,
+        ),
+        first_exchange="upbit",
+        second_exchange="bithumb",
+        base_asset="BTC",
+        quote_asset="KRW",
+        balances=SimulationBalanceSettings(
+            available_quote=Decimal("500"),
+            available_base=Decimal("2"),
+        ),
+        risk=SimulationRiskSettings(
+            min_profit_quote=Decimal("1"),
+            min_profit_bps=Decimal("1"),
+            max_clock_skew_ms=100,
+            max_orderbook_age_ms=10000,
+            max_balance_age_ms=5000,
+            max_notional_per_order=Decimal("1000"),
+            max_total_notional_per_bot=Decimal("1000"),
+            max_spread_bps=Decimal("1000"),
+            enforce_clock_skew_gate=True,
+        ),
+        now=datetime.fromisoformat("2026-04-19T00:00:03+00:00"),
+    )
+    _assert(
+        enforced_forward.reason_code == "QUOTE_PAIR_SKEW_TOO_HIGH",
+        "skew enforced mode must still reject",
     )
 
 
@@ -252,6 +344,7 @@ def main() -> None:
     _case_pair_normalization()
     _case_directional_evaluation()
     _case_stats_tracker()
+    _case_skew_diagnostic_only()
     _case_exchange_intervals_and_scheduler()
     _case_pair_timing_gate_alignment()
     print("PASS arbitrage simulation observer helpers evaluate and aggregate correctly")
