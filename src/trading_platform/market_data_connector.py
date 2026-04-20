@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from .market_data_freshness import choose_freshness_observed_at
 from .rate_limit import ExponentialBackoffPolicy, RateLimitPolicy, TokenBucketRateLimiter
 
 
@@ -418,7 +419,7 @@ class PublicMarketDataConnector:
         exchange_dt = datetime.fromisoformat(exchange_timestamp.replace("Z", "+00:00"))
         received_dt = datetime.fromisoformat(received_at.replace("Z", "+00:00"))
         age_ms = max(int((received_dt - exchange_dt).total_seconds() * 1000), 0)
-        return {
+        snapshot = {
             "exchange": exchange,
             "market": market,
             "best_bid": best_bid["price"],
@@ -434,6 +435,10 @@ class PublicMarketDataConnector:
             "stale": age_ms > self.stale_threshold_ms,
             "source_type": source_type,
         }
+        freshness_observed_at, freshness_observed_at_source = choose_freshness_observed_at(snapshot)
+        snapshot["freshness_observed_at"] = freshness_observed_at
+        snapshot["freshness_observed_at_source"] = freshness_observed_at_source
+        return snapshot
 
     def _normalize_levels(
         self,

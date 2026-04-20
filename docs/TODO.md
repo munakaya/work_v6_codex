@@ -1,97 +1,147 @@
 # TODO
 
-이 문서는 아직 남아 있는 구현/운영 보강 항목을 짧게 적어두는 메모다.
-이번 목록은 `/tmp/1`, `/tmp/2`, `/tmp/3`, `/tmp/4` 검토 결과를 현재 저장소 상태와 대조한 뒤,
-실제로 아직 남아 있는 항목만 다시 추렸다.
+이 문서는 남은 구현/운영 보강 항목을 실제 진행 순서대로 적어두는 작업판이다.
+이미 끝난 일과 앞으로 바로 구현해야 할 일을 섞지 않고, 지금부터 손대야 할 순서가 드러나도록 다시 정리한다.
 
-## 최우선
+## 이미 완료된 항목
 
 - [x] 실거래 private REST connector 최소 계약 구현
   Upbit/Bithumb/Coinone의 private balance, place order, order status, open orders를 실제 API로 연결했다.
-  남은 과제는 실계정 smoke, cancel flow, execution path 편입처럼 실운영 경로를 닫는 작업이다.
 
 - [x] `private_http` 의존을 임시 경로로 명확히 격하
-  `ready`의 `dependencies.private_execution`과 `strategy_runtime`에 `temporary_external_delegate` 메타데이터를 추가해,
-  외부 executor 위임이 최종 실행 경로가 아니라 임시 실연결 경로임을 직접 드러내도록 정리했다.
+  `ready`와 `strategy_runtime`에 `temporary_external_delegate` 메타데이터를 추가했다.
 
-- [x] Redis runtime을 `redis-cli` subprocess 의존에서 교체
-  내부 RESP 기반 connection-pool 클라이언트로 치환해 `redis-cli` 없이도 Redis runtime이 동작하도록 바꿨다.
-  명령 실패 시에는 무음 no-op 대신 `redis_runtime.state=degraded`로 내려가도록 정리했다.
+- [x] Redis runtime의 `redis-cli` subprocess 의존 제거
+  내부 RESP 기반 connection-pool 클라이언트로 교체했다.
 
-- [x] 운영 환경에서 write API fail-closed 강제
-  `APP_ENV=staging|production`에서는 `TP_ADMIN_TOKEN` 미설정 시 서버가 기동 실패하도록 바꿨다.
-  local/dev에서만 write API 무토큰 기동을 허용하고, `ready.write_api_guard`에 요구 여부를 직접 노출한다.
+- [x] 운영 환경 write API fail-closed 강제
+  `APP_ENV=staging|production`에서는 `TP_ADMIN_TOKEN`이 없으면 서버가 기동 실패하도록 바꿨다.
 
 - [x] 설계 진척도 문서 현실화
   `docs/08_progress_and_gaps.md`에서 설계 완성도와 구현/실거래 준비도를 분리했다.
-  상위 설계는 높게 보되, `private_http` 임시 경로, WS-first 미완료, pair-level lock 부재, 정식 테스트 부재를 반영해 live readiness 숫자를 낮췄다.
 
-## 실연결 전 보강
+## 지금부터 진행할 순서
 
-- [ ] public WS 기반 collector를 우선 경로로 전환
-  전략 런타임의 direct REST 재조회 제거와 cache-only hot path는 이미 반영됐다.
-  이제 남은 건 `public WS -> 최신 snapshot cache -> strategy runtime`을 기본 경로로 올리고, REST는 fallback/보정으로 내리는 일이다.
+### 1. Coinone public WS timestamp/freshness 문제 수정
 
-- [ ] market data collector coverage 확장
-  실행 중 arbitrage run에서 파생된 `(exchange, market)` poll target 확장은 들어갔다.
-  남은 과제는 다거래소/다심볼 전반에서 `MARKET_SNAPSHOT_NOT_FOUND`를 줄이도록 선제 수집 coverage와 target selection을 더 보강하는 것이다.
+- [x] Coinone public WS payload의 `t` / `timestamp` 의미를 재검증했다.
+  실제 호가 생성 시각인지, 서버 publish 시각인지, 문서와 실측이 일치하는지 확인해야 한다.
 
-- [ ] 3거래소 동시 비교용 candidate selection 설계 반영
-  지금 구조는 `base_exchange + hedge_exchange` 2거래소 고정 평가다.
-  `upbit/bithumb/coinone`처럼 3개 거래소를 동시에 보고, 가장 좋은 `selected_pair` 1개를 고른 뒤 기존 2-leg execution으로 넘기는 계약이 필요하다.
+- [x] `sim observer`와 runtime 입력 payload에서 `observed_at` 우선순위를 재설계했다.
+  현재는 `exchange_timestamp`를 `received_at`보다 우선 사용해 stale이 과도하게 발생한다.
 
-- [ ] pair-level trade lock 추가
-  현재는 active intent, recovery trace, open order count 중심으로 중복 진입을 막는다.
-  실 executor 연결 전에는 `(market, selected_pair)` 기준의 명시적 락을 넣어 같은 기회에 중복 진입하지 않도록 더 직접 막아야 한다.
+- [x] Coinone WS 전용 `received_at` fallback 규칙을 넣었다.
+  목표는 `ORDERBOOK_STALE` 오탐을 줄이되, 실제 오래된 snapshot을 허용하지 않는 것이다.
 
-- [ ] 실제 잔고 연동으로 runtime balance spec 대체
-  현재 전략 입력의 `base_balance`, `hedge_balance`는 runtime payload 중심이다.
-  실연결 전에는 거래소 `get_balances()` 결과와 freshness 기준으로 balance snapshot을 구성하고, config/runtime 수동 잔고는 시뮬레이션 전용으로만 남겨야 한다.
+- [x] Coinone WS freshness 회귀 케이스를 추가했다.
+  `tools_for_ai` 케이스와 이후 정식 테스트에서 5초 gate 경계값을 재현 가능해야 한다.
 
-## 검증 체계
+### 2. public WS-first collector를 런타임 기본 경로로 전환
 
-- [ ] `tools_for_ai` 검증을 정식 테스트 스위트로 승격
-  현재 실행형 케이스는 충분히 쌓였지만 `pytest/tests/CI` 체계가 없다.
-  우선 핵심 케이스부터 정식 테스트로 승격해서 discoverability, 회귀 추적, 실패 집계를 확보해야 한다.
+- [ ] 현재 `sim observer`에만 붙은 public WS 수집을 runtime collector로 끌어올린다.
+  목표 경로는 `public WS -> 최신 snapshot cache -> strategy runtime`이다.
 
-- [ ] 실호가 기반 VWAP/fee 검증 도구 보강
-  현재 pricing은 top-N depth, fee, buffer를 잘 반영하지만 실호가 숫자 대조 도구는 더 보강할 가치가 있다.
-  거래소별 실제 orderbook으로 `arbitrage_pricing` 결과를 수동 계산과 비교하는 검증을 계속 강화한다.
+- [ ] REST poller를 기본 경로에서 fallback/보정 경로로 내린다.
+  bootstrap, reconnect 직후 보정, 진단성 재조회 정도로 역할을 축소한다.
 
-- [ ] malformed `private_http` 응답의 서버 레벨 회귀 확대
-  direct adapter 검증은 강한 편이다.
-  남은 과제는 `evaluate-arbitrage` 등 실제 서버 경로까지 포함한 malformed response 회귀를 더 늘리는 것이다.
+- [ ] cache write 계약을 명확히 정리한다.
+  `exchange_timestamp`, `received_at`, `exchange_age_ms`, `source_type`가 WS/REST 양쪽에서 일관되게 들어가야 한다.
 
-- [ ] live/shadow/sim 편차 계측 추가
-  다른 저장소들처럼 실행 모드별 판단 편차를 운영 지표로 보이게 해야 한다.
-  특히 "선택된 후보 vs 미선택 후보", "shadow profit vs live fill", "REST fallback 사용 빈도"를 같이 집계하는 쪽이 좋다.
+- [ ] WS collector 장애 시 degrade/fallback 상태를 readiness와 로그에 명확히 노출한다.
 
-## 운영 안정성
+### 3. Bithumb public WS adapter 추가 또는 미지원 결정 확정
 
-- [ ] reconciliation backlog 요약 노출
-  trace 단건 조회는 가능하지만, 오래 unresolved인 건수나 반복 mismatch는 요약이 약하다.
-  운영 API/메트릭에서 backlog 압축 뷰를 제공해야 한다.
+- [ ] Bithumb public WS orderbook 계약을 다시 확인한다.
+  endpoint, subscribe payload, timestamp 필드, reconnect 규칙을 코드 반영 전에 고정해야 한다.
 
-- [ ] inventory skew / rebalance 제안 추가
-  현재는 `rebalance_buffer_quote`로 비용만 미리 차감한다.
-  거래소 간 KRW/코인 쏠림이 심할 때 운영자에게 알림과 action hint를 주는 레이어가 필요하다.
+- [ ] Bithumb public WS adapter를 추가한다.
+  `sim observer`와 이후 runtime collector 양쪽에서 동일 contract를 쓰도록 맞춘다.
 
-- [ ] in-flight order/fill 단기 캐시 검토
-  실 executor와 private WS를 붙이면 늦게 도착한 fill, duplicate fill, partial fill 재수신을 더 자주 다루게 된다.
-  store 검증 외에 짧은 메모리 캐시를 두는 방안을 검토한다.
+- [ ] 지원을 보류할 경우, 미지원 사유를 코드와 문서에 명시한다.
+  현재처럼 애매한 상태로 두지 않고 `unsupported` 또는 `experimental` 중 하나로 고정한다.
 
-## 문서 정리
+### 4. market data collector coverage 확장
 
-- [ ] `docs/04_operations.md`의 운영 기본값을 구현 현실에 맞게 조정
-  현재 문서는 write API 보호를 선택 사항처럼 적고 있다.
-  운영 환경에서는 필수, local 에서는 선택이라는 식으로 더 명확히 분리할 필요가 있다.
+- [ ] 실행 중 arbitrage run에서 파생되는 `(exchange, market)` target을 collector 기본 수집군에 더 빠르게 반영한다.
 
-- [ ] `docs/11_implementation_tasks.md`의 우선순위를 실구현 기준으로 재정렬
-  현재 작업판은 설계 시작용 순서의 흔적이 강하다.
-  이제는 "private connector", "Redis runtime", "WS-first collector", "pair lock", "정식 테스트 승격" 순으로 더 직접적인 실행 우선순위를 드러내야 한다.
+- [ ] 다거래소/다심볼 조건에서 `MARKET_SNAPSHOT_NOT_FOUND`를 줄이기 위한 선제 수집 정책을 넣는다.
+
+- [ ] coverage 부족을 readiness 또는 runtime 진단값으로 노출한다.
+  단순 miss가 아니라 “collector가 아직 안 보고 있음”을 구분해 보여줘야 한다.
+
+### 5. 3거래소 동시 비교 candidate selection 반영
+
+- [ ] 현재 `base_exchange + hedge_exchange` 2거래소 고정 평가를 일반화한다.
+
+- [ ] `upbit/bithumb/coinone` 전체를 동시에 보고, 그 시점 최적의 `selected_pair` 1개를 고르는 selection layer를 추가한다.
+
+- [ ] selection 결과와 탈락 후보를 함께 기록한다.
+  나중에 `selected_pair` 편향, missed opportunity, live/shadow 차이를 분석할 수 있어야 한다.
+
+### 6. pair-level trade lock 추가
+
+- [ ] `(market, selected_pair)` 기준의 명시적 락을 도입한다.
+  active intent, open order count만으로는 중복 진입 방지가 약하다.
+
+- [ ] recovery trace, open order, duplicate intent와 pair lock의 우선순위를 정리한다.
+  락 때문에 recovery가 막히거나 recovery 때문에 락이 무의미해지지 않게 해야 한다.
+
+- [ ] 락 획득 실패/해제 실패를 운영 로그와 메트릭으로 남긴다.
+
+### 7. 실제 거래소 잔고 기반 balance snapshot 연동
+
+- [ ] 전략 입력의 `base_balance`, `hedge_balance`를 거래소 `get_balances()` 기반 snapshot으로 바꾼다.
+
+- [ ] 잔고 freshness 기준을 risk gate에 명시적으로 반영한다.
+  stale balance를 들고 주문 판단을 하지 않도록 해야 한다.
+
+- [ ] 수동 runtime/config 잔고 주입은 `simulation/shadow 전용`으로만 남기고 live 경로에서는 막는다.
+
+### 8. private execution 최종 경로 정리
+
+- [ ] `private_http`를 계속 임시 외부 위임 경로로 둘지, 내장 execution path로 대체할지 결정한다.
+
+- [ ] 실계정 smoke, cancel flow, reconciliation까지 포함한 end-to-end 경로를 닫는다.
+
+- [ ] malformed `private_http` 응답 회귀를 서버 레벨까지 확대한다.
+  direct adapter만이 아니라 `evaluate-arbitrage` 실제 서버 경로에서 fail-closed를 확인해야 한다.
+
+### 9. 검증 체계 승격
+
+- [ ] `tools_for_ai` 핵심 케이스를 정식 `pytest/tests/CI` 체계로 승격한다.
+  최소 대상은 market data, private connector, strategy runtime, recovery, write guard다.
+
+- [ ] public WS/REST 비교 회귀 케이스를 자동화한다.
+  Coinone stale 재발, Bithumb parser 오류, fallback 전환 같은 케이스를 고정해야 한다.
+
+- [ ] 실호가 기반 VWAP/fee 대조 도구를 유지 보강한다.
+  거래소별 실제 orderbook과 pricing 결과가 계속 맞는지 확인할 수 있어야 한다.
+
+### 10. 운영 지표와 backlog 요약 추가
+
+- [ ] live/shadow/sim 편차 지표를 추가한다.
+  `selected_pair vs 미선택 후보`, `shadow profit vs live fill`, `REST fallback 사용 빈도`를 같이 기록한다.
+
+- [ ] reconciliation backlog 압축 뷰를 추가한다.
+  오래 unresolved인 trace, 반복 mismatch, submit timeout 재시도 누적을 한 번에 봐야 한다.
+
+- [ ] inventory skew / rebalance 제안 레이어를 추가한다.
+  거래소 간 KRW/코인 쏠림을 운영자가 바로 볼 수 있어야 한다.
+
+- [ ] in-flight order/fill 단기 캐시 필요성을 검토한다.
+  늦게 도착한 fill, duplicate fill, partial fill 재수신을 다룰 최소 메모리 계층이 필요한지 판단한다.
+
+## 문서 후속 정리
+
+- [ ] `docs/04_operations.md`의 운영 기본값을 구현 현실에 맞게 조정한다.
+  운영 환경에서 write API 보호가 필수라는 점과 `private_http`의 임시 성격을 더 명확히 적어야 한다.
+
+- [ ] `docs/11_implementation_tasks.md` 우선순위를 현재 구현 순서와 맞춘다.
+  문서도 `Coinone WS freshness -> WS-first collector -> Bithumb WS -> pair lock -> 실잔고 -> execution path -> 정식 테스트` 순서가 드러나야 한다.
 
 ## 메모
 
 - direct REST 재조회 제거와 cached snapshot 우선 로딩은 이미 반영됐다.
 - write API bearer token / rate limit guard도 이미 구현 및 실행 검증되어 있다.
-- 앞으로의 핵심 공백은 "문서 추가"보다 "실거래 경로 구현 + 운영 fail-closed + WS-first + 테스트 승격"이다.
+- 지금 가장 먼저 닫아야 할 공백은 `Coinone WS freshness`와 `WS-first collector`다.
+- 그 다음 축은 `Bithumb WS`, `pair-level lock`, `실제 잔고 snapshot`, `private execution 최종 경로`, `정식 테스트 승격`이다.

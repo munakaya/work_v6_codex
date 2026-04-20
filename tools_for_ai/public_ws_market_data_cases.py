@@ -6,6 +6,7 @@ import json
 import socket
 import socketserver
 import threading
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 from trading_platform.market_data_connector import MarketDataError
@@ -139,6 +140,8 @@ def _build_connector(*, upbit_ws_url: str, coinone_ws_url: str) -> PublicWebSock
 
 
 def _case_upbit_snapshot() -> None:
+    timestamp_ms = int(datetime.now(UTC).timestamp() * 1000)
+
     def callback(payload: object) -> list[dict[str, object]]:
         _assert(isinstance(payload, list), f"upbit request must be list: {payload}")
         type_fields = [item for item in payload if isinstance(item, dict) and item.get("type") == "orderbook"]
@@ -150,7 +153,7 @@ def _case_upbit_snapshot() -> None:
             {
                 "type": "orderbook",
                 "code": "KRW-BTC",
-                "timestamp": 1746601573804,
+                "timestamp": timestamp_ms,
                 "orderbook_units": [
                     {"ask_price": 101, "bid_price": 100, "ask_size": 1.5, "bid_size": 2.5},
                     {"ask_price": 102, "bid_price": 99, "ask_size": 1.0, "bid_size": 2.0},
@@ -165,9 +168,15 @@ def _case_upbit_snapshot() -> None:
     _assert(snapshot["best_bid"] == "100", f"upbit best bid mismatch: {snapshot}")
     _assert(snapshot["best_ask"] == "101", f"upbit best ask mismatch: {snapshot}")
     _assert(snapshot["source_type"] == "public_ws", f"upbit source_type mismatch: {snapshot}")
+    _assert(
+        snapshot["freshness_observed_at_source"] == "exchange_timestamp",
+        f"upbit freshness source mismatch: {snapshot}",
+    )
 
 
 def _case_coinone_snapshot() -> None:
+    timestamp_ms = int(datetime.now(UTC).timestamp() * 1000)
+
     def callback(payload: object) -> list[dict[str, object]]:
         _assert(isinstance(payload, dict), f"coinone request must be object: {payload}")
         _assert(payload.get("request_type") == "SUBSCRIBE", f"coinone request type mismatch: {payload}")
@@ -183,7 +192,7 @@ def _case_coinone_snapshot() -> None:
                 "data": {
                     "quote_currency": "KRW",
                     "target_currency": "BTC",
-                    "timestamp": 1746601573804,
+                    "timestamp": timestamp_ms,
                     "asks": [
                         {"price": "101", "qty": "1.5"},
                         {"price": "102", "qty": "1.0"},
@@ -203,6 +212,14 @@ def _case_coinone_snapshot() -> None:
     _assert(snapshot["best_bid"] == "100", f"coinone best bid mismatch: {snapshot}")
     _assert(snapshot["best_ask"] == "101", f"coinone best ask mismatch: {snapshot}")
     _assert(snapshot["source_type"] == "public_ws", f"coinone source_type mismatch: {snapshot}")
+    _assert(
+        snapshot["freshness_observed_at_source"] == "received_at",
+        f"coinone freshness source mismatch: {snapshot}",
+    )
+    _assert(
+        snapshot["freshness_observed_at"] == snapshot["received_at"],
+        f"coinone freshness observed_at mismatch: {snapshot}",
+    )
 
 
 def _case_unsupported_exchange() -> None:
@@ -221,6 +238,7 @@ def main() -> None:
     _case_unsupported_exchange()
     print("PASS public websocket connector parses upbit orderbook snapshots")
     print("PASS public websocket connector parses coinone orderbook snapshots")
+    print("PASS public websocket connector emits exchange-aware freshness metadata")
     print("PASS public websocket connector rejects unsupported exchanges")
 
 

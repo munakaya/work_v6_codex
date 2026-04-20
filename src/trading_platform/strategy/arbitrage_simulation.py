@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Sequence
 
+from ..market_data_freshness import choose_freshness_observed_at
 from .arbitrage_input_loader import load_strategy_inputs
 from .arbitrage_runtime import evaluate_arbitrage
 
@@ -67,13 +68,22 @@ def _snapshot_orderbook_payload(
     market: str,
     fallback_observed_at: str,
 ) -> dict[str, object]:
+    observed_at, observed_at_source = choose_freshness_observed_at(
+        snapshot,
+        fallback_now=fallback_observed_at,
+    )
     return {
         "exchange_name": exchange_name,
         "market": market,
-        "observed_at": _parse_iso_datetime(
-            snapshot.get("exchange_timestamp") or snapshot.get("received_at"),
-            fallback=fallback_observed_at,
-        ),
+        "observed_at": _parse_iso_datetime(observed_at, fallback=fallback_observed_at),
+        "observed_at_source": observed_at_source,
+        "exchange_timestamp": snapshot.get("exchange_timestamp"),
+        "received_at": snapshot.get("received_at"),
+        "exchange_age_ms": snapshot.get("exchange_age_ms"),
+        "source_type": snapshot.get("source_type"),
+        "stale": snapshot.get("stale"),
+        "freshness_observed_at": observed_at,
+        "freshness_observed_at_source": observed_at_source,
         "asks": _snapshot_levels(
             snapshot,
             side="asks",

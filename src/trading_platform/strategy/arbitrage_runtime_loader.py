@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ..market_data_connector import PublicMarketDataConnector
+from ..market_data_freshness import choose_freshness_observed_at, snapshot_sort_datetime
 from ..redis_runtime import RedisRuntime
 from ..storage.store_protocol import ControlPlaneStoreProtocol
 
@@ -17,20 +18,7 @@ def _iso_now() -> str:
 
 
 def _snapshot_sort_timestamp(snapshot: dict[str, object] | None) -> datetime | None:
-    if not isinstance(snapshot, dict):
-        return None
-    for key in ("received_at", "exchange_timestamp"):
-        value = snapshot.get(key)
-        if not isinstance(value, str) or not value:
-            continue
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=UTC)
-        return parsed.astimezone(UTC)
-    return None
+    return snapshot_sort_datetime(snapshot)
 
 
 def _newer_snapshot(
@@ -122,13 +110,22 @@ def _snapshot_levels(
 
 
 def _snapshot_orderbook(snapshot: dict[str, object]) -> dict[str, object]:
-    observed_at = str(
-        snapshot.get("exchange_timestamp") or snapshot.get("received_at") or _iso_now()
+    observed_at, observed_at_source = choose_freshness_observed_at(
+        snapshot,
+        fallback_now=_iso_now(),
     )
     return {
         "exchange_name": str(snapshot["exchange"]),
         "market": str(snapshot["market"]),
         "observed_at": observed_at,
+        "observed_at_source": observed_at_source,
+        "exchange_timestamp": snapshot.get("exchange_timestamp"),
+        "received_at": snapshot.get("received_at"),
+        "exchange_age_ms": snapshot.get("exchange_age_ms"),
+        "source_type": snapshot.get("source_type"),
+        "stale": snapshot.get("stale"),
+        "freshness_observed_at": observed_at,
+        "freshness_observed_at_source": observed_at_source,
         "asks": _snapshot_levels(
             snapshot,
             side="asks",
