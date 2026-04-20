@@ -39,3 +39,4 @@
 - arbitrage_sim_observer.py: 실제 공개 오더북 상위 depth를 읽어 executable VWAP 기준으로 sim 평가를 수행하고, REST 또는 public websocket 소스를 선택해 거래소별 fetch 주기(upbit=3초 등)를 따로 주며 stale/skew 진단과 요청 통계/JSONL/로그를 남긴다
 - arbitrage_simulation_cases.py: sim observer용 거래소 쌍 정규화, cadence tolerance scheduler, pair timing gate 보정, skew diagnostic-only 모드, actionable/positive-profit/reservation blocked/zero-profit 진단, 양방향 재정거래 평가, reason_code breakdown 포함 누적 집계를 검증한다
 - exchange_fixture_contract_cases.py: 거래소별 내부 contract fixture 자산이 필수 category를 모두 포함하는지 검증한다
+- arbitrage_multi_exchange_selection_cases.py: 3거래소 이상 후보를 양방향 평가해 최적 selected_pair를 고르고 accept/reject/accepted_unselected 후보를 decision_context에 남기는지 검증한다

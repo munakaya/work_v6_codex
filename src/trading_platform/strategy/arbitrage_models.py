@@ -100,6 +100,19 @@ class ArbitrageInputs:
 
 
 @dataclass(frozen=True)
+class ArbitrageCandidateInputs:
+    bot_id: str
+    strategy_run_id: str
+    canonical_symbol: str
+    market: str
+    candidate_exchanges: tuple[str, ...]
+    orderbooks_by_exchange: dict[str, OrderbookSnapshot]
+    balances_by_exchange: dict[str, BalanceSnapshot]
+    risk_config: RiskConfig
+    runtime_state: RuntimeState
+
+
+@dataclass(frozen=True)
 class GateCheckResult:
     name: str
     passed: bool

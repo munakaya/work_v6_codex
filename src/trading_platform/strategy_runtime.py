@@ -11,8 +11,8 @@ from .redis_runtime import RedisRuntime
 from .storage.store_protocol import ControlPlaneStoreProtocol
 from .strategy import (
     build_arbitrage_execution_adapter,
-    evaluate_arbitrage,
-    load_strategy_inputs,
+    evaluate_arbitrage_candidate_set,
+    load_candidate_strategy_inputs,
     persist_order_intent_plan,
 )
 from .strategy.arbitrage_evaluation_payload import build_arbitrage_evaluation_payload
@@ -292,7 +292,9 @@ class StrategyRuntime:
                 return
 
         try:
-            decision = evaluate_arbitrage(load_strategy_inputs(load_result.payload))
+            decision = evaluate_arbitrage_candidate_set(
+                load_candidate_strategy_inputs(load_result.payload)
+            )
         except Exception as exc:
             self._record_failure(run_id=run_id, bot_id=bot_id, exc=exc)
             return

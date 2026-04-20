@@ -71,11 +71,11 @@
 
 ### 5. 3거래소 동시 비교 candidate selection 반영
 
-- [ ] 현재 `base_exchange + hedge_exchange` 2거래소 고정 평가를 일반화한다.
+- [x] 현재 `base_exchange + hedge_exchange` 2거래소 고정 평가를 일반화한다.
 
-- [ ] `upbit/bithumb/coinone` 전체를 동시에 보고, 그 시점 최적의 `selected_pair` 1개를 고르는 selection layer를 추가한다.
+- [x] `upbit/bithumb/coinone` 전체를 동시에 보고, 그 시점 최적의 `selected_pair` 1개를 고르는 selection layer를 추가한다.
 
-- [ ] selection 결과와 탈락 후보를 함께 기록한다.
+- [x] selection 결과와 탈락 후보를 함께 기록한다.
   나중에 `selected_pair` 편향, missed opportunity, live/shadow 차이를 분석할 수 있어야 한다.
 
 ### 6. pair-level trade lock 추가

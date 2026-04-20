@@ -1,4 +1,4 @@
-from .arbitrage_input_loader import load_strategy_inputs
+from .arbitrage_input_loader import load_candidate_strategy_inputs, load_strategy_inputs
 from .arbitrage_execution_adapter import (
     ArbitrageExecutionAdapterProtocol,
     PrivateHttpArbitrageExecutionAdapter,
@@ -7,6 +7,7 @@ from .arbitrage_execution_adapter import (
     build_arbitrage_execution_adapter,
 )
 from .arbitrage_evaluation_payload import build_arbitrage_evaluation_payload
+from .arbitrage_candidate_sets import evaluate_arbitrage_candidate_set
 from .arbitrage_execution import submit_arbitrage_orders
 from .arbitrage_runtime import evaluate_arbitrage, persist_order_intent_plan
 from .arbitrage_runtime_loader import load_arbitrage_runtime_payload
@@ -57,7 +58,9 @@ __all__ = [
     "load_exchange_trading_credentials",
     "load_exchange_trading_credentials_from_config",
     "load_arbitrage_runtime_payload",
+    "load_candidate_strategy_inputs",
     "load_strategy_inputs",
+    "evaluate_arbitrage_candidate_set",
     "persist_order_intent_plan",
     "sign_coinone_payload",
     "submit_arbitrage_orders",
