@@ -5,9 +5,11 @@ from datetime import UTC, datetime
 import json
 import logging
 from shutil import which
-import subprocess
+import threading
 from typing import Any
 from uuid import uuid4
+
+from .redis_client import RedisClient, RedisClientError
 
 
 LOGGER = logging.getLogger(__name__)
@@ -57,19 +59,38 @@ class RedisRuntime:
         self.key_prefix = key_prefix
         self.service_name = service_name
         self.redis_cli_path = which("redis-cli")
-        self.info = RedisRuntimeInfo(
-            configured=bool(redis_url),
+        self._state_lock = threading.Lock()
+        self._last_error_message: str | None = None
+        self._client: RedisClient | None = None
+        if redis_url:
+            try:
+                self._client = RedisClient(redis_url, max_connections=8, socket_timeout_seconds=5.0)
+            except ValueError as exc:
+                LOGGER.warning(
+                    "redis runtime configuration invalid: %s",
+                    exc,
+                    extra={
+                        "event_name": "redis_runtime_failed",
+                    },
+                )
+
+    @property
+    def info(self) -> RedisRuntimeInfo:
+        return RedisRuntimeInfo(
+            configured=bool(self.redis_url),
             cli_available=bool(self.redis_cli_path),
-            enabled=bool(redis_url and self.redis_cli_path),
-            key_prefix=key_prefix,
+            enabled=bool(self.redis_url and self._client is not None),
+            key_prefix=self.key_prefix,
             state=self._state_name(),
         )
 
     def _state_name(self) -> str:
         if not self.redis_url:
             return "not_configured"
-        if not self.redis_cli_path:
-            return "redis_cli_missing"
+        if self._client is None:
+            return "invalid_config"
+        if self._last_error_message:
+            return "degraded"
         return "enabled"
 
     def now_iso(self) -> str:
@@ -78,18 +99,19 @@ class RedisRuntime:
     def set_json(
         self, key_parts: list[str], payload: dict[str, Any], ttl_seconds: int | None = None
     ) -> bool:
-        return self._run_command(
-            [
-                "SET",
-                self._key(*key_parts),
-                json.dumps(payload, separators=(",", ":"), ensure_ascii=True),
-                *([] if ttl_seconds is None else ["EX", str(ttl_seconds)]),
-            ]
-        )
+        command = [
+            "SET",
+            self._key(*key_parts),
+            json.dumps(payload, separators=(",", ":"), ensure_ascii=True),
+        ]
+        if ttl_seconds is not None:
+            command.extend(["EX", str(ttl_seconds)])
+        result = self._execute(command)
+        return result == "OK"
 
     def get_json(self, key_parts: list[str]) -> dict[str, Any] | None:
-        raw = self._run_command_output(["GET", self._key(*key_parts)])
-        if raw is None:
+        raw = self._execute(["GET", self._key(*key_parts)])
+        if raw is None or not isinstance(raw, str):
             return None
         stripped = raw.strip()
         if not stripped:
@@ -119,7 +141,7 @@ class RedisRuntime:
             "trace_id": trace_id,
             "payload": payload,
         }
-        return self._run_command(
+        result = self._execute(
             [
                 "XADD",
                 self._key("stream", stream_name),
@@ -131,6 +153,7 @@ class RedisRuntime:
                 json.dumps(envelope, separators=(",", ":"), ensure_ascii=True),
             ]
         )
+        return isinstance(result, str) and bool(result)
 
     def sync_bot_state(
         self,
@@ -520,9 +543,8 @@ class RedisRuntime:
         upper_bound = "+"
         if before_stream_id:
             upper_bound = f"({before_stream_id.strip()}"
-        raw = self._run_command_output(
+        raw = self._execute(
             [
-                "--json",
                 "XREVRANGE",
                 self._key("stream", stream_name),
                 upper_bound,
@@ -533,17 +555,10 @@ class RedisRuntime:
         )
         if raw is None:
             return None
-        stripped = raw.strip()
-        if not stripped:
-            return []
-        try:
-            entries = json.loads(stripped)
-        except json.JSONDecodeError:
-            return None
-        if not isinstance(entries, list):
+        if not isinstance(raw, list):
             return None
         events: list[dict[str, Any]] = []
-        for entry in entries:
+        for entry in raw:
             parsed = self._parse_stream_entry(entry)
             if parsed is not None:
                 events.append(parsed)
@@ -551,28 +566,20 @@ class RedisRuntime:
 
     def get_stream_summary(self, *, stream_name: str) -> dict[str, Any] | None:
         key = self._key("stream", stream_name)
-        length_raw = self._run_command_output(["XLEN", key])
+        length_raw = self._execute(["XLEN", key])
         if length_raw is None:
             return None
         try:
-            length = int(length_raw.strip() or "0")
-        except ValueError:
+            length = int(length_raw)
+        except (TypeError, ValueError):
             return None
         newest = self.list_stream_events(stream_name=stream_name, limit=1)
-        oldest_raw = self._run_command_output(["--json", "XRANGE", key, "-", "+", "COUNT", "1"])
+        oldest_raw = self._execute(["XRANGE", key, "-", "+", "COUNT", "1"])
         if oldest_raw is None:
             return None
-        stripped = oldest_raw.strip()
-        oldest_entries: list[Any] = []
-        if stripped:
-            try:
-                parsed = json.loads(stripped)
-            except json.JSONDecodeError:
-                return None
-            if not isinstance(parsed, list):
-                return None
-            oldest_entries = parsed
-        oldest_event = self._parse_stream_entry(oldest_entries[0]) if oldest_entries else None
+        if not isinstance(oldest_raw, list):
+            return None
+        oldest_event = self._parse_stream_entry(oldest_raw[0]) if oldest_raw else None
         newest_event = newest[0] if newest else None
         if length == 0 and (newest_event is not None or oldest_event is not None):
             length = 1
@@ -593,8 +600,8 @@ class RedisRuntime:
         return ":".join([self.key_prefix, *parts])
 
     def _get_json_by_full_key(self, key: str) -> dict[str, Any] | None:
-        raw = self._run_command_output(["GET", key])
-        if raw is None:
+        raw = self._execute(["GET", key])
+        if raw is None or not isinstance(raw, str):
             return None
         stripped = raw.strip()
         if not stripped:
@@ -626,38 +633,55 @@ class RedisRuntime:
             return None
         return {"stream_id": stream_id, **payload}
 
-    def _run_command(self, command: list[str]) -> bool:
-        return self._run_command_output(command) is not None
-
     def _scan_keys(self, pattern: str) -> list[str] | None:
-        output = self._run_command_output(["--scan", "--pattern", pattern])
-        if output is None:
+        if not self.info.enabled:
             return None
-        return [line.strip() for line in output.splitlines() if line.strip()]
+        cursor = "0"
+        keys: list[str] = []
+        seen: set[str] = set()
+        while True:
+            result = self._execute(["SCAN", cursor, "MATCH", pattern, "COUNT", "100"])
+            if result is None:
+                return None
+            if not isinstance(result, list) or len(result) != 2:
+                return None
+            next_cursor_raw, batch_raw = result
+            next_cursor = str(next_cursor_raw)
+            if not isinstance(batch_raw, list):
+                return None
+            for item in batch_raw:
+                if not isinstance(item, str) or item in seen:
+                    continue
+                seen.add(item)
+                keys.append(item)
+            if next_cursor == "0":
+                break
+            cursor = next_cursor
+        return keys
 
-    def _run_command_output(self, command: list[str]) -> str | None:
-        if not self.info.enabled or not self.redis_url or not self.redis_cli_path:
+    def _execute(self, command: list[str]) -> object | None:
+        client = self._client
+        if client is None:
             return None
         try:
-            completed = subprocess.run(
-                [self.redis_cli_path, "-u", self.redis_url, *command],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            return completed.stdout
-        except (OSError, subprocess.SubprocessError) as exc:
-            if (
-                isinstance(exc, subprocess.CalledProcessError)
-                and exc.returncode == 130
-            ):
-                return None
-            LOGGER.warning(
-                "redis runtime command failed: %s",
-                exc.__class__.__name__,
-                extra={
-                    "event_name": "redis_runtime_failed",
-                },
-            )
+            result = client.execute(*command)
+        except RedisClientError as exc:
+            self._record_failure(str(exc))
             return None
+        self._clear_failure()
+        return result
+
+    def _record_failure(self, message: str) -> None:
+        with self._state_lock:
+            self._last_error_message = message
+        LOGGER.warning(
+            "redis runtime command failed: %s",
+            message,
+            extra={
+                "event_name": "redis_runtime_failed",
+            },
+        )
+
+    def _clear_failure(self) -> None:
+        with self._state_lock:
+            self._last_error_message = None

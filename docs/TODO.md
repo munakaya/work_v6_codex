@@ -14,9 +14,9 @@
   `ready`의 `dependencies.private_execution`과 `strategy_runtime`에 `temporary_external_delegate` 메타데이터를 추가해,
   외부 executor 위임이 최종 실행 경로가 아니라 임시 실연결 경로임을 직접 드러내도록 정리했다.
 
-- [ ] Redis runtime을 `redis-cli` subprocess 의존에서 교체
-  현재 Redis 입출력은 `redis-cli` 호출 기반이라 지연, 실패 처리, 운영 관찰성 면에서 약하다.
-  connection pool 기반 정식 클라이언트로 바꾸고, 실패 시 no-op가 아니라 명시적 degraded/error 상태를 남겨야 한다.
+- [x] Redis runtime을 `redis-cli` subprocess 의존에서 교체
+  내부 RESP 기반 connection-pool 클라이언트로 치환해 `redis-cli` 없이도 Redis runtime이 동작하도록 바꿨다.
+  명령 실패 시에는 무음 no-op 대신 `redis_runtime.state=degraded`로 내려가도록 정리했다.
 
 - [ ] 운영 환경에서 write API fail-closed 강제
   bearer token / per-IP rate limit 자체는 이미 구현되어 있다.

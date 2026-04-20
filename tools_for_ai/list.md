@@ -3,6 +3,7 @@
 - arbitrage_runtime_cases.py: 재정거래 전략 런타임의 핵심 accept/reject 케이스(C1~C9)를 코드로 검증한다
 - recovery_runtime_cases.py: recovery trace가 zero-exposure/terminal/unwind fill/reconciliation matched면 resolved, failed or stale unwind와 reconciliation mismatch residual/반복 mismatch면 handoff_required로 바뀌는지 Redis 기준으로 검증한다
 - strategy_runtime_guard_cases.py: active recovery/manual handoff trace가 있을 때 strategy runtime이 새 평가를 skip하는지 검증한다
+- redis_runtime_cases.py: redis-cli 없이도 Redis runtime이 동작하고, 명령 실패 시 degraded 상태로 내려가는지 검증한다
 - private_execution_readiness_cases.py: private_http execution이 health probe 기준으로 reachable, missing, not_required 상태를 올바르게 판정하는지 검증한다
 - private_executor_stub.py: private_http execution 검증용 로컬 stub 서버를 띄워 health와 filled/submitted/failed 응답을 재현한다
 - private_http_adapter_cases.py: private_http adapter를 runtime guard 없이 직접 호출해 existing order id 충돌, submitted-with-fill, submit_failed bad fill/extra fill leg/filled-no-fill/partial-no-fill, filled bad preview, filled partial, extra fill leg 무저장 fail-closed를 검증한다
