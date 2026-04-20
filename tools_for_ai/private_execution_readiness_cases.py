@@ -45,6 +45,12 @@ def main() -> None:
         _assert(ok_status.configured, "health probe should be configured")
         _assert(ok_status.reachable, "health probe should be reachable")
         _assert(ok_status.state == "reachable", "health probe state mismatch")
+        _assert(ok_status.mode == "private_http", "health probe mode mismatch")
+        _assert(
+            ok_status.path_kind == "temporary_external_delegate",
+            "health probe path_kind mismatch",
+        )
+        _assert(ok_status.temporary is True, "health probe temporary flag mismatch")
 
         missing_health = private_execution_status(
             execution_enabled=True,
@@ -67,6 +73,8 @@ def main() -> None:
             timeout_ms=1000,
         )
         _assert(not_required.state == "not_required", "not_required state mismatch")
+        _assert(not_required.mode == "private_http", "not_required mode mismatch")
+        _assert(not_required.temporary is True, "not_required temporary mismatch")
 
         print("PASS private execution health probe reachable")
         print("PASS private execution missing health url detected")

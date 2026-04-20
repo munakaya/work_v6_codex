@@ -7,6 +7,7 @@
 - 잘못된 환경으로 live를 켜지 않는다
 - health는 되는데 주문이 안 나가는 상태를 빨리 찾는다
 - 문제 생기면 바로 `shadow` 또는 execution off로 되돌린다
+- `private_http`가 최종 실행 경로가 아니라 임시 외부 위임 경로라는 점을 운영 화면에서 항상 보이게 유지한다
 
 
 ## 1. 언제 이 문서를 쓰는가
@@ -58,6 +59,9 @@
 - `strategy_runtime.execution_enabled=true`
 - `strategy_runtime.execution_mode=private_http`
 - `strategy_runtime.execution_adapter=private_http`
+- `strategy_runtime.execution_path_kind=temporary_external_delegate`
+- `strategy_runtime.execution_path_temporary=true`
+- `dependencies.private_execution.temporary=true`
 - Redis / PostgreSQL dependency가 같이 정상
 
 보면 좋은 것:

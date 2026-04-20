@@ -10,9 +10,9 @@
   Upbit/Bithumb/Coinone의 private balance, place order, order status, open orders를 실제 API로 연결했다.
   남은 과제는 실계정 smoke, cancel flow, execution path 편입처럼 실운영 경로를 닫는 작업이다.
 
-- [ ] `private_http` 의존을 임시 경로로 명확히 격하
-  지금 execution mode는 `simulate_*`, `private_http`, `private_stub` 중심이다.
-  외부 executor 위임을 당장 유지하더라도, 문서와 ready/runtime API에서 "임시 실연결 경로"임을 더 명확히 드러내야 한다.
+- [x] `private_http` 의존을 임시 경로로 명확히 격하
+  `ready`의 `dependencies.private_execution`과 `strategy_runtime`에 `temporary_external_delegate` 메타데이터를 추가해,
+  외부 executor 위임이 최종 실행 경로가 아니라 임시 실연결 경로임을 직접 드러내도록 정리했다.
 
 - [ ] Redis runtime을 `redis-cli` subprocess 의존에서 교체
   현재 Redis 입출력은 `redis-cli` 호출 기반이라 지연, 실패 처리, 운영 관찰성 면에서 약하다.

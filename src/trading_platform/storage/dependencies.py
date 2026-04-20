@@ -10,6 +10,7 @@ from urllib import error, request
 
 from ..config import AppConfig
 from ..strategy.exchange_key_loader import inspect_exchange_trading_credentials_from_config
+from ..strategy.execution_mode_metadata import describe_execution_mode
 
 
 DEFAULT_POSTGRES_PORT: Final[int] = 5432
@@ -25,6 +26,10 @@ class DependencyStatus:
     state: str
     host: str | None = None
     port: int | None = None
+    mode: str | None = None
+    path_kind: str | None = None
+    temporary: bool | None = None
+    summary: str | None = None
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -33,6 +38,10 @@ class DependencyStatus:
             "state": self.state,
             "host": self.host,
             "port": self.port,
+            "mode": self.mode,
+            "path_kind": self.path_kind,
+            "temporary": self.temporary,
+            "summary": self.summary,
         }
 
 
@@ -77,17 +86,26 @@ def private_execution_status(
     token: str | None = None,
     timeout_ms: int = 3000,
 ) -> DependencyStatus:
-    if not execution_enabled or execution_mode.strip().lower() != "private_http":
+    metadata = describe_execution_mode(execution_mode)
+    if not execution_enabled or metadata.normalized_mode != "private_http":
         return DependencyStatus(
             configured=False,
             reachable=False,
             state="not_required",
+            mode=metadata.normalized_mode,
+            path_kind=metadata.path_kind,
+            temporary=metadata.temporary_path,
+            summary=metadata.summary,
         )
     if not submit_url:
         return DependencyStatus(
             configured=False,
             reachable=False,
             state="submit_url_missing",
+            mode=metadata.normalized_mode,
+            path_kind=metadata.path_kind,
+            temporary=metadata.temporary_path,
+            summary=metadata.summary,
         )
     if not health_url:
         parsed_submit = urlparse(submit_url)
@@ -97,6 +115,10 @@ def private_execution_status(
             state="health_url_missing",
             host=parsed_submit.hostname,
             port=parsed_submit.port or _default_port(parsed_submit.scheme),
+            mode=metadata.normalized_mode,
+            path_kind=metadata.path_kind,
+            temporary=metadata.temporary_path,
+            summary=metadata.summary,
         )
     parsed = urlparse(health_url)
     host = parsed.hostname
@@ -108,6 +130,10 @@ def private_execution_status(
             state="invalid_config",
             host=host,
             port=port,
+            mode=metadata.normalized_mode,
+            path_kind=metadata.path_kind,
+            temporary=metadata.temporary_path,
+            summary=metadata.summary,
         )
     timeout_seconds = max(timeout_ms, 250) / 1000.0
     headers = {"Accept": "application/json"}
@@ -124,6 +150,10 @@ def private_execution_status(
             state=f"http_{exc.code}",
             host=host,
             port=port,
+            mode=metadata.normalized_mode,
+            path_kind=metadata.path_kind,
+            temporary=metadata.temporary_path,
+            summary=metadata.summary,
         )
     except (error.URLError, TimeoutError, OSError):
         return DependencyStatus(
@@ -132,6 +162,10 @@ def private_execution_status(
             state="unreachable",
             host=host,
             port=port,
+            mode=metadata.normalized_mode,
+            path_kind=metadata.path_kind,
+            temporary=metadata.temporary_path,
+            summary=metadata.summary,
         )
     state = "reachable" if 200 <= int(status_code) < 400 else f"http_{int(status_code)}"
     return DependencyStatus(
@@ -140,6 +174,10 @@ def private_execution_status(
         state=state,
         host=host,
         port=port,
+        mode=metadata.normalized_mode,
+        path_kind=metadata.path_kind,
+        temporary=metadata.temporary_path,
+        summary=metadata.summary,
     )
 
 

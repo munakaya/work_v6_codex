@@ -71,10 +71,11 @@
 
 - PostgreSQL, Redis 연결과 market data / strategy runtime 상태 포함 준비 상태 확인
 - `strategy_runtime`에는 evaluation/persist/submit 카운터와 execution 모드(`simulate_success`, `simulate_failure`, `simulate_fill`, `private_stub`, `private_http`)도 포함
-- `strategy_runtime`에는 현재 연결된 execution adapter 이름도 포함
+- `strategy_runtime`에는 현재 연결된 execution adapter 이름과 실행 경로 메타데이터(`execution_path_kind`, `execution_path_temporary`, `execution_path_summary`)도 포함
 - `recovery_runtime`에는 active trace 처리, submit-timeout watchdog, terminal evaluation close sync, auto resolve, manual handoff 승격 카운터가 포함
 - `write_api_guard`에는 write API bearer token 보호와 per-IP rate limit 활성 여부가 포함
 - `strategy_runtime.execution_mode=private_http`이고 execution이 켜져 있으면 `dependencies.private_execution`도 함께 검사
+- `dependencies.private_execution`에는 `mode`, `path_kind=temporary_external_delegate`, `temporary=true`, `summary`가 포함돼 임시 외부 위임 경로임을 드러낸다
 - `dependencies.exchange_trading_keys`에는 upbit/bithumb/coinone 키 파일 상태와 primary/fallback 경로가 포함
 - 이때 `TP_STRATEGY_PRIVATE_EXECUTION_HEALTH_URL`이 없거나 health probe가 실패하면 ready는 `degraded`
 

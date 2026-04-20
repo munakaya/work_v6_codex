@@ -17,6 +17,7 @@ from .strategy import (
 )
 from .strategy.arbitrage_evaluation_payload import build_arbitrage_evaluation_payload
 from .strategy.arbitrage_runtime_loader import load_arbitrage_runtime_payload
+from .strategy.execution_mode_metadata import describe_execution_mode
 from .strategy_runtime_execution import execute_persisted_arbitrage_intent
 
 
@@ -42,6 +43,9 @@ class StrategyRuntimeInfo:
     execution_enabled: bool
     execution_mode: str
     execution_adapter: str
+    execution_path_kind: str
+    execution_path_temporary: bool
+    execution_path_summary: str
     auto_unwind_on_failure: bool
     running: bool
     state: str
@@ -68,6 +72,9 @@ class StrategyRuntimeInfo:
             "execution_enabled": self.execution_enabled,
             "execution_mode": self.execution_mode,
             "execution_adapter": self.execution_adapter,
+            "execution_path_kind": self.execution_path_kind,
+            "execution_path_temporary": self.execution_path_temporary,
+            "execution_path_summary": self.execution_path_summary,
             "auto_unwind_on_failure": self.auto_unwind_on_failure,
             "running": self.running,
             "state": self.state,
@@ -116,6 +123,7 @@ class StrategyRuntime:
             else "simulate_failure"
         )
         self.execution_enabled = execution_enabled
+        self._execution_mode_metadata = describe_execution_mode(self.execution_mode)
         self.auto_unwind_on_failure = auto_unwind_on_failure
         self.read_store = read_store
         self.connector = connector
@@ -155,6 +163,9 @@ class StrategyRuntime:
                 execution_enabled=self.execution_enabled,
                 execution_mode=self.execution_mode,
                 execution_adapter=self.execution_adapter.name,
+                execution_path_kind=self._execution_mode_metadata.path_kind,
+                execution_path_temporary=self._execution_mode_metadata.temporary_path,
+                execution_path_summary=self._execution_mode_metadata.summary,
                 auto_unwind_on_failure=self.auto_unwind_on_failure,
                 running=self._running,
                 state=self._state_name(),

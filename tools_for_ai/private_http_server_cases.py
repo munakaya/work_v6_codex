@@ -179,6 +179,22 @@ def _run_case(mode: str, *, submit_url: str, health_url: str) -> None:
         private_dep = ready_payload["data"]["dependencies"]["private_execution"]
         _assert(private_dep["configured"] is True, f"{mode}: private execution not configured")
         _assert(private_dep["reachable"] is True, f"{mode}: private execution not reachable")
+        _assert(private_dep["mode"] == "private_http", f"{mode}: private execution mode mismatch")
+        _assert(
+            private_dep["path_kind"] == "temporary_external_delegate",
+            f"{mode}: private execution path_kind mismatch",
+        )
+        _assert(private_dep["temporary"] is True, f"{mode}: private execution temporary mismatch")
+        strategy_runtime = ready_payload["data"]["strategy_runtime"]
+        _assert(strategy_runtime["execution_mode"] == "private_http", f"{mode}: execution mode mismatch")
+        _assert(
+            strategy_runtime["execution_path_kind"] == "temporary_external_delegate",
+            f"{mode}: execution path kind mismatch",
+        )
+        _assert(
+            strategy_runtime["execution_path_temporary"] is True,
+            f"{mode}: execution path temporary mismatch",
+        )
 
         bot_id, run_id = _register_and_start_run(f"private-http-server-{mode}-{uuid4().hex[:6]}")
         status, payload = _http_json(
