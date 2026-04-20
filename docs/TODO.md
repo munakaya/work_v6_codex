@@ -22,9 +22,9 @@
   `APP_ENV=staging|production`에서는 `TP_ADMIN_TOKEN` 미설정 시 서버가 기동 실패하도록 바꿨다.
   local/dev에서만 write API 무토큰 기동을 허용하고, `ready.write_api_guard`에 요구 여부를 직접 노출한다.
 
-- [ ] 설계 진척도 문서 현실화
-  `docs/08_progress_and_gaps.md`의 설계 진척률과 구현 준비도 표현이 현재 구현 공백보다 낙관적이다.
-  설계 완성도와 실거래 준비도를 분리해서 적고, "실거래 미구현 / Redis 교체 전 / WS-first 미완료" 상태를 명시해야 한다.
+- [x] 설계 진척도 문서 현실화
+  `docs/08_progress_and_gaps.md`에서 설계 완성도와 구현/실거래 준비도를 분리했다.
+  상위 설계는 높게 보되, `private_http` 임시 경로, WS-first 미완료, pair-level lock 부재, 정식 테스트 부재를 반영해 live readiness 숫자를 낮췄다.
 
 ## 실연결 전 보강
 

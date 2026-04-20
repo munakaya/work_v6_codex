@@ -1,133 +1,150 @@
 # Progress and Open Gaps
 
-이 문서는 현재 설계 진행 상태와 남은 공백을 추적한다. 지금 무엇이 준비되었고 무엇이 아직 비어 있는지 빠르게 판단할 때 사용한다.
+이 문서는 현재 저장소의 설계 문서 완성도와 실제 구현/운영 준비도를 함께 보되,
+둘을 같은 숫자로 섞어 과장하지 않기 위한 상태 메모다.
+문서를 많이 썼는지보다, 지금 이 저장소가 어디까지 실제로 닫혀 있는지를 빠르게 판단할 때 사용한다.
 
 
-## 24. 다음 우선 문서
+## 24. 이 문서를 읽는 방식
 
-이 문서 다음으로 바로 작성할 가치가 큰 문서는 아래 순서다.
+이 문서를 볼 때는 아래 두 축을 분리해서 읽는다.
 
-1. OpenAPI YAML 초안
-2. Alembic initial migration 문서
-3. Redis event catalog
-4. Strategy ADR
-5. Deployment runbook
+- 설계 완성도: 문서와 계약이 얼마나 정리되어 있는가
+- 구현 준비도: 현재 코드가 local, staging, live 직전 기준으로 얼마나 닫혀 있는가
 
-## 31. 전체 설계 진행 상황
+현재 저장소는 설계 완성도는 높은 편이지만, 실거래 준비도는 아직 중간 이하 구간이다.
+특히 private execution 최종 경로, public WS-first collector, pair-level lock, 실제 잔고 스냅샷, 정식 테스트 스위트가 아직 남아 있다.
 
-지금까지 문서 기준으로 보면 전체 설계 진행 상황은 아래 정도다.
 
-### 31.1 완료된 영역
+## 31. 설계 문서 기준 진행 상태
 
-- 제품 비전
-- 제품 목표 / 비목표
-- 핵심 사용자 정의
-- 제품 원칙
-- 권장 기술 스택
-- 목표 아키텍처
-- 권장 디렉터리 구조
-- 기능 요구사항
-- 비기능 요구사항
-- MVP 범위
-- 구현 순서
-- 초기 PostgreSQL 스키마 초안
-- API 명세 초안
-- OpenAPI YAML 초안
+### 31.1 비교적 안정된 영역
+
+- 제품 비전 / 목표 / 비목표
+- 상위 아키텍처와 구성 요소 분리
+- PostgreSQL, Redis, runtime, control plane의 책임 분리
+- API 초안과 OpenAPI 초안
 - Redis key / stream 규약
-- migration 정책
-- decision record format
-- observability spec
-- deployment runbook
-- strategy ADR
+- 운영 runbook과 smoke checklist의 기본 뼈대
+- 재정거래 전략 문서군과 recovery 문서군
+- 거래소 adapter 공통 방향과 validation 관점
 
-### 31.2 아직 초안 수준인 영역
+### 31.2 아직 초안이거나 후속 구체화가 필요한 영역
 
-- 거래소별 상세 어댑터 계약
-- UI 상세 설계
+- 거래소별 상세 contract와 실거래 edge case 표
+- UI 상세 설계와 frontend query contract의 운영 수준 보강
 - OpenAPI 완성본
 - Redis event catalog 상세판
-- migration 실제 revision 파일 수준 설계
-- alert rule 임계치 값
-- 전략별 리스크 규칙 상세값
+- migration revision 단위 문서
+- alert threshold와 운영 지표 임계값
+- live 승인 절차와 운영 역할 분담 문서
 
-### 31.3 아직 거의 시작하지 않은 영역
+### 31.3 아직 약한 영역
 
-- 프론트엔드 실제 스택 선택
-- auth / RBAC
+- auth / RBAC 전체 설계
 - object storage 사용 여부
-- backtesting / replay spec
-- 운영자 워크플로우 문서
+- backtesting / replay 운영 절차
+- 운영자 workflow 상세 문서
 - SLO / SLA 정의
 
-### 31.4 현재 진척도 판단
+### 31.4 설계 완성도 재평가
 
-내 기준으로는 지금 문서 설계는 다음 정도까지 왔다.
+문서 기준 현재 평가는 아래 정도가 맞다.
 
-- 시스템/제품 아키텍처: 85%
-- 데이터 모델: 75%
-- API 설계: 70%
-- 운영 설계: 80%
-- 거래소 세부 설계: 40%
-- UI 세부 설계: 35%
-
-전체적으로 보면 "프로젝트 착수 가능한 수준의 상위 설계는 완료" 상태다.
-다음 단계는 더 많은 PRD 확장이 아니라, 거래소 상세 설계와 UI 상세 설계를 별도 문서로 파고드는 것이 맞다.
-
-## 42. 설계 완료 기준과 남은 공백
-
-이 문서는 이미 새 프로젝트 착수를 위한 상위 설계 문서로 사용할 수 있다.
-다만 실제 구현 직전에는 아래 공백을 닫아야 한다.
-
-### 42.1 구현 착수 가능 항목
-
-- control plane API 골격
-- PostgreSQL schema 1차 migration
-- Redis stream/key 규약 기반 event bus 골격
-- strategy worker runtime 골격
-- observability/logging/notifier 기본 모듈
-- Bot Overview, Bot Detail, Order Explorer 초기 UI
-
-### 42.2 구현 직전 추가 확정이 필요한 항목
-
-- Upbit / Bithumb / Coinone 공식 API 문서 버전 pinning
-- 거래소별 symbol normalization 규칙
-- 수수료 계산 source of truth
-- 최소 주문 수량/금액 validation 규칙
-- live mode 승인 절차와 실제 운영 책임자
-- secret manager 방식
-
-### 42.3 문서 기준 완료 정의
-
-다음 조건을 만족하면 "설계 1차 완료"로 본다.
-
-- PRD, 아키텍처, DB, API, 운영, UI, adapter 설계가 한 문서 안에서 충돌 없이 연결됨
-- 전략 판단부터 주문, fill, 포지션, alert, audit까지 이벤트 흐름이 정의됨
-- 거래소 구현 시 필요한 auth, endpoint, error mapping의 초안이 존재함
-- production 이전에 필요한 test matrix와 approval gate가 정의됨
-
-### 42.4 다음 상세 문서 후보
-
-- 거래소별 symbol / fee / precision 규약서
-- Order reconciliation job 상세 설계
-- Position unwind engine 상세 설계
-- Frontend API query contract 문서
-- 운영자 장애 대응 플레이북 심화판
-
-## 48. 현재 문서 기준 전체 설계 상태 재평가
-
-이번 보강 이후의 주관적 진행 상태는 다음과 같다.
-
-- PRD / 제품 방향: 95%
-- 상위 아키텍처: 90%
-- DB 모델: 85%
-- API / UI 계약: 85%
-- 운영 / 관찰성 / 장애 대응: 90%
-- 거래소 adapter 공통 설계: 85%
-- 거래소별 구현 계약: 65%
-- 웹 UI 상세 설계: 75%
+- PRD / 제품 방향: 90%
+- 상위 아키텍처: 85%
+- 데이터 모델: 80%
+- API 계약: 80%
+- 운영 문서: 75%
+- 거래소 adapter 공통 설계: 75%
+- 거래소별 상세 계약: 55%
+- 웹 UI 상세 설계: 60%
 
 해석:
 
-- 이제 이 문서는 "착수 전 상위 설계 문서" 수준은 넘었다
-- 실제 구현 팀은 backend, frontend, infra, exchange adapter 작업을 병렬로 나눌 수 있다
-- 가장 큰 잔여 리스크는 거래소별 공식 문서 pinning과 실제 live smoke 검증이다
+- 프로젝트 착수용 상위 설계는 이미 충분하다.
+- 반면 "문서가 많다"는 이유로 실제 구현 준비도까지 높다고 보면 안 된다.
+- 지금 필요한 것은 PRD 확장보다 실거래에 직접 연결되는 공백을 닫는 일이다.
+
+
+## 42. 구현 준비도와 실거래 준비도
+
+### 42.1 현재 코드에서 이미 닫힌 항목
+
+- control plane read/write 기본 API 골격
+- PostgreSQL/Redis/readiness 기본 점검 경로
+- private REST connector 최소 계약
+- `private_http`가 임시 외부 위임 경로라는 메타데이터 노출
+- Redis runtime의 `redis-cli` 의존 제거
+- 운영 환경 write API fail-closed 기동 정책
+- cached snapshot 우선 로딩과 direct REST 재조회 제거
+- `tools_for_ai` 기반 실행형 회귀 케이스 축적
+
+### 42.2 아직 실거래 전환을 막는 핵심 공백
+
+- private execution의 최종 내장 경로 미구현
+- `private_http`는 아직 임시 외부 delegate 경로
+- public WS-first collector 미완료
+- collector coverage 확장 미완료
+- pair-level trade lock 부재
+- 실제 거래소 잔고 기반 balance snapshot 미완료
+- 정식 `pytest/tests/CI` 체계 부재
+- malformed `private_http` 응답의 서버 레벨 회귀 확대 필요
+- live/shadow/sim 편차 계측 부재
+
+### 42.3 구현 준비도 재평가
+
+현재 저장소의 구현 준비도는 아래 정도가 맞다.
+
+- local 개발/기능 검증 준비도: 80%
+- staging 배포 준비도: 60%
+- shadow 운영 준비도: 55%
+- restricted live smoke 준비도: 40%
+- 지속 운영 가능한 live readiness: 30%
+
+해석:
+
+- local에서 기능을 붙이고 회귀를 돌리는 기반은 꽤 올라와 있다.
+- staging과 shadow는 가능하지만, 운영 편차와 실행 경로 안전장치가 아직 부족하다.
+- live readiness는 private connector 존재만으로 높게 볼 수 없고, execution path, collector, lock, balance, CI가 닫혀야 한다.
+
+
+## 48. 지금 가장 중요한 잔여 리스크
+
+### 48.1 실거래 경로 리스크
+
+- private REST connector는 붙었지만 cancel flow, execution path 편입, 실계정 smoke가 남아 있다.
+- `private_http`는 계속 임시 경로이며, 외부 executor 의존을 제거하지 못했다.
+
+### 48.2 market data 리스크
+
+- direct REST 재조회는 제거됐지만 public WS가 아직 기본 경로가 아니다.
+- collector coverage가 충분하지 않아 `MARKET_SNAPSHOT_NOT_FOUND` 계열 실패를 완전히 낮추지 못했다.
+
+### 48.3 동시성/중복 진입 리스크
+
+- active intent와 recovery trace는 있으나 `(market, selected_pair)` 기준 명시적 pair-level lock은 아직 없다.
+- 다거래소 candidate selection이 아직 2거래소 고정 평가에 머물러 있다.
+
+### 48.4 운영 검증 리스크
+
+- 실행형 케이스는 쌓였지만 정식 테스트 집계/발견 체계가 없다.
+- live/shadow/sim 편차를 운영 지표로 직접 보지 못한다.
+
+
+## 54. 현재 상태 한 줄 요약
+
+현재 저장소는 "설계 문서는 착수 가능 수준 이상"이지만, "실거래 준비가 거의 끝난 상태"는 아니다.
+보다 정확한 표현은 아래에 가깝다.
+
+- 설계 문서: 상위 구조는 충분히 정리됨
+- 구현 상태: local/staging 검증 기반은 형성됨
+- 실거래 상태: 아직 핵심 실행 공백이 남아 있음
+
+다음 우선순위는 문서 확장보다 아래 작업들이다.
+
+1. public WS-first collector 전환
+2. pair-level trade lock 추가
+3. 실제 잔고 snapshot 연동
+4. `tools_for_ai` 핵심 케이스의 정식 테스트 승격
+5. private execution 최종 경로 정리
