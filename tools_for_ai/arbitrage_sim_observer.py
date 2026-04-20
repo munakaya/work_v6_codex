@@ -269,7 +269,7 @@ def main() -> None:
         )
         if unsupported:
             raise SystemExit(
-                "ws data source currently supports only upbit/coinone; unsupported exchanges: "
+                "ws data source currently supports only upbit/bithumb/coinone; unsupported exchanges: "
                 + ", ".join(unsupported)
             )
 

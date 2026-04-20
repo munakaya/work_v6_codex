@@ -36,6 +36,9 @@ class MarketDataRuntimeInfo:
     failure_count: int
     source_policies: list[dict[str, object]]
     source_statuses: list[dict[str, object]]
+    target_coverage: list[dict[str, object]]
+    coverage_state: str
+    missing_snapshot_count: int
     fallback_active: bool
     fallback_count: int
 
@@ -56,6 +59,9 @@ class MarketDataRuntimeInfo:
             "failure_count": self.failure_count,
             "source_policies": self.source_policies,
             "source_statuses": self.source_statuses,
+            "target_coverage": self.target_coverage,
+            "coverage_state": self.coverage_state,
+            "missing_snapshot_count": self.missing_snapshot_count,
             "fallback_active": self.fallback_active,
             "fallback_count": self.fallback_count,
         }
@@ -102,6 +108,14 @@ class MarketDataRuntime:
         target_count = sum(len(markets) for _, markets in target_groups)
         source_policies = self._source_policy_items(target_groups)
         source_statuses = self._source_status_items(source_policies)
+        target_coverage = self._target_coverage_items(target_groups)
+        missing_snapshot_count = sum(
+            len(tuple(item.get("missing_markets") or ())) for item in target_coverage
+        )
+        coverage_state = self._coverage_state_name(
+            target_count=target_count,
+            missing_snapshot_count=missing_snapshot_count,
+        )
         fallback_active = any(bool(item.get("fallback_active")) for item in source_statuses)
         fallback_count = sum(int(item.get("fallback_count") or 0) for item in source_statuses)
         with self._lock:
@@ -124,6 +138,9 @@ class MarketDataRuntime:
                 failure_count=self._failure_count,
                 source_policies=source_policies,
                 source_statuses=source_statuses,
+                target_coverage=target_coverage,
+                coverage_state=coverage_state,
+                missing_snapshot_count=missing_snapshot_count,
                 fallback_active=fallback_active,
                 fallback_count=fallback_count,
             )
@@ -164,6 +181,17 @@ class MarketDataRuntime:
         if self._failure_count > 0 and self._success_count == 0:
             return "degraded"
         return "idle"
+
+    def _coverage_state_name(
+        self, *, target_count: int, missing_snapshot_count: int
+    ) -> str:
+        if target_count <= 0:
+            return "no_targets"
+        if missing_snapshot_count <= 0:
+            return "covered"
+        if missing_snapshot_count >= target_count:
+            return "missing"
+        return "partial"
 
     def _run_loop(self) -> None:
         try:
@@ -347,6 +375,47 @@ class MarketDataRuntime:
                 }
             )
         return items
+
+    def _target_coverage_items(
+        self, target_groups: tuple[tuple[str, tuple[str, ...]], ...]
+    ) -> list[dict[str, object]]:
+        items: list[dict[str, object]] = []
+        for exchange, markets in target_groups:
+            missing_markets: list[str] = []
+            cached_market_count = 0
+            for market in markets:
+                snapshot = self._cached_snapshot(exchange=exchange, market=market)
+                if isinstance(snapshot, dict):
+                    cached_market_count += 1
+                    continue
+                missing_markets.append(market)
+            state = "covered"
+            if missing_markets and cached_market_count:
+                state = "partial"
+            elif missing_markets:
+                state = "missing"
+            items.append(
+                {
+                    "exchange": exchange,
+                    "target_market_count": len(markets),
+                    "cached_market_count": cached_market_count,
+                    "missing_markets": missing_markets,
+                    "state": state,
+                }
+            )
+        return items
+
+    def _cached_snapshot(self, *, exchange: str, market: str) -> dict[str, object] | None:
+        cached_reader = getattr(self.connector, "get_cached_orderbook_top", None)
+        if callable(cached_reader):
+            cached = cached_reader(exchange=exchange, market=market)
+            if isinstance(cached, dict):
+                return cached
+        if self.redis_runtime.info.enabled:
+            payload = self.redis_runtime.get_market_orderbook_top(exchange=exchange, market=market)
+            if isinstance(payload, dict):
+                return payload
+        return None
 
     def _record_snapshot(
         self, snapshot: dict[str, object], *, trace_id: str | None = None

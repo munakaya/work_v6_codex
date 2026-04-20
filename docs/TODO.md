@@ -51,10 +51,10 @@
 
 ### 3. Bithumb public WS adapter 추가 또는 미지원 결정 확정
 
-- [ ] Bithumb public WS orderbook 계약을 다시 확인한다.
+- [x] Bithumb public WS orderbook 계약을 다시 확인한다.
   endpoint, subscribe payload, timestamp 필드, reconnect 규칙을 코드 반영 전에 고정해야 한다.
 
-- [ ] Bithumb public WS adapter를 추가한다.
+- [x] Bithumb public WS adapter를 추가한다.
   `sim observer`와 이후 runtime collector 양쪽에서 동일 contract를 쓰도록 맞춘다.
 
 - [ ] 지원을 보류할 경우, 미지원 사유를 코드와 문서에 명시한다.
@@ -62,11 +62,11 @@
 
 ### 4. market data collector coverage 확장
 
-- [ ] 실행 중 arbitrage run에서 파생되는 `(exchange, market)` target을 collector 기본 수집군에 더 빠르게 반영한다.
+- [x] 실행 중 arbitrage run에서 파생되는 `(exchange, market)` target을 collector 기본 수집군에 더 빠르게 반영한다.
 
 - [ ] 다거래소/다심볼 조건에서 `MARKET_SNAPSHOT_NOT_FOUND`를 줄이기 위한 선제 수집 정책을 넣는다.
 
-- [ ] coverage 부족을 readiness 또는 runtime 진단값으로 노출한다.
+- [x] coverage 부족을 readiness 또는 runtime 진단값으로 노출한다.
   단순 miss가 아니라 “collector가 아직 안 보고 있음”을 구분해 보여줘야 한다.
 
 ### 5. 3거래소 동시 비교 candidate selection 반영

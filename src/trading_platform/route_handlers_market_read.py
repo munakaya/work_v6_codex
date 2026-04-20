@@ -68,12 +68,33 @@ class ControlPlaneMarketReadRouteMixin:
             market=market,
         )
         if payload is None:
+            target_state = self._market_snapshot_target_state(exchange=exchange, market=market)
+            if target_state == "pending":
+                return (
+                    HTTPStatus.NOT_FOUND,
+                    self._response(
+                        error={
+                            "code": "MARKET_SNAPSHOT_PENDING",
+                            "message": "collector is tracking the market but no cached snapshot is available yet",
+                        }
+                    ),
+                )
+            if target_state == "collector_disabled":
+                return (
+                    HTTPStatus.NOT_FOUND,
+                    self._response(
+                        error={
+                            "code": "MARKET_SNAPSHOT_COLLECTOR_DISABLED",
+                            "message": "collector target exists but market data runtime is disabled",
+                        }
+                    ),
+                )
             return (
                 HTTPStatus.NOT_FOUND,
                 self._response(
                     error={
-                        "code": "MARKET_SNAPSHOT_NOT_FOUND",
-                        "message": "cached market snapshot not found",
+                        "code": "MARKET_SNAPSHOT_NOT_TARGETED",
+                        "message": "collector is not tracking the requested market",
                     }
                 ),
             )
@@ -149,3 +170,17 @@ class ControlPlaneMarketReadRouteMixin:
         if snapshots is None:
             return []
         return snapshots
+
+    def _market_snapshot_target_state(self, *, exchange: str, market: str) -> str:
+        runtime = self.server.market_data_runtime.info
+        targeted = any(
+            str(item.get("exchange") or "").strip().lower() == exchange
+            and market in tuple(item.get("markets") or ())
+            for item in runtime.target_groups
+            if isinstance(item, dict)
+        )
+        if not targeted:
+            return "not_targeted"
+        if runtime.enabled:
+            return "pending"
+        return "collector_disabled"

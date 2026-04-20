@@ -123,7 +123,12 @@ class _ServerContext:
         self._thread.join(timeout=2)
 
 
-def _build_connector(*, upbit_ws_url: str, coinone_ws_url: str) -> PublicWebSocketMarketDataConnector:
+def _build_connector(
+    *,
+    upbit_ws_url: str,
+    bithumb_ws_url: str,
+    coinone_ws_url: str,
+) -> PublicWebSocketMarketDataConnector:
     return PublicWebSocketMarketDataConnector(
         timeout_ms=1000,
         stale_threshold_ms=3000,
@@ -135,6 +140,7 @@ def _build_connector(*, upbit_ws_url: str, coinone_ws_url: str) -> PublicWebSock
         bithumb_base_url="https://api.bithumb.com",
         coinone_base_url="https://api.coinone.co.kr",
         upbit_ws_url=upbit_ws_url,
+        bithumb_ws_url=bithumb_ws_url,
         coinone_ws_url=coinone_ws_url,
     )
 
@@ -162,7 +168,7 @@ def _case_upbit_snapshot() -> None:
         ]
 
     with _ServerContext(callback) as upbit_server:
-        connector = _build_connector(upbit_ws_url=upbit_server.url, coinone_ws_url="ws://127.0.0.1:9")
+        connector = _build_connector(upbit_ws_url=upbit_server.url, bithumb_ws_url="ws://127.0.0.1:9", coinone_ws_url="ws://127.0.0.1:9")
         snapshot = connector.get_orderbook_top(exchange="upbit", market="KRW-BTC")
     _assert(snapshot["exchange"] == "upbit", f"upbit exchange mismatch: {snapshot}")
     _assert(snapshot["best_bid"] == "100", f"upbit best bid mismatch: {snapshot}")
@@ -206,7 +212,7 @@ def _case_coinone_snapshot() -> None:
         ]
 
     with _ServerContext(callback) as coinone_server:
-        connector = _build_connector(upbit_ws_url="ws://127.0.0.1:9", coinone_ws_url=coinone_server.url)
+        connector = _build_connector(upbit_ws_url="ws://127.0.0.1:9", bithumb_ws_url="ws://127.0.0.1:9", coinone_ws_url=coinone_server.url)
         snapshot = connector.get_orderbook_top(exchange="coinone", market="KRW-BTC")
     _assert(snapshot["exchange"] == "coinone", f"coinone exchange mismatch: {snapshot}")
     _assert(snapshot["best_bid"] == "100", f"coinone best bid mismatch: {snapshot}")
@@ -222,10 +228,54 @@ def _case_coinone_snapshot() -> None:
     )
 
 
+def _case_bithumb_snapshot() -> None:
+    timestamp_us = int(datetime.now(UTC).timestamp() * 1_000_000)
+
+    def callback(payload: object) -> list[dict[str, object]]:
+        _assert(isinstance(payload, list), f"bithumb request must be list: {payload}")
+        type_fields = [item for item in payload if isinstance(item, dict) and item.get("type") == "orderbook"]
+        _assert(type_fields, f"bithumb type field missing: {payload}")
+        request = type_fields[0]
+        _assert(request.get("codes") == ["KRW-BTC"], f"bithumb market request mismatch: {payload}")
+        _assert(request.get("isOnlySnapshot") is True, f"bithumb snapshot flag mismatch: {payload}")
+        return [
+            {
+                "type": "orderbook",
+                "code": "KRW-BTC",
+                "timestamp": timestamp_us,
+                "stream_type": "REALTIME",
+                "orderbook_units": [
+                    {"ask_price": "101", "bid_price": "100", "ask_size": "1.5", "bid_size": "2.5"},
+                    {"ask_price": "102", "bid_price": "99", "ask_size": "1.0", "bid_size": "2.0"},
+                ],
+            }
+        ]
+
+    with _ServerContext(callback) as bithumb_server:
+        connector = _build_connector(
+            upbit_ws_url="ws://127.0.0.1:9",
+            bithumb_ws_url=bithumb_server.url,
+            coinone_ws_url="ws://127.0.0.1:9",
+        )
+        snapshot = connector.get_orderbook_top(exchange="bithumb", market="KRW-BTC")
+    _assert(snapshot["exchange"] == "bithumb", f"bithumb exchange mismatch: {snapshot}")
+    _assert(snapshot["best_bid"] == "100", f"bithumb best bid mismatch: {snapshot}")
+    _assert(snapshot["best_ask"] == "101", f"bithumb best ask mismatch: {snapshot}")
+    _assert(snapshot["source_type"] == "public_ws", f"bithumb source_type mismatch: {snapshot}")
+    _assert(
+        snapshot["freshness_observed_at_source"] == "exchange_timestamp",
+        f"bithumb freshness source mismatch: {snapshot}",
+    )
+
+
 def _case_unsupported_exchange() -> None:
-    connector = _build_connector(upbit_ws_url="ws://127.0.0.1:9", coinone_ws_url="ws://127.0.0.1:9")
+    connector = _build_connector(
+        upbit_ws_url="ws://127.0.0.1:9",
+        bithumb_ws_url="ws://127.0.0.1:9",
+        coinone_ws_url="ws://127.0.0.1:9",
+    )
     try:
-        connector.get_orderbook_top(exchange="bithumb", market="KRW-BTC")
+        connector.get_orderbook_top(exchange="sample", market="KRW-BTC")
     except MarketDataError as exc:
         _assert(exc.code == "EXCHANGE_NOT_SUPPORTED", f"unsupported exchange code mismatch: {exc}")
         return
@@ -234,9 +284,11 @@ def _case_unsupported_exchange() -> None:
 
 def main() -> None:
     _case_upbit_snapshot()
+    _case_bithumb_snapshot()
     _case_coinone_snapshot()
     _case_unsupported_exchange()
     print("PASS public websocket connector parses upbit orderbook snapshots")
+    print("PASS public websocket connector parses bithumb orderbook snapshots")
     print("PASS public websocket connector parses coinone orderbook snapshots")
     print("PASS public websocket connector emits exchange-aware freshness metadata")
     print("PASS public websocket connector rejects unsupported exchanges")

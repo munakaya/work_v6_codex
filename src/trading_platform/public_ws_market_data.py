@@ -19,12 +19,24 @@ def _iso_from_epoch_ms(value: object) -> str | None:
     if isinstance(value, bool) or value is None:
         return None
     try:
-        timestamp_ms = int(str(value))
+        raw_timestamp = int(str(value))
     except ValueError:
         return None
-    return datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC).isoformat().replace(
-        "+00:00", "Z"
-    )
+    magnitude = abs(raw_timestamp)
+    if magnitude >= 10_000_000_000_000_000:
+        timestamp_seconds = raw_timestamp / 1_000_000_000
+    elif magnitude >= 10_000_000_000_000:
+        timestamp_seconds = raw_timestamp / 1_000_000
+    elif magnitude >= 10_000_000_000:
+        timestamp_seconds = raw_timestamp / 1000
+    else:
+        timestamp_seconds = float(raw_timestamp)
+    try:
+        return datetime.fromtimestamp(timestamp_seconds, tz=UTC).isoformat().replace(
+            "+00:00", "Z"
+        )
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 class PublicWebSocketMarketDataConnector(PublicMarketDataConnector):
@@ -41,6 +53,7 @@ class PublicWebSocketMarketDataConnector(PublicMarketDataConnector):
         bithumb_base_url: str,
         coinone_base_url: str,
         upbit_ws_url: str = "wss://api.upbit.com/websocket/v1",
+        bithumb_ws_url: str = "wss://ws-api.bithumb.com/websocket/v1",
         coinone_ws_url: str = "wss://stream.coinone.co.kr",
     ) -> None:
         super().__init__(
@@ -55,17 +68,20 @@ class PublicWebSocketMarketDataConnector(PublicMarketDataConnector):
             coinone_base_url=coinone_base_url,
         )
         self.upbit_ws_url = upbit_ws_url
+        self.bithumb_ws_url = bithumb_ws_url
         self.coinone_ws_url = coinone_ws_url
 
     @property
     def supported_ws_exchanges(self) -> tuple[str, ...]:
-        return ("upbit", "coinone")
+        return ("upbit", "bithumb", "coinone")
 
     def get_orderbook_top(self, *, exchange: str, market: str) -> dict[str, object]:
         normalized_exchange = exchange.strip().lower()
         normalized_market = market.strip().upper()
         if normalized_exchange == "upbit":
             snapshot = self._get_upbit_orderbook_top_ws(normalized_market)
+        elif normalized_exchange == "bithumb":
+            snapshot = self._get_bithumb_orderbook_top_ws(normalized_market)
         elif normalized_exchange == "coinone":
             snapshot = self._get_coinone_orderbook_top_ws(normalized_market)
         else:
@@ -73,7 +89,7 @@ class PublicWebSocketMarketDataConnector(PublicMarketDataConnector):
                 status=self._unsupported_status(),
                 code="EXCHANGE_NOT_SUPPORTED",
                 message=(
-                    "public websocket sim supports only upbit and coinone; "
+                    "public websocket sim supports only upbit, bithumb, and coinone; "
                     f"got exchange={normalized_exchange or '(empty)'}"
                 ),
             )
@@ -123,6 +139,51 @@ class PublicWebSocketMarketDataConnector(PublicMarketDataConnector):
         )
         return self._build_snapshot(
             exchange="upbit",
+            market=str(payload.get("code") or market),
+            bids=bids,
+            asks=asks,
+            exchange_timestamp=_iso_from_epoch_ms(payload.get("timestamp")),
+            source_type="public_ws",
+        )
+
+    def _get_bithumb_orderbook_top_ws(self, market: str) -> dict[str, object]:
+        request_payload = [
+            {"ticket": f"tp-ws-{uuid4().hex[:12]}"},
+            {
+                "type": "orderbook",
+                "codes": [market],
+                "isOnlySnapshot": True,
+            },
+            {"format": "DEFAULT"},
+        ]
+        with _WebSocketJsonClient(self.bithumb_ws_url, timeout_seconds=self.timeout_seconds) as client:
+            client.send_json(request_payload)
+            payload = client.recv_json()
+        if not isinstance(payload, dict):
+            raise MarketDataError(
+                self._unsupported_status(),
+                "UPSTREAM_INVALID_RESPONSE",
+                "bithumb websocket response has invalid shape",
+            )
+        units = payload.get("orderbook_units")
+        if not isinstance(units, list) or not units or not isinstance(units[0], dict):
+            raise MarketDataError(
+                self._unsupported_status(),
+                "UPSTREAM_INVALID_RESPONSE",
+                "bithumb websocket response is missing orderbook_units",
+            )
+        asks = self._normalize_levels(
+            list(units[: self.orderbook_depth_levels]),
+            price_key="ask_price",
+            quantity_key="ask_size",
+        )
+        bids = self._normalize_levels(
+            list(units[: self.orderbook_depth_levels]),
+            price_key="bid_price",
+            quantity_key="bid_size",
+        )
+        return self._build_snapshot(
+            exchange="bithumb",
             market=str(payload.get("code") or market),
             bids=bids,
             asks=asks,

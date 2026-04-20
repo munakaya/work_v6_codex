@@ -61,7 +61,7 @@ class RecordingRestConnector:
 class RecordingWsConnector(RecordingRestConnector):
     @property
     def supported_ws_exchanges(self) -> tuple[str, ...]:
-        return ("upbit", "coinone")
+        return ("upbit", "bithumb", "coinone")
 
     def get_orderbook_top(self, *, exchange: str, market: str) -> dict[str, object]:
         self.calls.append((exchange, market))
@@ -79,15 +79,27 @@ class RecordingWsConnector(RecordingRestConnector):
 def main() -> None:
     rest_connector = RecordingRestConnector()
     ws_connector = RecordingWsConnector()
+    runtime_connector = RuntimeMarketDataConnector(
+        rest_connector=rest_connector,
+        ws_connector=ws_connector,
+    )
+    bithumb_policy = runtime_connector.source_policy(exchange="bithumb")
+    _assert(bithumb_policy.preferred_source == "public_ws", "bithumb policy mismatch")
+    bithumb_snapshot = runtime_connector.get_orderbook_top(exchange="bithumb", market="KRW-BTC")
+    _assert(
+        bithumb_snapshot["collector_preferred_source"] == "public_ws",
+        "bithumb collector preferred source mismatch",
+    )
+    _assert(
+        bithumb_snapshot["collector_fallback_used"] is False,
+        "bithumb should not use rest fallback",
+    )
     runtime = MarketDataRuntime(
         enabled=True,
         exchange="coinone",
         markets=("KRW-XRP",),
         interval_ms=1000,
-        connector=RuntimeMarketDataConnector(
-            rest_connector=rest_connector,
-            ws_connector=ws_connector,
-        ),
+        connector=runtime_connector,
         metrics=MetricsRegistry(),
         redis_runtime=RedisRuntime(None, "tp", "control-plane"),
         read_store=sample_read_store(),
@@ -114,6 +126,7 @@ def main() -> None:
     _assert(("coinone", "KRW-XRP") in ws_connector.calls, "coinone ws call missing")
     _assert(("coinone", "KRW-XRP") in rest_connector.calls, "coinone rest fallback call missing")
     _assert(("upbit", "KRW-BTC") in ws_connector.calls, "upbit ws call missing")
+    _assert(("bithumb", "KRW-BTC") in ws_connector.calls, "bithumb ws call missing")
     _assert(("sample", "KRW-BTC") in rest_connector.calls, "sample rest call missing")
 
     print("PASS market data runtime uses websocket first for supported exchanges")
