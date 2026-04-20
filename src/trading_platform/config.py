@@ -11,6 +11,7 @@ DEFAULT_BITHUMB_PUBLIC_REST_RATE_LIMIT_PER_SEC = 100.0
 DEFAULT_BITHUMB_PUBLIC_REST_BURST = 100
 DEFAULT_COINONE_PUBLIC_REST_RATE_LIMIT_PER_SEC = 10.0
 DEFAULT_COINONE_PUBLIC_REST_BURST = 10
+OPERATING_ENVS_REQUIRING_ADMIN_TOKEN = frozenset({"staging", "production"})
 
 
 def _env_int(name: str, default: int) -> int:
@@ -77,7 +78,9 @@ class AppConfig:
     market_data_poll_exchange: str
     market_data_poll_markets: tuple[str, ...]
     market_data_poll_interval_ms: int
+    app_env: str
     admin_token: str | None
+    write_api_require_admin_token: bool
     control_plane_write_rate_limit_window_ms: int
     control_plane_write_rate_limit_max_requests: int
     strategy_runtime_enabled: bool
@@ -104,9 +107,17 @@ class AppConfig:
         return bool(self.postgres_dsn and self.redis_url)
 
 
+def validate_config(config: AppConfig) -> None:
+    if config.write_api_require_admin_token and not config.admin_token:
+        raise ValueError(
+            f"APP_ENV={config.app_env} requires TP_ADMIN_TOKEN for write API fail-closed startup"
+        )
+
+
 def load_config() -> AppConfig:
     root_dir = Path(__file__).resolve().parents[2]
     alert_hook_raw = os.getenv("TP_ALERT_HOOK_PATH")
+    app_env = (os.getenv("APP_ENV", "local").strip().lower() or "local")
     return AppConfig(
         project_root=root_dir,
         service_name=os.getenv("TP_SERVICE_NAME", "control-plane"),
@@ -171,7 +182,12 @@ def load_config() -> AppConfig:
         market_data_poll_exchange=os.getenv("TP_MARKET_DATA_POLL_EXCHANGE", "upbit"),
         market_data_poll_markets=_env_csv("TP_MARKET_DATA_POLL_MARKETS"),
         market_data_poll_interval_ms=_env_int("TP_MARKET_DATA_POLL_INTERVAL_MS", 3000),
+        app_env=app_env,
         admin_token=os.getenv("TP_ADMIN_TOKEN"),
+        write_api_require_admin_token=(
+            app_env in OPERATING_ENVS_REQUIRING_ADMIN_TOKEN
+            or _env_bool("TP_WRITE_API_REQUIRE_ADMIN_TOKEN", False)
+        ),
         control_plane_write_rate_limit_window_ms=_env_int(
             "TP_CONTROL_PLANE_WRITE_RATE_LIMIT_WINDOW_MS", 0
         ),

@@ -16,8 +16,8 @@ info:
   description: >
     Automated trading platform control plane for bot registry,
     config management, strategy runs, order intents, orders, fills, and alerts.
-    When TP_ADMIN_TOKEN is configured, write endpoints require Bearer auth and
-    may return 401 or 429.
+    Write endpoints require Bearer auth when TP_ADMIN_TOKEN is configured, and
+    staging/production startup fails closed if TP_ADMIN_TOKEN is missing.
 
 servers:
   - url: https://api.example.com

@@ -216,7 +216,9 @@ PostgreSQL smoke는 `04_postgres_smoke_runbook.md`, 거래소 live smoke는 `04_
 - worker 또는 bot 부팅 시 `fetch-keys.sh`가 `/dev/shm/keys`를 다시 채운다는 전제를 운영 문서에 포함한다.
 - local trading key file JSON은 모든 거래소에서 `{"access_key": "...", "secret_key": "..."}`를 기본 형식으로 사용한다.
 - key file이 아직 없는 상태는 배포 전 또는 미등록 상태로 보고, worker는 이를 명시적으로 처리해야 한다.
-- write API 보호가 필요하면 `TP_ADMIN_TOKEN`을 설정하고, public read는 유지하되 write API만 bearer token으로 보호한다.
+- `APP_ENV=staging` 또는 `APP_ENV=production`에서는 `TP_ADMIN_TOKEN`이 필수다. 누락 시 control plane은 기동 자체를 거부한다.
+- local/dev에서만 `TP_ADMIN_TOKEN` 없이 write API 무토큰 기동을 허용한다. 이 경우에도 public read와 write 범위는 운영과 분리해 사용한다.
+- 운영 환경에서는 public read는 유지하되 write API만 bearer token으로 보호한다.
 - 필요 시 `TP_CONTROL_PLANE_WRITE_RATE_LIMIT_WINDOW_MS`, `TP_CONTROL_PLANE_WRITE_RATE_LIMIT_MAX_REQUESTS`로 per-IP write 요청 제한을 켠다.
 
 ### 25.5 초기 배포 순서

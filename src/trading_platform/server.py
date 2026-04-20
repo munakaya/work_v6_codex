@@ -8,7 +8,7 @@ from time import perf_counter
 from typing import Any
 from urllib.parse import urlparse
 
-from .config import AppConfig
+from .config import AppConfig, validate_config
 from .market_data_connector import PublicMarketDataConnector
 from .market_data_runtime import MarketDataRuntime
 from .observability import AlertHookNotifier, MetricsRegistry
@@ -308,6 +308,7 @@ class ControlPlaneRequestHandler(ControlPlaneRouteMixin, BaseHTTPRequestHandler)
 
 
 def build_server(config: AppConfig) -> ControlPlaneServer:
+    validate_config(config)
     LOGGER.debug("building control plane server with config: %s", asdict(config))
     bootstrap = build_read_store_bundle(config)
     metrics = MetricsRegistry()

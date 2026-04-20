@@ -1214,6 +1214,7 @@
 - 1단계: 내부망 + static admin token
 - 2단계: service-to-service token 또는 mTLS
 - 구현 기준:
-  - `TP_ADMIN_TOKEN`이 비어 있으면 local/dev에서는 write API 인증을 생략할 수 있음
+  - `APP_ENV=staging` 또는 `APP_ENV=production`에서는 `TP_ADMIN_TOKEN`이 필수이며, 없으면 서버가 기동되지 않음
+  - local/dev에서는 `TP_ADMIN_TOKEN`이 비어 있으면 write API 인증을 생략할 수 있음
   - `TP_ADMIN_TOKEN`이 설정되면 write API는 `Authorization: Bearer <token>`이 없거나 틀릴 때 `401`을 반환
   - 선택적으로 `TP_CONTROL_PLANE_WRITE_RATE_LIMIT_WINDOW_MS`, `TP_CONTROL_PLANE_WRITE_RATE_LIMIT_MAX_REQUESTS`로 write API per-IP 기본 제한을 켤 수 있음

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from .config import load_config
+from .config import load_config, validate_config
 from .logging_setup import configure_logging
 from .server import build_server
 
@@ -12,6 +12,7 @@ LOGGER = logging.getLogger(__name__)
 
 def main() -> None:
     config = load_config()
+    validate_config(config)
     log_path = configure_logging(config)
     server = build_server(config)
     server.market_data_runtime.start()

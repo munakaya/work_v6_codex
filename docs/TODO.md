@@ -18,9 +18,9 @@
   내부 RESP 기반 connection-pool 클라이언트로 치환해 `redis-cli` 없이도 Redis runtime이 동작하도록 바꿨다.
   명령 실패 시에는 무음 no-op 대신 `redis_runtime.state=degraded`로 내려가도록 정리했다.
 
-- [ ] 운영 환경에서 write API fail-closed 강제
-  bearer token / per-IP rate limit 자체는 이미 구현되어 있다.
-  남은 과제는 staging/production에서 `TP_ADMIN_TOKEN` 미설정 시 서버가 fail-open으로 뜨지 않도록 기동 정책과 문서를 함께 조정하는 것이다.
+- [x] 운영 환경에서 write API fail-closed 강제
+  `APP_ENV=staging|production`에서는 `TP_ADMIN_TOKEN` 미설정 시 서버가 기동 실패하도록 바꿨다.
+  local/dev에서만 write API 무토큰 기동을 허용하고, `ready.write_api_guard`에 요구 여부를 직접 노출한다.
 
 - [ ] 설계 진척도 문서 현실화
   `docs/08_progress_and_gaps.md`의 설계 진척률과 구현 준비도 표현이 현재 구현 공백보다 낙관적이다.

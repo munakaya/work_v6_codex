@@ -118,6 +118,48 @@ def _stop_server(process: subprocess.Popen[str]) -> None:
         process.wait(timeout=5)
 
 
+def _start_server_expect_failure(
+    env_overrides: dict[str, str],
+    *,
+    timeout_seconds: float = 5.0,
+) -> str:
+    port = _allocate_local_port()
+    env = os.environ.copy()
+    env.update(
+        {
+            "PYTHONPATH": str(ROOT_DIR / "src"),
+            "TP_PORT": str(port),
+            "TP_USE_SAMPLE_READ_MODEL": "true",
+            "TP_STRATEGY_RUNTIME_ENABLED": "false",
+            "TP_RECOVERY_RUNTIME_ENABLED": "false",
+        }
+    )
+    env.update(env_overrides)
+    process = subprocess.Popen(
+        [str(PYTHON_BIN), "-m", "trading_platform.main"],
+        cwd=str(ROOT_DIR),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    started = time.monotonic()
+    while time.monotonic() - started < timeout_seconds:
+        if process.poll() is not None:
+            output = process.stdout.read() if process.stdout is not None else ""
+            _assert(process.returncode not in {None, 0}, f"server should fail to start: {output}")
+            return output
+        time.sleep(0.1)
+    process.terminate()
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=2)
+    output = process.stdout.read() if process.stdout is not None else ""
+    raise AssertionError(f"server did not fail in time: {output}")
+
+
 def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
@@ -153,6 +195,11 @@ def _run_auth_case() -> None:
     try:
         ready_payload = _wait_ready(base_url)
         write_guard = ready_payload["data"]["write_api_guard"]
+        _assert(write_guard["app_env"] == "local", f"app_env mismatch: {ready_payload}")
+        _assert(
+            write_guard["admin_token_required"] is False,
+            f"local should not require token: {ready_payload}",
+        )
         _assert(write_guard["auth_enabled"] is True, f"auth guard not exposed: {ready_payload}")
         _assert(write_guard["rate_limit_enabled"] is True, f"rate limit not exposed: {ready_payload}")
 
@@ -202,6 +249,11 @@ def _run_rate_limit_case() -> None:
     try:
         ready_payload = _wait_ready(base_url)
         write_guard = ready_payload["data"]["write_api_guard"]
+        _assert(write_guard["app_env"] == "local", f"app_env mismatch: {ready_payload}")
+        _assert(
+            write_guard["admin_token_required"] is False,
+            f"local should not require token: {ready_payload}",
+        )
         _assert(
             write_guard["rate_limit_max_requests"] == 2,
             f"rate limit max_requests mismatch: {ready_payload}",
@@ -243,9 +295,21 @@ def _run_rate_limit_case() -> None:
         _stop_server(process)
 
 
+def _run_fail_closed_startup_case() -> None:
+    output = _start_server_expect_failure({
+        "APP_ENV": "staging",
+    })
+    _assert(
+        "APP_ENV=staging requires TP_ADMIN_TOKEN" in output,
+        f"startup failure message mismatch: {output}",
+    )
+    print("PASS staging startup fails closed without admin token")
+
+
 def main() -> None:
     _run_auth_case()
     _run_rate_limit_case()
+    _run_fail_closed_startup_case()
 
 
 if __name__ == "__main__":

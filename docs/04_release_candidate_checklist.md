@@ -15,7 +15,7 @@
 
 - `TP_USE_SAMPLE_READ_MODEL=false`
 - PostgreSQL/Redis 운영 값 확인
-- `TP_ADMIN_TOKEN` 적용 여부 확인
+- `APP_ENV=staging|production`이면 `TP_ADMIN_TOKEN` 필수 적용 확인
 - write API 기본 rate limit 값 확인
 - `/dev/shm/keys` 배치 방식과 fallback 정책 확인
 

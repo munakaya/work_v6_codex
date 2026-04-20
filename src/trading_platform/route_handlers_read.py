@@ -154,6 +154,8 @@ class ControlPlaneReadRouteMixin:
                 "recovery_runtime": self.server.recovery_runtime.info.as_dict(),
                 "read_store": self.server.store_bootstrap.as_dict(),
                 "write_api_guard": {
+                    "app_env": config.app_env,
+                    "admin_token_required": config.write_api_require_admin_token,
                     "auth_enabled": self.server.write_request_guard.config.auth_enabled,
                     "rate_limit_enabled": (
                         self.server.write_request_guard.config.rate_limit_enabled
