@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import logging
 import threading
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from .market_data_connector import PublicMarketDataConnector
@@ -27,6 +28,9 @@ from .strategy.arbitrage_evaluation_payload import build_arbitrage_evaluation_pa
 from .strategy.arbitrage_runtime_loader import load_arbitrage_runtime_payload
 from .strategy.execution_mode_metadata import describe_execution_mode
 from .strategy_runtime_execution import execute_persisted_arbitrage_intent
+
+if TYPE_CHECKING:
+    from .private_exchange_connector import PrivateExchangeConnectorProtocol
 
 
 LOGGER = logging.getLogger(__name__)
@@ -116,6 +120,7 @@ class StrategyRuntime:
         read_store: ControlPlaneStoreProtocol,
         connector: PublicMarketDataConnector,
         redis_runtime: RedisRuntime,
+        private_exchange_connectors: dict[str, PrivateExchangeConnectorProtocol] | None = None,
         private_execution_url: str | None = None,
         private_execution_timeout_ms: int = 3000,
         private_execution_token: str | None = None,
@@ -136,6 +141,7 @@ class StrategyRuntime:
         self.read_store = read_store
         self.connector = connector
         self.redis_runtime = redis_runtime
+        self.private_exchange_connectors = private_exchange_connectors or {}
         self.execution_adapter = execution_adapter or build_arbitrage_execution_adapter(
             self.execution_mode,
             private_execution_url=private_execution_url,
@@ -491,6 +497,7 @@ class StrategyRuntime:
             connector=self.connector,
             run=run,
             redis_runtime=self.redis_runtime,
+            private_exchange_connectors=self.private_exchange_connectors,
         )
         if load_result.payload is None:
             self._record_skip(load_result.skip_reason or "SKIPPED", load_result.detail)

@@ -94,6 +94,7 @@
 - M5. pair-level lock 추가 (완료, Redis runtime `pair_lock:{market}:{quote_pair_id}` + `PAIR_LOCK_ACTIVE`)
 - M6. shadow/live 비교 지표에 "미선택 후보와 선택 후보 차이" 추가
 - M7. API 계약과 runtime loader의 `base_exchange/hedge_exchange` 호환 전환안 정리
+  현재 상태: `live`에서는 private balance source를 강제하고, `shadow/dry_run`만 runtime config balance fallback을 허용.
 - M8. 전략 핫패스에서 direct REST 재조회 제거, `market-data collector -> snapshot cache -> strategy runtime` 단일 경로로 정리
   현재 상태: direct REST 재조회 제거와 실행 중 arbitrage run 기반 poll target 확장까지 반영. 남은 범위는 WS collector 우선 전환과 collector coverage 추가 보강.
 - M9. direct market read API와 strategy runtime이 같은 공인 IP rate budget을 잠식하지 않도록 cached read 우선 정책 정리

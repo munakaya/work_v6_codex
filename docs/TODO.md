@@ -91,12 +91,14 @@
 
 ### 7. 실제 거래소 잔고 기반 balance snapshot 연동
 
-- [ ] 전략 입력의 `base_balance`, `hedge_balance`를 거래소 `get_balances()` 기반 snapshot으로 바꾼다.
+- [x] 전략 입력의 `base_balance`, `hedge_balance`를 거래소 `get_balances()` 기반 snapshot으로 바꾼다.
+  `live` run은 candidate exchange별 private connector `get_balances()`를 강제하고, 전략 입력의 `balances_by_exchange`는 이 snapshot을 우선 사용한다.
 
-- [ ] 잔고 freshness 기준을 risk gate에 명시적으로 반영한다.
-  stale balance를 들고 주문 판단을 하지 않도록 해야 한다.
+- [x] 잔고 freshness 기준을 risk gate에 명시적으로 반영한다.
+  private balance snapshot은 fetch 시각 기준 `observed_at`/`is_fresh`를 채우고, 기존 `BALANCE_STALE` gate가 그대로 fail-closed 하도록 연결했다.
 
-- [ ] 수동 runtime/config 잔고 주입은 `simulation/shadow 전용`으로만 남기고 live 경로에서는 막는다.
+- [x] 수동 runtime/config 잔고 주입은 `simulation/shadow 전용`으로만 남기고 live 경로에서는 막는다.
+  `live`에서 `balance_source=runtime_config`는 즉시 reject하고, private balance refresh 실패도 `BALANCE_SNAPSHOT_UNAVAILABLE`로 fail-closed 한다.
 
 ### 8. private execution 최종 경로 정리
 
@@ -214,4 +216,4 @@
 - direct REST 재조회 제거와 cached snapshot 우선 로딩은 이미 반영됐다.
 - write API bearer token / rate limit guard도 이미 구현 및 실행 검증되어 있다.
 - 지금 가장 먼저 닫아야 할 공백은 `Coinone WS freshness`와 `WS-first collector`다.
-- 그 다음 축은 `Bithumb WS`, `실제 잔고 snapshot`, `private execution 최종 경로`, `정식 테스트 승격`, `live/shadow 편차 계측`이다.
+- 그 다음 축은 `Bithumb WS`, `private execution 최종 경로`, `정식 테스트 승격`, `live/shadow 편차 계측`, `private balance refresh 관측성 보강`이다.

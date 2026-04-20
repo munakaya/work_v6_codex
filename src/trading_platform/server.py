@@ -404,6 +404,7 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         read_store=bootstrap.store,
         connector=market_data_connector,
         redis_runtime=redis_runtime,
+        private_exchange_connectors=private_exchange_connectors,
     )
     recovery_runtime = RecoveryRuntime(
         enabled=config.recovery_runtime_enabled,

@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from ..market_data_connector import PublicMarketDataConnector
 from ..market_data_freshness import choose_freshness_observed_at, snapshot_sort_datetime
 from ..redis_runtime import RedisRuntime
 from ..storage.store_protocol import ControlPlaneStoreProtocol
+from .arbitrage_balance_sources import load_balance_snapshots
+
+if TYPE_CHECKING:
+    from ..private_exchange_connector import PrivateExchangeConnectorProtocol
 
 
 ACTIVE_INTENT_STATUSES = {'created', 'submitted'}
@@ -146,28 +151,6 @@ def _snapshot_orderbook(snapshot: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _balance_payload(
-    *,
-    exchange_name: str,
-    base_asset: str,
-    quote_asset: str,
-    payload: dict[str, object],
-) -> dict[str, object] | None:
-    available_base = payload.get('available_base')
-    available_quote = payload.get('available_quote')
-    if available_base is None or available_quote is None:
-        return None
-    return {
-        'exchange_name': exchange_name,
-        'base_asset': base_asset,
-        'quote_asset': quote_asset,
-        'available_base': str(available_base),
-        'available_quote': str(available_quote),
-        'observed_at': str(payload.get('observed_at') or _iso_now()),
-        'is_fresh': bool(payload.get('is_fresh', True)),
-    }
-
-
 def _runtime_defaults(
     *,
     store: ControlPlaneStoreProtocol,
@@ -226,53 +209,13 @@ def _candidate_exchanges(runtime_spec: dict[str, object]) -> list[str]:
     return exchanges
 
 
-def _exchange_balance_specs(
-    runtime_spec: dict[str, object],
-    *,
-    candidate_exchanges: list[str],
-) -> tuple[dict[str, dict[str, object]] | None, str | None]:
-    raw_exchange_balances = runtime_spec.get('exchange_balances')
-    if isinstance(raw_exchange_balances, dict):
-        normalized_input = {
-            _normalized_exchange(exchange): payload
-            for exchange, payload in raw_exchange_balances.items()
-        }
-        normalized: dict[str, dict[str, object]] = {}
-        missing = [
-            exchange
-            for exchange in candidate_exchanges
-            if not isinstance(normalized_input.get(exchange), dict)
-        ]
-        if missing:
-            return None, 'missing exchange_balances for: ' + ', '.join(missing)
-        for exchange in candidate_exchanges:
-            normalized[exchange] = dict(normalized_input[exchange])
-        return normalized, None
-
-    base_exchange = _normalized_exchange(runtime_spec.get('base_exchange'))
-    hedge_exchange = _normalized_exchange(runtime_spec.get('hedge_exchange'))
-    base_balance_spec = runtime_spec.get('base_balance')
-    hedge_balance_spec = runtime_spec.get('hedge_balance')
-    if not base_exchange or not hedge_exchange:
-        return None, 'base_exchange and hedge_exchange are required when exchange_balances is absent'
-    if not isinstance(base_balance_spec, dict) or not isinstance(hedge_balance_spec, dict):
-        return None, 'base_balance and hedge_balance must be objects'
-    normalized = {
-        base_exchange: dict(base_balance_spec),
-        hedge_exchange: dict(hedge_balance_spec),
-    }
-    missing = [exchange for exchange in candidate_exchanges if exchange not in normalized]
-    if missing:
-        return None, 'missing exchange-specific balances for: ' + ', '.join(missing)
-    return normalized, None
-
-
 def load_arbitrage_runtime_payload(
     *,
     store: ControlPlaneStoreProtocol,
     connector: PublicMarketDataConnector,
     run: dict[str, object],
     redis_runtime: RedisRuntime | None = None,
+    private_exchange_connectors: dict[str, PrivateExchangeConnectorProtocol] | None = None,
 ) -> ArbitrageRuntimeLoadResult:
     bot_id = str(run.get('bot_id') or '').strip()
     if not bot_id:
@@ -348,17 +291,6 @@ def load_arbitrage_runtime_payload(
             detail='runtime_state must be an object',
         )
 
-    balance_specs, balance_error = _exchange_balance_specs(
-        runtime_spec,
-        candidate_exchanges=candidate_exchanges,
-    )
-    if balance_specs is None:
-        return ArbitrageRuntimeLoadResult(
-            payload=None,
-            skip_reason='RUNTIME_INPUTS_INVALID',
-            detail=balance_error,
-        )
-
     snapshots_by_exchange: dict[str, dict[str, object]] = {}
     missing_exchanges: list[str] = []
     for exchange in candidate_exchanges:
@@ -383,21 +315,22 @@ def load_arbitrage_runtime_payload(
         exchange: _snapshot_orderbook(snapshot)
         for exchange, snapshot in snapshots_by_exchange.items()
     }
-    balances_by_exchange: dict[str, dict[str, object]] = {}
-    for exchange, balance_spec in balance_specs.items():
-        balance_payload = _balance_payload(
-            exchange_name=exchange,
-            base_asset=required['base_asset'],
-            quote_asset=required['quote_asset'],
-            payload=balance_spec,
+    balance_result = load_balance_snapshots(
+        runtime_spec=runtime_spec,
+        candidate_exchanges=candidate_exchanges,
+        base_asset=required['base_asset'],
+        quote_asset=required['quote_asset'],
+        run=run,
+        bot_detail=bot_detail,
+        private_exchange_connectors=private_exchange_connectors,
+    )
+    if balance_result.snapshots_by_exchange is None:
+        return ArbitrageRuntimeLoadResult(
+            payload=None,
+            skip_reason=balance_result.skip_reason,
+            detail=balance_result.detail,
         )
-        if balance_payload is None:
-            return ArbitrageRuntimeLoadResult(
-                payload=None,
-                skip_reason='RUNTIME_INPUTS_INVALID',
-                detail=f'balance payload must include available_base and available_quote: {exchange}',
-            )
-        balances_by_exchange[exchange] = balance_payload
+    balances_by_exchange = balance_result.snapshots_by_exchange
 
     primary_base_exchange = _normalized_exchange(runtime_spec.get('base_exchange')) or candidate_exchanges[0]
     primary_hedge_exchange = _normalized_exchange(runtime_spec.get('hedge_exchange')) or candidate_exchanges[1]
@@ -423,6 +356,11 @@ def load_arbitrage_runtime_payload(
                 bot_detail=bot_detail,
                 run=run,
                 runtime_payload=runtime_state_spec,
+            ),
+            'balance_sources_by_exchange': (
+                balance_result.source_by_exchange
+                if balance_result.source_by_exchange is not None
+                else {}
             ),
         }
     )

@@ -23,6 +23,7 @@
 - 거래소별 latest orderbook snapshot
   현재 구현은 `PublicMarketDataConnector` cache와 Redis `market.orderbook_top` cached snapshot을 우선 재사용하고, direct REST 재조회는 기본 경로에서 제거됐다.
 - 거래소별 balance snapshot
+  현재 구현은 `live` run이면 candidate exchange별 private connector `get_balances()`를 강제하고, `shadow/dry_run`은 `runtime_config` balance fallback을 유지한다.
 - risk/config snapshot
 - open order / unwind / reservation 상태
 

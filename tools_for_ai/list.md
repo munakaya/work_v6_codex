@@ -41,3 +41,4 @@
 - exchange_fixture_contract_cases.py: 거래소별 내부 contract fixture 자산이 필수 category를 모두 포함하는지 검증한다
 - arbitrage_multi_exchange_selection_cases.py: 3거래소 이상 후보를 양방향 평가해 최적 selected_pair를 고르고 accept/reject/accepted_unselected 후보를 decision_context에 남기는지 검증한다
 - pair_lock_runtime_cases.py: strategy runtime이 pair lock conflict를 `PAIR_LOCK_ACTIVE`로 막고 submit/recovery/closed lifecycle에 따라 락을 refresh 또는 release 하는지 검증한다
+- arbitrage_runtime_balance_cases.py: live run이 private connector `get_balances()`를 강제하고, shadow는 runtime_config balance fallback을 유지하며, live의 manual balance source는 fail-closed 되는지 검증한다
