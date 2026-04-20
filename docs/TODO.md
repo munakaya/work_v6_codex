@@ -117,6 +117,75 @@
 - [ ] 실호가 기반 VWAP/fee 대조 도구를 유지 보강한다.
   거래소별 실제 orderbook과 pricing 결과가 계속 맞는지 확인할 수 있어야 한다.
 
+- [ ] `pytest` 기본 골격을 먼저 추가한다.
+  `pyproject.toml` 또는 동등한 테스트 설정 파일, `tests/` 디렉토리, 공통 fixture/bootstrap, 기본 실행 명령을 먼저 고정해야 한다.
+
+- [ ] `tools_for_ai` 케이스를 "그대로 호출하는 래퍼"가 아니라 pytest 테스트로 재구성한다.
+  현재처럼 스크립트 단위 `SystemExit` 검증에 머무르지 말고, assertion/fixture/parametrize 구조로 옮겨 discoverability와 부분 실행성을 확보해야 한다.
+
+- [ ] 최소 CI 경로를 추가한다.
+  `market data`, `strategy runtime`, `private connector` 핵심 스모크가 push/PR마다 자동 실행되게 하고, 장시간/실거래 의존 케이스는 별도 job 또는 수동 workflow로 분리한다.
+
+- [ ] 테스트 실행 시 로그 노이즈를 줄이는 기본 정책을 정한다.
+  의도된 failure-path 검증 로그와 실제 회귀 로그를 구분할 수 있어야 하며, 기본 test run에서는 warning/error 로그가 과도하게 쏟아지지 않게 해야 한다.
+
+### 9A. 배포/패키징 최소 기준 추가
+
+- [ ] Python 의존성과 실행 진입점을 저장소 안에 명시한다.
+  현재는 `setup.sh`와 `.venv` 전제만 있고 패키지 매니페스트가 없다. `pyproject.toml` 또는 동등한 의존성 선언 파일을 추가해 새 머신 재현성을 확보해야 한다.
+
+- [ ] `setup.sh`/`run.sh`와 문서에 "처음부터 실행 가능한 경로"를 맞춘다.
+  venv 생성만 하고 수동 설치를 요구하는 현재 흐름은 새 세션/새 머신에서 재현성이 약하다. 설치, 테스트, 서버 기동의 표준 명령을 문서와 스크립트에서 하나로 고정해야 한다.
+
+- [ ] 최소 컨테이너/배포 아티팩트 필요성을 검토하고 결정한다.
+  바로 Docker까지 갈지, 우선 로컬/단일 서버 배포만 지원할지 기준을 정하고, 선택한 경로에 맞는 아티팩트를 저장소에 남겨야 한다.
+
+### 9B. freshness/source 기준 일반화
+
+- [ ] `exchange_timestamp` 우선 정책을 거래소별 patch가 아니라 일반 규칙으로 재설계한다.
+  현재는 Coinone WS만 `received_at` 예외를 두고 있다. `freshness_observed_at` 선택 기준을 "거래소 시계를 얼마나 신뢰할지" 관점에서 거래소/소스별 정책 테이블로 승격해야 한다.
+
+- [ ] freshness 정책에 skew guard를 추가한다.
+  `exchange_timestamp`가 `received_at`보다 과도하게 뒤처지거나 미래로 치우치면 자동으로 `received_at`로 강등하고, 그 사실을 메타데이터와 진단값에 남겨야 한다.
+
+- [ ] freshness 회귀 케이스를 거래소 공통 포맷으로 늘린다.
+  Coinone만이 아니라 Upbit/Bithumb/REST/WS 각각에 대해 `timestamp missing`, `timestamp lag`, `future timestamp`, `received_at only` 케이스를 고정해야 한다.
+
+### 9C. 대형 모듈 분해
+
+- [ ] `recovery_runtime.py`를 책임 단위로 분해한다.
+  trace 조회, handoff 판정, replay/reconciliation, runtime thread 제어를 한 파일에 두지 말고 모듈로 분리해야 한다.
+
+- [ ] `private_exchange_connector.py`를 거래소/동작 단위로 쪼갠다.
+  최소한 `upbit/bithumb/coinone` 별 API contract와 공통 HTTP/error normalization 계층을 분리해, 한 거래소 수정이 전체 파일 review로 번지지 않게 해야 한다.
+
+- [ ] `arbitrage_private_execution_adapter.py`를 상태 해석기와 transport 계층으로 분리한다.
+  외부 응답 파싱, fill/order normalization, fail-closed 분류, HTTP 호출을 분리하지 않으면 execution path 내재화 작업이 계속 어려워진다.
+
+### 9D. store bootstrap / fallback 정책 재점검
+
+- [ ] Postgres 미연결 시 `memory_empty`로 조용히 떨어지는 현재 동작을 재검토한다.
+  개발 편의성은 있지만, 운영 환경에서 "서버는 떴는데 데이터는 비어 있는" 상태를 만들기 쉽다. 최소한 staging/production에서는 fail-closed 또는 강한 경고로 바꿔야 한다.
+
+- [ ] store bootstrap 결과를 readiness와 운영 로그에서 더 강하게 드러낸다.
+  지금도 bootstrap info는 있지만, `memory_empty`가 실제 운영에서 허용되는 상태인지 즉시 판단할 수 있도록 health/ready/boot log 계약을 더 명확히 해야 한다.
+
+### 9E. control plane 기반 재점검
+
+- [ ] `ThreadingHTTPServer` 기반 control plane 유지 여부를 재평가한다.
+  현재 구조가 충분한지, 아니면 request lifecycle, shutdown, concurrency 제어가 더 나은 표준 프레임워크로 옮겨야 하는지 기준과 비용을 문서화해야 한다.
+
+- [ ] 현재 HTTP 서버 구조에서 공유 상태 경쟁 범위를 명시한다.
+  market data, strategy, recovery runtime과 route handler가 어떤 락/불변 조건에 기대고 있는지 정리하지 않으면 이후 기능 추가 때 race를 다시 만들기 쉽다.
+
+### 9F. pricing/reservation 일관성 검증
+
+- [ ] `arbitrage_pricing.py`와 `arbitrage_reservation.py` 사이 버퍼 차감 일관성을 검증한다.
+  unwind/rebalance/slippage buffer가 sizing 단계와 reservation 단계에서 이중 차감되는지 확인하고, 실제 reject 케이스를 회귀 테스트로 고정해야 한다.
+
+- [ ] Decimal hot path 성능을 실측한다.
+  현재 철학은 정확도 우선이지만, top-N depth pricing과 다거래소 selection 경로에서 허용 가능한 latency인지 벤치마크와 운영 로그 기준으로 확인해야 한다.
+
 ### 10. 운영 지표와 backlog 요약 추가
 
 - [ ] live/shadow/sim 편차 지표를 추가한다.
