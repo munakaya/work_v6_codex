@@ -12,6 +12,134 @@ from .request_utils import (
 
 
 class ControlPlaneWriteRouteMixin:
+    def _collector_targets_for_config(
+        self, config_json: object
+    ) -> tuple[tuple[str, str], ...]:
+        if not isinstance(config_json, dict):
+            return ()
+        runtime_spec = config_json.get("arbitrage_runtime")
+        if not isinstance(runtime_spec, dict):
+            return ()
+        if runtime_spec.get("enabled") is False:
+            return ()
+        market = str(runtime_spec.get("market") or "").strip().upper()
+        if not market:
+            return ()
+        targets: set[tuple[str, str]] = set()
+        for exchange_key in ("base_exchange", "hedge_exchange"):
+            exchange = str(runtime_spec.get(exchange_key) or "").strip().lower()
+            if exchange:
+                targets.add((exchange, market))
+        return tuple(sorted(targets))
+
+    def _config_version_payload(
+        self, *, config_scope: str, version_no: int
+    ) -> dict[str, object] | None:
+        for item in self.server.read_store.list_config_versions(config_scope):
+            if int(item.get("version_no") or -1) == version_no:
+                return item
+        return None
+
+    def _assigned_config_payload(self, *, bot_id: str) -> dict[str, object] | None:
+        bot_detail = self.server.read_store.get_bot_detail(bot_id)
+        if not isinstance(bot_detail, dict):
+            return None
+        assigned = bot_detail.get("assigned_config_version")
+        if not isinstance(assigned, dict):
+            return None
+        config_scope = str(assigned.get("config_scope") or "").strip()
+        version_raw = assigned.get("version_no")
+        if not config_scope or version_raw is None:
+            return None
+        try:
+            version_no = int(version_raw)
+        except (TypeError, ValueError):
+            return None
+        return self._config_version_payload(config_scope=config_scope, version_no=version_no)
+
+    def _bot_has_running_arbitrage_run(self, *, bot_id: str) -> bool:
+        runs = self.server.read_store.list_strategy_runs(bot_id=bot_id, status="running")
+        return any(
+            str(item.get("strategy_name") or "").strip().lower() == "arbitrage"
+            for item in runs
+            if isinstance(item, dict)
+        )
+
+    def _prewarm_market_data_targets(
+        self, *, targets: tuple[tuple[str, str], ...]
+    ) -> dict[str, object]:
+        runtime = getattr(self.server, "market_data_runtime", None)
+        refresher = getattr(runtime, "refresh", None)
+        if not callable(refresher):
+            return {
+                "status": "unavailable",
+                "reason": "market_data_runtime.refresh is unavailable",
+                "requested_target_count": len(targets),
+                "success_count": 0,
+                "failure_count": 0,
+                "items": [],
+            }
+        grouped: dict[str, set[str]] = {}
+        for exchange, market in targets:
+            grouped.setdefault(exchange, set()).add(market)
+        if not grouped:
+            return {
+                "status": "skipped",
+                "reason": "no_targets",
+                "requested_target_count": 0,
+                "success_count": 0,
+                "failure_count": 0,
+                "items": [],
+            }
+        items: list[dict[str, object]] = []
+        success_count = 0
+        failure_count = 0
+        for exchange, markets in sorted(grouped.items()):
+            snapshots, errors = refresher(exchange=exchange, markets=tuple(sorted(markets)))
+            for snapshot in snapshots:
+                success_count += 1
+                items.append(
+                    {
+                        "exchange": snapshot.get("exchange"),
+                        "market": snapshot.get("market"),
+                        "status": "fetched",
+                        "source_type": snapshot.get("source_type"),
+                        "collector_fallback_used": bool(
+                            snapshot.get("collector_fallback_used", False)
+                        ),
+                    }
+                )
+            for error in errors:
+                failure_count += 1
+                items.append(
+                    {
+                        "exchange": exchange,
+                        "market": error.get("market"),
+                        "status": "failed",
+                        "code": error.get("code"),
+                        "message": error.get("message"),
+                    }
+                )
+        status = "completed"
+        if failure_count and success_count:
+            status = "partial"
+        elif failure_count:
+            status = "failed"
+        return {
+            "status": status,
+            "requested_target_count": sum(len(markets) for markets in grouped.values()),
+            "success_count": success_count,
+            "failure_count": failure_count,
+            "items": items,
+        }
+
+    def _prewarm_market_data_for_config(
+        self, *, config_json: object
+    ) -> dict[str, object]:
+        return self._prewarm_market_data_targets(
+            targets=self._collector_targets_for_config(config_json)
+        )
+
     def _ensure_mutation_supported(self) -> tuple[HTTPStatus, dict[str, object]] | None:
         if self.server.read_store.supports_mutation:
             return None
@@ -374,7 +502,17 @@ class ControlPlaneWriteRouteMixin:
             )
         self.server.metrics.observe_alert_emitted("info")
         self._sync_bot_state(bot_id)
-        return HTTPStatus.ACCEPTED, self._response(data=result)
+        response_data = dict(result)
+        if self._bot_has_running_arbitrage_run(bot_id=bot_id):
+            config_payload = self._config_version_payload(
+                config_scope=config_scope,
+                version_no=version_no,
+            )
+            if isinstance(config_payload, dict):
+                response_data["collector_prewarm"] = self._prewarm_market_data_for_config(
+                    config_json=config_payload.get("config_json")
+                )
+        return HTTPStatus.ACCEPTED, self._response(data=response_data)
 
     def _acknowledge_config_response(
         self, path: str
@@ -500,7 +638,13 @@ class ControlPlaneWriteRouteMixin:
                 ),
             )
         self._sync_strategy_run_state(run)
-        return HTTPStatus.ACCEPTED, self._response(data=run)
+        response_data = dict(run)
+        config_payload = self._assigned_config_payload(bot_id=str(run.get("bot_id") or ""))
+        if isinstance(config_payload, dict):
+            response_data["collector_prewarm"] = self._prewarm_market_data_for_config(
+                config_json=config_payload.get("config_json")
+            )
+        return HTTPStatus.ACCEPTED, self._response(data=response_data)
 
     def _stop_strategy_run_response(
         self, run_id: str

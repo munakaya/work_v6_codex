@@ -64,7 +64,7 @@
 
 - [x] 실행 중 arbitrage run에서 파생되는 `(exchange, market)` target을 collector 기본 수집군에 더 빠르게 반영한다.
 
-- [ ] 다거래소/다심볼 조건에서 `MARKET_SNAPSHOT_NOT_FOUND`를 줄이기 위한 선제 수집 정책을 넣는다.
+- [x] 다거래소/다심볼 조건에서 `MARKET_SNAPSHOT_NOT_FOUND`를 줄이기 위한 선제 수집 정책을 넣는다.
 
 - [x] coverage 부족을 readiness 또는 runtime 진단값으로 노출한다.
   단순 miss가 아니라 “collector가 아직 안 보고 있음”을 구분해 보여줘야 한다.
