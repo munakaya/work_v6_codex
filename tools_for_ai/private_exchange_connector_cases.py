@@ -6,6 +6,7 @@ import tempfile
 
 from trading_platform.config import load_config
 from trading_platform.private_exchange_connector import (
+    RestPrivateExchangeConnector,
     build_private_exchange_connector,
     build_private_exchange_connectors,
 )
@@ -49,17 +50,18 @@ def main() -> None:
 
             upbit = build_private_exchange_connector("upbit", config=config)
             _assert(upbit.info.ready is True, "upbit connector should be ready")
+            _assert(upbit.info.state == "ready_rest", "upbit connector state mismatch")
             _assert(
-                upbit.info.state == "ready_not_implemented",
-                "upbit placeholder state mismatch",
-            )
-            _assert(
-                upbit.get_balances().outcome == "not_implemented",
-                "upbit placeholder result mismatch",
+                isinstance(upbit, RestPrivateExchangeConnector),
+                "upbit connector should be REST-backed",
             )
 
             bithumb = build_private_exchange_connector("bithumb", config=config)
             _assert(bithumb.info.ready is True, "bithumb connector should be ready")
+            _assert(
+                bithumb.info.state == "ready_rest",
+                "bithumb connector state mismatch",
+            )
             _assert(
                 "bithumb.json" in str(bithumb.info.credential_source_path),
                 "bithumb fallback path mismatch",
@@ -68,10 +70,14 @@ def main() -> None:
             coinone = build_private_exchange_connector("coinone", config=config)
             _assert(coinone.info.ready is False, "coinone connector should be unavailable")
             _assert(coinone.get_balances().outcome == "unavailable", "coinone outcome mismatch")
+            _assert(
+                coinone.get_balances().error_code == "AUTH_CONFIG_MISSING",
+                "coinone unavailable error_code mismatch",
+            )
 
             bundle = build_private_exchange_connectors(config=config)
             _assert(set(bundle) == {"upbit", "bithumb", "coinone"}, "bundle keys mismatch")
-            print("PASS private exchange connector placeholder readiness")
+            print("PASS private exchange connector readiness")
         finally:
             if previous_primary is None:
                 os.environ.pop("TP_EXCHANGE_KEY_PRIMARY_DIR", None)

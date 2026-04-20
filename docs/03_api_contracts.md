@@ -1028,7 +1028,7 @@
 목적:
 
 - 직접 거래소 실행용 private connector 준비 상태를 한 번에 확인
-- 거래소별 키 파일 로드 상태와 placeholder/unavailable 상태를 운영 화면에서 조회
+- 거래소별 키 파일 로드 상태와 `ready_rest`/`unavailable` 상태를 운영 화면에서 조회
 
 쿼리:
 

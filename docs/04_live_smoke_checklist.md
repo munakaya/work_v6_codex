@@ -1,7 +1,7 @@
 # Exchange Live Smoke Checklist
 
 이 문서는 private 거래소 연동을 실제로 붙이기 직전과 직후에 확인할 최소 smoke 절차를 적는다.
-현재 저장소는 private connector가 아직 placeholder 단계이므로, 이 문서는 구현 전 승인 기준과 구현 후 실행 순서를 고정하는 용도다.
+현재 저장소는 private connector의 최소 REST 계약이 구현된 상태이므로, 이 문서는 실계정 smoke 전 승인 기준과 구현 후 실행 순서를 고정하는 용도다.
 
 
 ## 공통 전제

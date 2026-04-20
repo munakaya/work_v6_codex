@@ -99,14 +99,9 @@ def main() -> None:
             _assert(data["ready_count"] == 2, "private connector ready count mismatch")
             _assert(data["overall_state"] == "partial", "private connector overall mismatch")
             items = {item["exchange"]: item for item in data["items"]}
-            _assert(
-                items["upbit"]["state"] == "ready_not_implemented",
-                "upbit runtime state mismatch",
-            )
-            _assert(
-                items["coinone"]["state"] == "not_found",
-                "coinone runtime state mismatch",
-            )
+            _assert(items["upbit"]["state"] == "ready_rest", "upbit runtime state mismatch")
+            _assert(items["bithumb"]["state"] == "ready_rest", "bithumb runtime state mismatch")
+            _assert(items["coinone"]["state"] == "not_found", "coinone runtime state mismatch")
             status, payload = _read_json(
                 f"http://127.0.0.1:{port}/api/v1/runtime/private-connectors?exchange=upbit"
             )

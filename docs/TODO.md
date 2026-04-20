@@ -6,9 +6,9 @@
 
 ## 최우선
 
-- [ ] 실거래 private connector 구현
-  현재 `private_exchange_connector.py`는 키 상태를 읽어 `ready_not_implemented` placeholder만 만든다.
-  Upbit/Bithumb/Coinone의 private balance, place order, order status, open orders를 실제 API로 연결해야 한다.
+- [x] 실거래 private REST connector 최소 계약 구현
+  Upbit/Bithumb/Coinone의 private balance, place order, order status, open orders를 실제 API로 연결했다.
+  남은 과제는 실계정 smoke, cancel flow, execution path 편입처럼 실운영 경로를 닫는 작업이다.
 
 - [ ] `private_http` 의존을 임시 경로로 명확히 격하
   지금 execution mode는 `simulate_*`, `private_http`, `private_stub` 중심이다.
