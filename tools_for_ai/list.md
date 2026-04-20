@@ -19,6 +19,7 @@
 - control_plane_write_guard_cases.py: write API bearer token 보호, per-IP 기본 rate limit, staging fail-closed startup이 실제 서버 기준으로 동작하는지 검증한다
 - exchange_auth_cases.py: Upbit/Bithumb/Coinone auth helper가 query_hash, JWT, payload/signature를 결정적으로 생성하는지 검증한다
 - market_data_runtime_target_cases.py: market_data_runtime가 고정 poll 대상과 실행 중 arbitrage run에서 파생된 거래소/심볼 target을 함께 수집하는지 검증한다
+- public_ws_market_data_cases.py: public websocket 기반 orderbook connector가 upbit/coinone snapshot을 파싱하고 unsupported exchange를 거부하는지 검증한다
 - private_exchange_ws_runtime_cases.py: runtime API가 거래소별 private websocket auth-ready 상태와 기본 제한 정보를 노출하는지 검증한다
 - arbitrage_runtime_cache_cases.py: strategy runtime loader가 direct REST 대신 cached orderbook snapshot만 읽고, cache miss 시 fail-closed로 빠지는지 검증한다
 - arbitrage_replay_runner.py: 저장된 재정거래 입력 payload를 다시 평가해 accepted/reason_code 요약과 mismatch를 출력한다
@@ -31,6 +32,6 @@
 - arbitrage_replay_csv_cases.py: replay CSV export/import가 roundtrip 되는지 검증한다
 - observer_request_stats_cases.py: public REST observer용 요청 통계가 거래소별 성공/실패 비율, latency p50/p95/p99, slow outlier 개수를 올바르게 집계하는지 검증한다
 - coinone_depth_gap_probe.py: Coinone 저유동성 알트의 best ask와 deeper ask를 분리 기록해 best-ask spike인지 깊은 ask 공백인지 재현 검증한다
-- arbitrage_sim_observer.py: 실제 공개 오더북 상위 depth를 읽어 executable VWAP 기준으로 sim 평가를 수행하고, 거래소별 fetch 주기(upbit=3초 등)를 따로 주며 REST sim에서는 stale을 hard gate, skew는 기본 진단값으로만 집계하고 요청 통계/JSONL/로그를 남긴다
+- arbitrage_sim_observer.py: 실제 공개 오더북 상위 depth를 읽어 executable VWAP 기준으로 sim 평가를 수행하고, REST 또는 public websocket 소스를 선택해 거래소별 fetch 주기(upbit=3초 등)를 따로 주며 stale/skew 진단과 요청 통계/JSONL/로그를 남긴다
 - arbitrage_simulation_cases.py: sim observer용 거래소 쌍 정규화, cadence tolerance scheduler, pair timing gate 보정, skew diagnostic-only 모드, actionable/positive-profit/reservation blocked/zero-profit 진단, 양방향 재정거래 평가, reason_code breakdown 포함 누적 집계를 검증한다
 - exchange_fixture_contract_cases.py: 거래소별 내부 contract fixture 자산이 필수 category를 모두 포함하는지 검증한다

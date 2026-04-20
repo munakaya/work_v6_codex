@@ -21,6 +21,7 @@ if str(SRC_DIR) not in sys.path:
 from trading_platform.config import load_config
 from trading_platform.logging_setup import configure_logging
 from trading_platform.market_data_connector import MarketDataError, PublicMarketDataConnector
+from trading_platform.public_ws_market_data import PublicWebSocketMarketDataConnector
 from trading_platform.observer_request_stats import RequestStatsTracker
 from trading_platform.rate_limit import ExponentialBackoffPolicy, RateLimitPolicy
 from trading_platform.strategy.arbitrage_simulation import (
@@ -39,9 +40,12 @@ from trading_platform.strategy.arbitrage_simulation import (
 LOGGER = logging.getLogger(__name__)
 
 
-def _build_connector() -> PublicMarketDataConnector:
+def _build_connector(*, data_source: str) -> PublicMarketDataConnector:
     config = load_config()
-    return PublicMarketDataConnector(
+    connector_class = (
+        PublicWebSocketMarketDataConnector if data_source == "ws" else PublicMarketDataConnector
+    )
+    return connector_class(
         timeout_ms=config.market_data_timeout_ms,
         stale_threshold_ms=config.market_data_stale_threshold_ms,
         orderbook_depth_levels=config.market_data_orderbook_depth_levels,
@@ -88,6 +92,7 @@ def _parse_args() -> argparse.Namespace:
         help="Exchange pairs in buy/sell comparison groups. Each pair is evaluated in both directions.",
     )
     parser.add_argument("--interval-seconds", type=float, default=1.0)
+    parser.add_argument("--data-source", choices=("rest", "ws"), default="rest")
     parser.add_argument("--iterations", type=int, default=0)
     parser.add_argument("--duration-seconds", type=int, default=0)
     parser.add_argument("--summary-every", type=int, default=10)
@@ -192,6 +197,7 @@ def _collect_tick_summary(
     clock_skew_gate_enforced: bool,
 ) -> dict[str, object]:
     summary = tracker.snapshot()
+    summary["data_source"] = request_stats.data_source
     summary["configured_exchange_intervals"] = {
         exchange: interval for exchange, interval in sorted(exchange_intervals.items())
     }
@@ -231,7 +237,7 @@ def main() -> None:
     )
     risk = _risk_settings(args)
     balances = _balance_settings(args)
-    connector = _build_connector()
+    connector = _build_connector(data_source=args.data_source)
     tracker = SimulationStatsTracker()
     scheduler = ExchangeFetchScheduler(exchange_intervals)
     latest_snapshots: dict[str, dict[str, object]] = {}
@@ -240,6 +246,7 @@ def main() -> None:
     fetch_error_by_code: Counter[str] = Counter()
     pair_skip_by_reason: Counter[str] = Counter()
     request_stats = RequestStatsTracker()
+    request_stats.data_source = args.data_source
     interval_gate_alignment_enabled = not args.disable_interval_gate_alignment
     pair_timing_gates = {
         f"{first_exchange}:{second_exchange}": derive_pair_timing_gates(
@@ -254,10 +261,23 @@ def main() -> None:
     }
     output_path = _snapshot_path()
 
+    if args.data_source == "ws":
+        unsupported = sorted(
+            exchange
+            for exchange in exchanges
+            if exchange not in getattr(connector, "supported_ws_exchanges", ())
+        )
+        if unsupported:
+            raise SystemExit(
+                "ws data source currently supports only upbit/coinone; unsupported exchanges: "
+                + ", ".join(unsupported)
+            )
+
     LOGGER.info(
-        "starting arbitrage sim observer market=%s pairs=%s interval_seconds=%s exchange_intervals=%s skew_gate_enforced=%s output=%s log=%s",
+        "starting arbitrage sim observer market=%s pairs=%s data_source=%s interval_seconds=%s exchange_intervals=%s skew_gate_enforced=%s output=%s log=%s",
         args.market,
         ",".join(f"{left}:{right}" for left, right in pairs),
+        args.data_source,
         interval_seconds,
         exchange_intervals,
         args.enforce_clock_skew_gate,

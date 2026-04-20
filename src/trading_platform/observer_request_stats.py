@@ -107,6 +107,7 @@ class ExchangeRequestStats:
 
 @dataclass
 class RequestStatsTracker:
+    data_source: str = "unknown"
     by_exchange: dict[str, ExchangeRequestStats] = field(default_factory=dict)
 
     def _get(self, exchange: str) -> ExchangeRequestStats:
