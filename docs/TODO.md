@@ -80,13 +80,14 @@
 
 ### 6. pair-level trade lock 추가
 
-- [ ] `(market, selected_pair)` 기준의 명시적 락을 도입한다.
-  active intent, open order count만으로는 중복 진입 방지가 약하다.
+- [x] `(market, selected_pair)` 기준의 명시적 락을 도입한다.
+  Redis runtime에 `pair_lock:{market}:{quote_pair_id}`를 두고, accept된 `selected_pair`가 intent persist 직전에 충돌하면 `PAIR_LOCK_ACTIVE`로 fail-closed 한다.
 
-- [ ] recovery trace, open order, duplicate intent와 pair lock의 우선순위를 정리한다.
-  락 때문에 recovery가 막히거나 recovery 때문에 락이 무의미해지지 않게 해야 한다.
+- [x] recovery trace, open order, duplicate intent와 pair lock의 우선순위를 정리한다.
+  recovery trace / open order / duplicate intent가 먼저 새 평가를 막고, pair lock은 그 이후 `selected_pair` 중복 진입만 보조적으로 막는다.
 
-- [ ] 락 획득 실패/해제 실패를 운영 로그와 메트릭으로 남긴다.
+- [x] 락 획득 실패/해제 실패를 운영 로그와 메트릭으로 남긴다.
+  acquire/refresh/release/conflict를 Redis strategy event와 warning 로그로 남기고, submit/recovery/closed lifecycle에 맞춰 락을 refresh 또는 release 한다.
 
 ### 7. 실제 거래소 잔고 기반 balance snapshot 연동
 
@@ -213,4 +214,4 @@
 - direct REST 재조회 제거와 cached snapshot 우선 로딩은 이미 반영됐다.
 - write API bearer token / rate limit guard도 이미 구현 및 실행 검증되어 있다.
 - 지금 가장 먼저 닫아야 할 공백은 `Coinone WS freshness`와 `WS-first collector`다.
-- 그 다음 축은 `Bithumb WS`, `pair-level lock`, `실제 잔고 snapshot`, `private execution 최종 경로`, `정식 테스트 승격`이다.
+- 그 다음 축은 `Bithumb WS`, `실제 잔고 snapshot`, `private execution 최종 경로`, `정식 테스트 승격`, `live/shadow 편차 계측`이다.

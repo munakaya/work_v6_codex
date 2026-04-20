@@ -21,7 +21,7 @@
 - `canonical_symbol`
 - `candidate_exchanges[]`
 - 거래소별 latest orderbook snapshot
-  현재 구현은 이 snapshot을 런타임 시점에 직접 REST 조회로 만들고, 목표 구조는 collector/cache 재사용으로 옮기는 것이다.
+  현재 구현은 `PublicMarketDataConnector` cache와 Redis `market.orderbook_top` cached snapshot을 우선 재사용하고, direct REST 재조회는 기본 경로에서 제거됐다.
 - 거래소별 balance snapshot
 - risk/config snapshot
 - open order / unwind / reservation 상태
@@ -37,9 +37,9 @@
 
 ## 모델 변경 메모
 
-- 현재 구현은 `base_exchange + hedge_exchange` 2거래소 쌍 입력을 전제로 한다.
-- 목표 구조는 `candidate_exchanges[]`를 입력으로 받아, 런타임 안에서 모든 유효 조합을 평가한 뒤 1개의 `selected_pair`를 고르는 방식이다.
-- 즉시 API 계약을 전면 변경하지 않더라도, 내부 설계 기준은 "다거래소 후보 평가 -> 최적 pair 선택 -> 기존 2-leg execution 진입"으로 맞춘다.
+- 현재 구현은 `candidate_exchanges[]`를 입력으로 받아, 런타임 안에서 모든 유효 조합을 평가한 뒤 1개의 `selected_pair`를 고른다.
+- 하위 호환을 위해 `base_exchange + hedge_exchange` 2거래소 입력도 계속 받지만, 내부 설계 기준은 이미 "다거래소 후보 평가 -> 최적 pair 선택 -> 기존 2-leg execution 진입"으로 맞춰졌다.
+- pair-level lock도 `(market, selected_pair)` 기준 Redis runtime key로 추가돼, intent persist 직전 마지막 중복 진입 방어를 담당한다.
 - execution 자체는 여전히 `buy leg 1개 + sell leg 1개`의 2-leg 주문으로 유지한다.
 
 ## 현재 구현 기준 핫패스 메모

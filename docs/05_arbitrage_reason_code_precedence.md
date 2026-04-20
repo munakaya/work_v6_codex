@@ -61,13 +61,22 @@
 - depth 반영 후 음수면 `EXECUTABLE_PROFIT_NEGATIVE_AFTER_DEPTH`
 - 음수는 아니지만 기준 미만이면 `PROFIT_TOO_LOW`
 
-### 5. reservation 실패
+### 5. pair lock 충돌
+
+- `PAIR_LOCK_ACTIVE`
+
+원칙:
+
+- recovery trace, open order, duplicate intent가 먼저 진입을 막는 경로라면 pair lock 단계까지 오지 않는다.
+- pair lock은 `selected_pair`가 accept된 뒤 intent persist 직전에 마지막으로 중복 진입을 막는 대표 code다.
+
+### 6. reservation 실패
 
 - `RESERVATION_FAILED`
 
 원칙:
 
-- 이 단계까지 왔다는 뜻은 gate와 risk와 profit은 모두 통과했다는 뜻이다.
+- 이 단계까지 왔다는 뜻은 gate와 risk와 profit은 모두 통과했고, pair lock도 비어 있었다는 뜻이다.
 - 따라서 reservation 실패는 더 앞선 reject code로 덮지 않는다.
 
 

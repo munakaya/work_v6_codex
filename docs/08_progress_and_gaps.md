@@ -13,7 +13,7 @@
 - 구현 준비도: 현재 코드가 local, staging, live 직전 기준으로 얼마나 닫혀 있는가
 
 현재 저장소는 설계 완성도는 높은 편이지만, 실거래 준비도는 아직 중간 이하 구간이다.
-특히 private execution 최종 경로, public WS-first collector, pair-level lock, 실제 잔고 스냅샷, 정식 테스트 스위트가 아직 남아 있다.
+특히 private execution 최종 경로, public WS-first collector, 실제 잔고 스냅샷, 정식 테스트 스위트, live/shadow 편차 계측이 아직 남아 있다.
 
 
 ## 31. 설계 문서 기준 진행 상태
@@ -86,7 +86,7 @@
 - `private_http`는 아직 임시 외부 delegate 경로
 - public WS-first collector 미완료
 - collector coverage 확장 미완료
-- pair-level trade lock 부재
+- pair-level trade lock 운영 검증/지표 보강 필요
 - 실제 거래소 잔고 기반 balance snapshot 미완료
 - 정식 `pytest/tests/CI` 체계 부재
 - malformed `private_http` 응답의 서버 레벨 회귀 확대 필요
@@ -106,7 +106,7 @@
 
 - local에서 기능을 붙이고 회귀를 돌리는 기반은 꽤 올라와 있다.
 - staging과 shadow는 가능하지만, 운영 편차와 실행 경로 안전장치가 아직 부족하다.
-- live readiness는 private connector 존재만으로 높게 볼 수 없고, execution path, collector, lock, balance, CI가 닫혀야 한다.
+- live readiness는 private connector 존재만으로 높게 볼 수 없고, execution path, collector, balance, CI, 운영 편차 계측이 닫혀야 한다.
 
 
 ## 48. 지금 가장 중요한 잔여 리스크
@@ -123,8 +123,8 @@
 
 ### 48.3 동시성/중복 진입 리스크
 
-- active intent와 recovery trace는 있으나 `(market, selected_pair)` 기준 명시적 pair-level lock은 아직 없다.
-- 다거래소 candidate selection이 아직 2거래소 고정 평가에 머물러 있다.
+- `(market, selected_pair)` 기준 pair-level lock과 `PAIR_LOCK_ACTIVE` fail-closed 경로는 들어갔다.
+- 다거래소 candidate selection도 `selected_pair`/미선택 후보 기록까지 포함해 일반화됐다. 남은 공백은 편차 계측과 운영 지표 보강이다.
 
 ### 48.4 운영 검증 리스크
 
@@ -144,7 +144,7 @@
 다음 우선순위는 문서 확장보다 아래 작업들이다.
 
 1. public WS-first collector 전환
-2. pair-level trade lock 추가
-3. 실제 잔고 snapshot 연동
-4. `tools_for_ai` 핵심 케이스의 정식 테스트 승격
-5. private execution 최종 경로 정리
+2. 실제 잔고 snapshot 연동
+3. `tools_for_ai` 핵심 케이스의 정식 테스트 승격
+4. private execution 최종 경로 정리
+5. live/shadow/sim 편차 계측 추가

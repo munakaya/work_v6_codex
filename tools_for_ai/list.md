@@ -40,3 +40,4 @@
 - arbitrage_simulation_cases.py: sim observer용 거래소 쌍 정규화, cadence tolerance scheduler, pair timing gate 보정, skew diagnostic-only 모드, actionable/positive-profit/reservation blocked/zero-profit 진단, 양방향 재정거래 평가, reason_code breakdown 포함 누적 집계를 검증한다
 - exchange_fixture_contract_cases.py: 거래소별 내부 contract fixture 자산이 필수 category를 모두 포함하는지 검증한다
 - arbitrage_multi_exchange_selection_cases.py: 3거래소 이상 후보를 양방향 평가해 최적 selected_pair를 고르고 accept/reject/accepted_unselected 후보를 decision_context에 남기는지 검증한다
+- pair_lock_runtime_cases.py: strategy runtime이 pair lock conflict를 `PAIR_LOCK_ACTIVE`로 막고 submit/recovery/closed lifecycle에 따라 락을 refresh 또는 release 하는지 검증한다

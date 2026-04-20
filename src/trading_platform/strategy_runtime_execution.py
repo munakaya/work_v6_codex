@@ -2,12 +2,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import logging
 from uuid import uuid4
 
 from .redis_runtime import RedisRuntime
 from .storage.store_protocol import ControlPlaneStoreProtocol
 from .strategy import ArbitrageExecutionAdapterProtocol
+from .strategy.arbitrage_execution import ArbitrageSubmitResult
 from .strategy.arbitrage_models import ArbitrageDecision
+from .strategy.arbitrage_pair_lock import (
+    build_pair_lock_payload,
+    pair_lock_acquired_at,
+    pair_lock_identity_from_context,
+    pair_lock_owner_id,
+    should_hold_pair_lock,
+)
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -32,6 +44,104 @@ def _submit_failure_message(submit_result: ArbitrageSubmitResult) -> str:
 
 TERMINAL_ORDER_STATUSES = {"filled", "cancelled", "rejected", "expired", "failed"}
 TERMINAL_INTENT_STATUSES = {"filled", "closed", "simulated"}
+
+
+def _pair_lock_payload(
+    *,
+    decision_context: dict[str, object] | None,
+    bot_id: str,
+    run_id: str,
+    lifecycle_state: str,
+    intent_id: str | None = None,
+    recovery_trace_id: str | None = None,
+) -> tuple[str, str, dict[str, object]] | None:
+    identity = pair_lock_identity_from_context(decision_context)
+    if identity is None:
+        return None
+    market = str(identity.get("market") or "").strip()
+    quote_pair_id = str(identity.get("quote_pair_id") or "").strip()
+    if not market or not quote_pair_id:
+        return None
+    selected_pair = identity.get("selected_pair")
+    return (
+        market,
+        quote_pair_id,
+        build_pair_lock_payload(
+            bot_id=bot_id,
+            strategy_run_id=run_id,
+            owner_id=pair_lock_owner_id(bot_id=bot_id, strategy_run_id=run_id),
+            market=market,
+            quote_pair_id=quote_pair_id,
+            lifecycle_state=lifecycle_state,
+            selected_pair=selected_pair if isinstance(selected_pair, dict) else None,
+            acquired_at=pair_lock_acquired_at(decision_context) or _iso_now(),
+            intent_id=intent_id,
+            recovery_trace_id=recovery_trace_id,
+        ),
+    )
+
+
+def _sync_pair_lock(
+    *,
+    redis_runtime: RedisRuntime,
+    decision_context: dict[str, object] | None,
+    bot_id: str,
+    run_id: str,
+    trace_id: str,
+    lifecycle_state: str,
+    intent_id: str | None = None,
+    recovery_trace_id: str | None = None,
+) -> None:
+    if not redis_runtime.info.enabled:
+        return
+    pair_lock_payload = _pair_lock_payload(
+        decision_context=decision_context,
+        bot_id=bot_id,
+        run_id=run_id,
+        lifecycle_state=lifecycle_state,
+        intent_id=intent_id,
+        recovery_trace_id=recovery_trace_id,
+    )
+    if pair_lock_payload is None:
+        return
+    market, quote_pair_id, payload = pair_lock_payload
+    hold_lock = should_hold_pair_lock(
+        {
+            "market": market,
+            "decision_context": decision_context or {},
+            "lifecycle_preview": lifecycle_state,
+        }
+    )
+    if hold_lock:
+        outcome, _ = redis_runtime.acquire_pair_lock(
+            market=market,
+            quote_pair_id=quote_pair_id,
+            payload=payload,
+            trace_id=trace_id,
+        )
+        if outcome in {"conflict", "failed"}:
+            LOGGER.warning(
+                "pair lock execution refresh failed: run_id=%s market=%s quote_pair_id=%s outcome=%s",
+                run_id,
+                market,
+                quote_pair_id,
+                outcome,
+            )
+        return
+    outcome, _ = redis_runtime.release_pair_lock(
+        market=market,
+        quote_pair_id=quote_pair_id,
+        owner_id=str(payload.get("owner_id") or ""),
+        trace_id=trace_id,
+    )
+    if outcome in {"conflict", "failed"}:
+        LOGGER.warning(
+            "pair lock execution release failed: run_id=%s market=%s quote_pair_id=%s outcome=%s",
+            run_id,
+            market,
+            quote_pair_id,
+            outcome,
+        )
 
 
 def _maybe_close_after_terminal_fill(
@@ -129,6 +239,19 @@ def execute_persisted_arbitrage_intent(
         trace_id=trace_id,
         publish_event=True,
     )
+    _sync_pair_lock(
+        redis_runtime=redis_runtime,
+        decision_context=(
+            payload.get("decision_context")
+            if isinstance(payload.get("decision_context"), dict)
+            else None
+        ),
+        bot_id=bot_id,
+        run_id=run_id,
+        trace_id=trace_id,
+        lifecycle_state=str(payload.get("lifecycle_preview") or ""),
+        intent_id=str(intent.get("intent_id") or "") or None,
+    )
 
     if submit_result.outcome in {"submitted", "filled"}:
         if submit_result.outcome == "filled" and payload.get("lifecycle_preview") == "closed":
@@ -198,11 +321,27 @@ def execute_persisted_arbitrage_intent(
     )
     latest_trace = redis_runtime.get_recovery_trace(recovery_trace_id=recovery_trace_id)
     if latest_trace is not None:
-        redis_runtime.sync_arbitrage_evaluation_recovery_state(
+        synced_payload = redis_runtime.sync_arbitrage_evaluation_recovery_state(
             run_id=run_id,
             recovery_trace=latest_trace,
             trace_id=trace_id,
         )
+        if synced_payload is not None:
+            payload = synced_payload
+    _sync_pair_lock(
+        redis_runtime=redis_runtime,
+        decision_context=(
+            payload.get("decision_context")
+            if isinstance(payload.get("decision_context"), dict)
+            else None
+        ),
+        bot_id=bot_id,
+        run_id=run_id,
+        trace_id=trace_id,
+        lifecycle_state=str(payload.get("lifecycle_preview") or submit_result.lifecycle_preview),
+        intent_id=str(intent.get("intent_id") or "") or None,
+        recovery_trace_id=recovery_trace_id,
+    )
     redis_runtime.publish_alert_event(
         event_type="alert.created",
         payload={

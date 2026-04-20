@@ -52,6 +52,7 @@ class RedisRuntimeInfo:
 class RedisRuntime:
     BOT_STATE_TTL_SECONDS = 120
     MARKET_ORDERBOOK_TTL_SECONDS = 15
+    PAIR_LOCK_TTL_SECONDS = 180
     EVENT_VERSION = 1
 
     def __init__(self, redis_url: str | None, key_prefix: str, service_name: str) -> None:
@@ -456,6 +457,227 @@ class RedisRuntime:
         self, *, exchange: str, market: str
     ) -> dict[str, Any] | None:
         return self.get_json(["market", "orderbook_top", exchange, market])
+
+    def get_pair_lock(self, *, market: str, quote_pair_id: str) -> dict[str, Any] | None:
+        return self.get_json(["pair_lock", market, quote_pair_id])
+
+    def list_pair_locks(
+        self,
+        *,
+        market: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]] | None:
+        key_prefix = self._key("pair_lock") + ":"
+        keys = self._scan_keys(self._key("pair_lock", "*"))
+        if keys is None:
+            return None
+        normalized_market = (market or "").strip()
+        locks: list[dict[str, Any]] = []
+        for key in keys:
+            if not key.startswith(key_prefix):
+                continue
+            payload = self._get_json_by_full_key(key)
+            if payload is None:
+                continue
+            if normalized_market and str(payload.get("market") or "").strip() != normalized_market:
+                continue
+            locks.append(payload)
+        locks.sort(
+            key=lambda item: _parse_iso_datetime(item.get("updated_at"))
+            or _parse_iso_datetime(item.get("acquired_at"))
+            or datetime.fromtimestamp(0, UTC),
+            reverse=True,
+        )
+        return locks[: max(1, min(limit, 100))]
+
+    def acquire_pair_lock(
+        self,
+        *,
+        market: str,
+        quote_pair_id: str,
+        payload: dict[str, Any],
+        trace_id: str | None = None,
+        ttl_seconds: int | None = None,
+    ) -> tuple[str, dict[str, Any] | None]:
+        client = self._client
+        if client is None:
+            return "disabled", None
+        key = self._key("pair_lock", market, quote_pair_id)
+        effective_ttl = max(1, int(ttl_seconds or self.PAIR_LOCK_TTL_SECONDS))
+        now_iso = _iso_now()
+        payload_to_store = {
+            **payload,
+            "market": market,
+            "quote_pair_id": quote_pair_id,
+            "updated_at": now_iso,
+            "ttl_seconds": effective_ttl,
+        }
+        owner_id = str(payload_to_store.get("owner_id") or "").strip()
+        strategy_run_id = str(payload_to_store.get("strategy_run_id") or "").strip()
+        bot_id = str(payload_to_store.get("bot_id") or "").strip()
+        if not payload_to_store.get("acquired_at"):
+            payload_to_store["acquired_at"] = now_iso
+        existing = self.get_pair_lock(market=market, quote_pair_id=quote_pair_id)
+        if isinstance(existing, dict):
+            same_owner = owner_id and str(existing.get("owner_id") or "").strip() == owner_id
+            same_run = strategy_run_id and bot_id and (
+                str(existing.get("strategy_run_id") or "").strip() == strategy_run_id
+                and str(existing.get("bot_id") or "").strip() == bot_id
+            )
+            if same_owner or same_run:
+                if self.set_json(["pair_lock", market, quote_pair_id], payload_to_store, ttl_seconds=effective_ttl):
+                    self.append_event(
+                        "strategy_events",
+                        event_type="strategy.pair_lock.refreshed",
+                        payload={
+                            "market": market,
+                            "quote_pair_id": quote_pair_id,
+                            "strategy_run_id": strategy_run_id,
+                            "bot_id": bot_id,
+                            "lifecycle_state": payload_to_store.get("lifecycle_state"),
+                        },
+                        trace_id=trace_id,
+                    )
+                    return "refreshed", payload_to_store
+                return "failed", existing
+            self.append_event(
+                "strategy_events",
+                event_type="strategy.pair_lock.conflict",
+                payload={
+                    "market": market,
+                    "quote_pair_id": quote_pair_id,
+                    "requested_strategy_run_id": strategy_run_id,
+                    "requested_bot_id": bot_id,
+                    "existing_strategy_run_id": existing.get("strategy_run_id"),
+                    "existing_bot_id": existing.get("bot_id"),
+                },
+                trace_id=trace_id,
+            )
+            LOGGER.warning(
+                "pair lock conflict: market=%s quote_pair_id=%s requested_run=%s existing_run=%s",
+                market,
+                quote_pair_id,
+                strategy_run_id,
+                existing.get("strategy_run_id"),
+                extra={"event_name": "strategy_pair_lock_conflict"},
+            )
+            return "conflict", existing
+        try:
+            result = client.execute(
+                "SET",
+                key,
+                json.dumps(payload_to_store, separators=(",", ":"), ensure_ascii=True),
+                "NX",
+                "EX",
+                str(effective_ttl),
+            )
+        except RedisClientError as exc:
+            self._record_failure(str(exc))
+            return "failed", None
+        self._clear_failure()
+        if result == "OK":
+            self.append_event(
+                "strategy_events",
+                event_type="strategy.pair_lock.acquired",
+                payload={
+                    "market": market,
+                    "quote_pair_id": quote_pair_id,
+                    "strategy_run_id": strategy_run_id,
+                    "bot_id": bot_id,
+                    "lifecycle_state": payload_to_store.get("lifecycle_state"),
+                },
+                trace_id=trace_id,
+            )
+            return "acquired", payload_to_store
+        existing = self.get_pair_lock(market=market, quote_pair_id=quote_pair_id)
+        return "conflict", existing
+
+    def release_pair_lock(
+        self,
+        *,
+        market: str,
+        quote_pair_id: str,
+        strategy_run_id: str | None = None,
+        bot_id: str | None = None,
+        owner_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> tuple[str, dict[str, Any] | None]:
+        client = self._client
+        if client is None:
+            return "disabled", None
+        key = self._key("pair_lock", market, quote_pair_id)
+        existing = self.get_pair_lock(market=market, quote_pair_id=quote_pair_id)
+        if existing is None:
+            return "missing", None
+        owner_matches = owner_id and str(existing.get("owner_id") or "").strip() == owner_id
+        run_matches = strategy_run_id and bot_id and (
+            str(existing.get("strategy_run_id") or "").strip() == str(strategy_run_id).strip()
+            and str(existing.get("bot_id") or "").strip() == str(bot_id).strip()
+        )
+        if owner_id is not None or (strategy_run_id is not None and bot_id is not None):
+            if not owner_matches and not run_matches:
+                self.append_event(
+                    "strategy_events",
+                    event_type="strategy.pair_lock.release_failed",
+                    payload={
+                        "market": market,
+                        "quote_pair_id": quote_pair_id,
+                        "requested_strategy_run_id": strategy_run_id,
+                        "requested_bot_id": bot_id,
+                        "existing_strategy_run_id": existing.get("strategy_run_id"),
+                        "existing_bot_id": existing.get("bot_id"),
+                        "reason": "owner_mismatch",
+                    },
+                    trace_id=trace_id,
+                )
+                LOGGER.warning(
+                    "pair lock release failed(owner mismatch): market=%s quote_pair_id=%s requested_run=%s existing_run=%s",
+                    market,
+                    quote_pair_id,
+                    strategy_run_id,
+                    existing.get("strategy_run_id"),
+                    extra={"event_name": "strategy_pair_lock_release_failed"},
+                )
+                return "conflict", existing
+        try:
+            deleted = client.execute("DEL", key)
+        except RedisClientError as exc:
+            self._record_failure(str(exc))
+            return "failed", existing
+        self._clear_failure()
+        if int(deleted or 0) == 1:
+            self.append_event(
+                "strategy_events",
+                event_type="strategy.pair_lock.released",
+                payload={
+                    "market": market,
+                    "quote_pair_id": quote_pair_id,
+                    "strategy_run_id": existing.get("strategy_run_id"),
+                    "bot_id": existing.get("bot_id"),
+                },
+                trace_id=trace_id,
+            )
+            return "released", existing
+        self.append_event(
+            "strategy_events",
+            event_type="strategy.pair_lock.release_failed",
+            payload={
+                "market": market,
+                "quote_pair_id": quote_pair_id,
+                "strategy_run_id": existing.get("strategy_run_id"),
+                "bot_id": existing.get("bot_id"),
+                "reason": "delete_missed",
+            },
+            trace_id=trace_id,
+        )
+        LOGGER.warning(
+            "pair lock release failed(delete missed): market=%s quote_pair_id=%s run=%s",
+            market,
+            quote_pair_id,
+            existing.get("strategy_run_id"),
+            extra={"event_name": "strategy_pair_lock_release_failed"},
+        )
+        return "failed", existing
 
     def get_arbitrage_evaluation(self, *, run_id: str) -> dict[str, Any] | None:
         return self.get_json(["strategy_run", run_id, "latest_evaluation"])

@@ -10,10 +10,18 @@ from .market_data_connector import PublicMarketDataConnector
 from .redis_runtime import RedisRuntime
 from .storage.store_protocol import ControlPlaneStoreProtocol
 from .strategy import (
+    attach_pair_lock_context,
     build_arbitrage_execution_adapter,
+    build_pair_lock_blocked_decision,
+    build_pair_lock_payload,
     evaluate_arbitrage_candidate_set,
     load_candidate_strategy_inputs,
+    pair_lock_acquired_at,
+    pair_lock_identity_from_context,
+    pair_lock_identity_from_payload,
+    pair_lock_owner_id,
     persist_order_intent_plan,
+    should_hold_pair_lock,
 )
 from .strategy.arbitrage_evaluation_payload import build_arbitrage_evaluation_payload
 from .strategy.arbitrage_runtime_loader import load_arbitrage_runtime_payload
@@ -226,6 +234,218 @@ class StrategyRuntime:
             with self._lock:
                 self._running = False
 
+    def _pair_lock_payload(
+        self,
+        *,
+        decision_context: dict[str, object],
+        bot_id: str,
+        run_id: str,
+        lifecycle_state: str,
+        intent_id: str | None = None,
+        recovery_trace_id: str | None = None,
+    ) -> tuple[str, str, dict[str, object]] | None:
+        identity = pair_lock_identity_from_context(decision_context)
+        if identity is None:
+            return None
+        market = str(identity.get('market') or '').strip()
+        quote_pair_id = str(identity.get('quote_pair_id') or '').strip()
+        if not market or not quote_pair_id:
+            return None
+        selected_pair = identity.get('selected_pair')
+        return (
+            market,
+            quote_pair_id,
+            build_pair_lock_payload(
+                bot_id=bot_id,
+                strategy_run_id=run_id,
+                owner_id=pair_lock_owner_id(bot_id=bot_id, strategy_run_id=run_id),
+                market=market,
+                quote_pair_id=quote_pair_id,
+                lifecycle_state=lifecycle_state,
+                selected_pair=selected_pair if isinstance(selected_pair, dict) else None,
+                acquired_at=pair_lock_acquired_at(decision_context) or _iso_now(),
+                intent_id=intent_id,
+                recovery_trace_id=recovery_trace_id,
+            ),
+        )
+
+    def _reconcile_pair_lock(self, *, run_id: str, bot_id: str, trace_id: str) -> None:
+        if not self.redis_runtime.info.enabled:
+            return
+        latest_payload = self.redis_runtime.get_arbitrage_evaluation(run_id=run_id)
+        if latest_payload is None:
+            return
+        identity = pair_lock_identity_from_payload(latest_payload)
+        if identity is None:
+            return
+        market = str(identity.get('market') or '').strip()
+        quote_pair_id = str(identity.get('quote_pair_id') or '').strip()
+        if not market or not quote_pair_id:
+            return
+        owner_id = pair_lock_owner_id(bot_id=bot_id, strategy_run_id=run_id)
+        if should_hold_pair_lock(latest_payload):
+            pair_lock_payload = self._pair_lock_payload(
+                decision_context=dict(latest_payload.get('decision_context') or {}),
+                bot_id=bot_id,
+                run_id=run_id,
+                lifecycle_state=str(latest_payload.get('lifecycle_preview') or ''),
+                intent_id=(
+                    str(dict(latest_payload.get('persisted_intent') or {}).get('intent_id') or '')
+                    or None
+                ),
+                recovery_trace_id=(
+                    str(latest_payload.get('recovery_trace_id') or '') or None
+                ),
+            )
+            if pair_lock_payload is None:
+                return
+            acquire_outcome, _ = self.redis_runtime.acquire_pair_lock(
+                market=pair_lock_payload[0],
+                quote_pair_id=pair_lock_payload[1],
+                payload=pair_lock_payload[2],
+                trace_id=trace_id,
+            )
+            if acquire_outcome == 'conflict':
+                LOGGER.warning(
+                    'pair lock refresh conflict: run_id=%s market=%s quote_pair_id=%s',
+                    run_id,
+                    market,
+                    quote_pair_id,
+                )
+            elif acquire_outcome == 'failed':
+                LOGGER.warning(
+                    'pair lock refresh failed: run_id=%s market=%s quote_pair_id=%s',
+                    run_id,
+                    market,
+                    quote_pair_id,
+                )
+            return
+        release_outcome, _ = self.redis_runtime.release_pair_lock(
+            market=market,
+            quote_pair_id=quote_pair_id,
+            owner_id=owner_id,
+            trace_id=trace_id,
+        )
+        if release_outcome in {'conflict', 'failed'}:
+            LOGGER.warning(
+                'pair lock release reconcile failed: run_id=%s market=%s quote_pair_id=%s outcome=%s',
+                run_id,
+                market,
+                quote_pair_id,
+                release_outcome,
+            )
+
+    def _acquire_pair_lock_for_decision(
+        self,
+        *,
+        decision,
+        run_id: str,
+        bot_id: str,
+        trace_id: str,
+    ):
+        pair_lock_payload = self._pair_lock_payload(
+            decision_context=decision.decision_context,
+            bot_id=bot_id,
+            run_id=run_id,
+            lifecycle_state='decision_accepted',
+        )
+        if pair_lock_payload is None or not self.redis_runtime.info.enabled:
+            return decision, None
+        acquire_outcome, existing_lock = self.redis_runtime.acquire_pair_lock(
+            market=pair_lock_payload[0],
+            quote_pair_id=pair_lock_payload[1],
+            payload=pair_lock_payload[2],
+            trace_id=trace_id,
+        )
+        if acquire_outcome in {'acquired', 'refreshed'}:
+            return attach_pair_lock_context(
+                decision=decision,
+                pair_lock_payload=pair_lock_payload[2],
+                state='acquired',
+            ), pair_lock_payload
+        if acquire_outcome in {'conflict', 'failed'}:
+            if acquire_outcome == 'failed':
+                LOGGER.warning(
+                    'pair lock acquire failed: run_id=%s market=%s quote_pair_id=%s',
+                    run_id,
+                    pair_lock_payload[0],
+                    pair_lock_payload[1],
+                )
+            return build_pair_lock_blocked_decision(
+                decision=decision,
+                existing_lock=existing_lock
+                if isinstance(existing_lock, dict)
+                else {
+                    'market': pair_lock_payload[0],
+                    'quote_pair_id': pair_lock_payload[1],
+                    'state': 'acquire_failed',
+                },
+            ), None
+        return decision, None
+
+    def _refresh_pair_lock_after_persist(
+        self,
+        *,
+        decision,
+        run_id: str,
+        bot_id: str,
+        trace_id: str,
+        intent_id: str,
+    ) -> None:
+        pair_lock_payload = self._pair_lock_payload(
+            decision_context=decision.decision_context,
+            bot_id=bot_id,
+            run_id=run_id,
+            lifecycle_state='intent_created',
+            intent_id=intent_id,
+        )
+        if pair_lock_payload is None or not self.redis_runtime.info.enabled:
+            return
+        refresh_outcome, _ = self.redis_runtime.acquire_pair_lock(
+            market=pair_lock_payload[0],
+            quote_pair_id=pair_lock_payload[1],
+            payload=pair_lock_payload[2],
+            trace_id=trace_id,
+        )
+        if refresh_outcome == 'failed':
+            LOGGER.warning(
+                'pair lock refresh after persist failed: run_id=%s market=%s quote_pair_id=%s',
+                run_id,
+                pair_lock_payload[0],
+                pair_lock_payload[1],
+            )
+
+    def _release_pair_lock_for_decision(
+        self,
+        *,
+        decision_context: dict[str, object],
+        run_id: str,
+        bot_id: str,
+        trace_id: str,
+    ) -> None:
+        pair_lock_payload = self._pair_lock_payload(
+            decision_context=decision_context,
+            bot_id=bot_id,
+            run_id=run_id,
+            lifecycle_state='closed',
+        )
+        if pair_lock_payload is None or not self.redis_runtime.info.enabled:
+            return
+        release_outcome, _ = self.redis_runtime.release_pair_lock(
+            market=pair_lock_payload[0],
+            quote_pair_id=pair_lock_payload[1],
+            owner_id=pair_lock_payload[2]['owner_id'],
+            trace_id=trace_id,
+        )
+        if release_outcome in {'conflict', 'failed'}:
+            LOGGER.warning(
+                'pair lock release after persist failure failed: run_id=%s market=%s quote_pair_id=%s outcome=%s',
+                run_id,
+                pair_lock_payload[0],
+                pair_lock_payload[1],
+                release_outcome,
+            )
+
     def _tick(self) -> None:
         runs = self.read_store.list_strategy_runs(status="running")
         arbitrage_runs = [
@@ -240,6 +460,7 @@ class StrategyRuntime:
         run_id = str(run.get("run_id") or "")
         bot_id = str(run.get("bot_id") or "")
         trace_id = f"strategy-runtime-{uuid4()}"
+        self._reconcile_pair_lock(run_id=run_id, bot_id=bot_id, trace_id=trace_id)
         if self.redis_runtime.info.enabled:
             try:
                 blocking_trace = self.redis_runtime.get_blocking_recovery_trace(
@@ -299,6 +520,19 @@ class StrategyRuntime:
             self._record_failure(run_id=run_id, bot_id=bot_id, exc=exc)
             return
 
+        acquired_pair_lock = None
+        if (
+            self.persist_intent
+            and self.read_store.supports_mutation
+            and decision.accepted
+        ):
+            decision, acquired_pair_lock = self._acquire_pair_lock_for_decision(
+                decision=decision,
+                run_id=run_id,
+                bot_id=bot_id,
+                trace_id=trace_id,
+            )
+
         payload = build_arbitrage_evaluation_payload(
             decision=decision,
             bot_id=bot_id,
@@ -341,7 +575,23 @@ class StrategyRuntime:
             strategy_run_id=run_id,
         )
         if outcome != "created" or intent is None:
+            if acquired_pair_lock is not None:
+                self._release_pair_lock_for_decision(
+                    decision_context=decision.decision_context,
+                    run_id=run_id,
+                    bot_id=bot_id,
+                    trace_id=trace_id,
+                )
             return
+
+        if acquired_pair_lock is not None:
+            self._refresh_pair_lock_after_persist(
+                decision=decision,
+                run_id=run_id,
+                bot_id=bot_id,
+                trace_id=trace_id,
+                intent_id=str(intent.get('intent_id') or ''),
+            )
 
         payload = build_arbitrage_evaluation_payload(
             decision=decision,

@@ -62,6 +62,7 @@ def _candidate_summary(
 ) -> dict[str, object]:
     executable_edge = decision.executable_edge
     return {
+        'market': inputs.market,
         'buy_exchange': inputs.base_exchange,
         'sell_exchange': inputs.hedge_exchange,
         'quote_pair_id': str(decision.decision_context.get('quote_pair_id') or ''),

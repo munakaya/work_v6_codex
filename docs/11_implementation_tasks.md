@@ -81,9 +81,9 @@
 
 ## 3.1 다거래소 재정거래 확장 메모
 
-- 현재 구현은 `base_exchange + hedge_exchange` 고정 2거래소 평가를 기본으로 둔다.
-- 다음 확장은 "3개 거래소 이상을 동시에 읽고, 이번 틱의 최적 pair를 고른 뒤 기존 2-leg execution으로 진입"하는 방향으로 본다.
-- 즉, execution을 3-leg로 바꾸는 작업이 아니라 candidate selection을 다거래소화하는 작업으로 정의한다.
+- 현재 구현은 `candidate_exchanges[]`를 받아 모든 유효 조합을 양방향 평가하고, 이번 틱의 최적 `selected_pair` 1개를 고른다.
+- 하위 호환을 위해 `base_exchange + hedge_exchange` 2거래소 입력도 계속 받지만, 내부 판단 경로는 다거래소 candidate selection 기준이다.
+- execution은 여전히 2-leg 주문으로 유지하며, 다거래소화 범위는 candidate selection과 pair-level lock까지로 본다.
 
 권장 세부 작업:
 
@@ -91,7 +91,7 @@
 - M2. 거래소별 snapshot/balance/freshness 수집기 분리
 - M3. 유효 조합 생성과 양방향 평가
 - M4. `selected_pair` ranking 규칙 확정
-- M5. pair-level lock 추가
+- M5. pair-level lock 추가 (완료, Redis runtime `pair_lock:{market}:{quote_pair_id}` + `PAIR_LOCK_ACTIVE`)
 - M6. shadow/live 비교 지표에 "미선택 후보와 선택 후보 차이" 추가
 - M7. API 계약과 runtime loader의 `base_exchange/hedge_exchange` 호환 전환안 정리
 - M8. 전략 핫패스에서 direct REST 재조회 제거, `market-data collector -> snapshot cache -> strategy runtime` 단일 경로로 정리

@@ -8,6 +8,16 @@ from .arbitrage_execution_adapter import (
 )
 from .arbitrage_evaluation_payload import build_arbitrage_evaluation_payload
 from .arbitrage_candidate_sets import evaluate_arbitrage_candidate_set
+from .arbitrage_pair_lock import (
+    attach_pair_lock_context,
+    build_pair_lock_blocked_decision,
+    build_pair_lock_payload,
+    pair_lock_acquired_at,
+    pair_lock_identity_from_context,
+    pair_lock_identity_from_payload,
+    pair_lock_owner_id,
+    should_hold_pair_lock,
+)
 from .arbitrage_execution import submit_arbitrage_orders
 from .arbitrage_runtime import evaluate_arbitrage, persist_order_intent_plan
 from .arbitrage_runtime_loader import load_arbitrage_runtime_payload
@@ -45,6 +55,11 @@ __all__ = [
     "build_arbitrage_evaluation_payload",
     "build_arbitrage_execution_adapter",
     "build_coinone_private_headers",
+    "build_pair_lock_blocked_decision",
+    "build_pair_lock_payload",
+    "attach_pair_lock_context",
+    "pair_lock_acquired_at",
+    "pair_lock_owner_id",
     "build_query_hash",
     "build_query_string",
     "classify_submit_failure_transition",
@@ -61,6 +76,9 @@ __all__ = [
     "load_candidate_strategy_inputs",
     "load_strategy_inputs",
     "evaluate_arbitrage_candidate_set",
+    "pair_lock_identity_from_context",
+    "pair_lock_identity_from_payload",
+    "should_hold_pair_lock",
     "persist_order_intent_plan",
     "sign_coinone_payload",
     "submit_arbitrage_orders",
