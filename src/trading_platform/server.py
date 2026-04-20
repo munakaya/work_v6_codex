@@ -11,6 +11,8 @@ from urllib.parse import urlparse
 from .config import AppConfig, validate_config
 from .market_data_connector import PublicMarketDataConnector
 from .market_data_runtime import MarketDataRuntime
+from .public_ws_market_data import PublicWebSocketMarketDataConnector
+from .runtime_market_data_connector import RuntimeMarketDataConnector
 from .observability import AlertHookNotifier, MetricsRegistry
 from .private_exchange_connector import (
     PrivateExchangeConnectorProtocol,
@@ -345,12 +347,45 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         bithumb_base_url=config.bithumb_public_base_url,
         coinone_base_url=config.coinone_public_base_url,
     )
+    market_data_runtime_connector = RuntimeMarketDataConnector(
+        rest_connector=market_data_connector,
+        ws_connector=PublicWebSocketMarketDataConnector(
+            timeout_ms=config.market_data_timeout_ms,
+            stale_threshold_ms=config.market_data_stale_threshold_ms,
+            orderbook_depth_levels=config.market_data_orderbook_depth_levels,
+            retry_count=config.market_data_retry_count,
+            retry_backoff=ExponentialBackoffPolicy(
+                initial_delay_ms=config.market_data_retry_backoff_initial_ms,
+                max_delay_ms=config.market_data_retry_backoff_max_ms,
+            ),
+            rate_limit_policies={
+                "upbit": RateLimitPolicy(
+                    name="upbit_public_rest",
+                    rate_per_sec=config.upbit_public_rest_rate_limit_per_sec,
+                    burst=config.upbit_public_rest_burst,
+                ),
+                "bithumb": RateLimitPolicy(
+                    name="bithumb_public_rest",
+                    rate_per_sec=config.bithumb_public_rest_rate_limit_per_sec,
+                    burst=config.bithumb_public_rest_burst,
+                ),
+                "coinone": RateLimitPolicy(
+                    name="coinone_public_rest",
+                    rate_per_sec=config.coinone_public_rest_rate_limit_per_sec,
+                    burst=config.coinone_public_rest_burst,
+                ),
+            },
+            upbit_base_url=config.upbit_quotation_base_url,
+            bithumb_base_url=config.bithumb_public_base_url,
+            coinone_base_url=config.coinone_public_base_url,
+        ),
+    )
     market_data_runtime = MarketDataRuntime(
         enabled=config.market_data_poll_enabled,
         exchange=config.market_data_poll_exchange,
         markets=config.market_data_poll_markets,
         interval_ms=config.market_data_poll_interval_ms,
-        connector=market_data_connector,
+        connector=market_data_runtime_connector,
         metrics=metrics,
         redis_runtime=redis_runtime,
         read_store=bootstrap.store,

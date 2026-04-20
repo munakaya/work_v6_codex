@@ -19,6 +19,7 @@
 - control_plane_write_guard_cases.py: write API bearer token 보호, per-IP 기본 rate limit, staging fail-closed startup이 실제 서버 기준으로 동작하는지 검증한다
 - exchange_auth_cases.py: Upbit/Bithumb/Coinone auth helper가 query_hash, JWT, payload/signature를 결정적으로 생성하는지 검증한다
 - market_data_runtime_target_cases.py: market_data_runtime가 고정 poll 대상과 실행 중 arbitrage run에서 파생된 거래소/심볼 target을 함께 수집하는지 검증한다
+- market_data_runtime_ws_first_cases.py: market data runtime이 upbit/coinone은 WS 우선, bithumb/sample은 REST 유지, WS 실패 시 REST fallback과 runtime 진단값 노출을 수행하는지 검증한다
 - public_ws_market_data_cases.py: public websocket 기반 orderbook connector가 upbit/coinone snapshot을 파싱하고 exchange-aware freshness metadata를 남기며 unsupported exchange를 거부하는지 검증한다
 - coinone_ws_freshness_cases.py: Coinone public WS snapshot이 5초 freshness 경계에서 received_at fallback으로 오탐을 줄이고 실제 stale snapshot은 계속 차단하는지 검증한다
 - private_exchange_ws_runtime_cases.py: runtime API가 거래소별 private websocket auth-ready 상태와 기본 제한 정보를 노출하는지 검증한다

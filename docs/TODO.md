@@ -38,16 +38,16 @@
 
 ### 2. public WS-first collector를 런타임 기본 경로로 전환
 
-- [ ] 현재 `sim observer`에만 붙은 public WS 수집을 runtime collector로 끌어올린다.
+- [x] 현재 `sim observer`에만 붙은 public WS 수집을 runtime collector로 끌어올렸다.
   목표 경로는 `public WS -> 최신 snapshot cache -> strategy runtime`이다.
 
-- [ ] REST poller를 기본 경로에서 fallback/보정 경로로 내린다.
+- [x] REST poller를 기본 경로에서 fallback/보정 경로로 내렸다.
   bootstrap, reconnect 직후 보정, 진단성 재조회 정도로 역할을 축소한다.
 
-- [ ] cache write 계약을 명확히 정리한다.
+- [x] cache write 계약을 명확히 정리했다.
   `exchange_timestamp`, `received_at`, `exchange_age_ms`, `source_type`가 WS/REST 양쪽에서 일관되게 들어가야 한다.
 
-- [ ] WS collector 장애 시 degrade/fallback 상태를 readiness와 로그에 명확히 노출한다.
+- [x] WS collector 장애 시 degrade/fallback 상태를 readiness와 로그에 명확히 노출한다.
 
 ### 3. Bithumb public WS adapter 추가 또는 미지원 결정 확정
 

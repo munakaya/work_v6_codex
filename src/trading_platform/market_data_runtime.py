@@ -34,6 +34,10 @@ class MarketDataRuntimeInfo:
     last_error_message: str | None
     success_count: int
     failure_count: int
+    source_policies: list[dict[str, object]]
+    source_statuses: list[dict[str, object]]
+    fallback_active: bool
+    fallback_count: int
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -50,6 +54,10 @@ class MarketDataRuntimeInfo:
             "last_error_message": self.last_error_message,
             "success_count": self.success_count,
             "failure_count": self.failure_count,
+            "source_policies": self.source_policies,
+            "source_statuses": self.source_statuses,
+            "fallback_active": self.fallback_active,
+            "fallback_count": self.fallback_count,
         }
 
 
@@ -83,11 +91,19 @@ class MarketDataRuntime:
         self._last_error_message: str | None = None
         self._success_count = 0
         self._failure_count = 0
+        self._last_source_by_exchange: dict[str, str] = {}
+        self._fallback_count_by_exchange: dict[str, int] = {}
+        self._last_fallback_at_by_exchange: dict[str, str] = {}
+        self._last_fallback_reason_by_exchange: dict[str, str] = {}
 
     @property
     def info(self) -> MarketDataRuntimeInfo:
         target_groups = self._target_groups()
         target_count = sum(len(markets) for _, markets in target_groups)
+        source_policies = self._source_policy_items(target_groups)
+        source_statuses = self._source_status_items(source_policies)
+        fallback_active = any(bool(item.get("fallback_active")) for item in source_statuses)
+        fallback_count = sum(int(item.get("fallback_count") or 0) for item in source_statuses)
         with self._lock:
             return MarketDataRuntimeInfo(
                 enabled=self.enabled,
@@ -100,12 +116,16 @@ class MarketDataRuntime:
                 ],
                 interval_ms=self.interval_ms,
                 running=self._running,
-                state=self._state_name(),
+                state=self._state_name(fallback_active=fallback_active),
                 last_success_at=self._last_success_at,
                 last_error_at=self._last_error_at,
                 last_error_message=self._last_error_message,
                 success_count=self._success_count,
                 failure_count=self._failure_count,
+                source_policies=source_policies,
+                source_statuses=source_statuses,
+                fallback_active=fallback_active,
+                fallback_count=fallback_count,
             )
 
     def start(self) -> None:
@@ -130,9 +150,13 @@ class MarketDataRuntime:
             self._running = False
         self._thread = None
 
-    def _state_name(self) -> str:
+    def _state_name(self, *, fallback_active: bool = False) -> str:
         if not self.enabled:
             return "disabled"
+        if fallback_active and self._running:
+            return "running_with_fallback"
+        if fallback_active:
+            return "fallback_active"
         if self._running:
             return "running"
         if not self._target_groups():
@@ -258,6 +282,72 @@ class MarketDataRuntime:
                 break
             self.refresh(exchange=exchange, markets=markets)
 
+    def _source_policy_items(
+        self,
+        target_groups: tuple[tuple[str, tuple[str, ...]], ...],
+    ) -> list[dict[str, object]]:
+        exchanges = sorted({exchange for exchange, _markets in target_groups})
+        policy_reader = getattr(self.connector, "source_policy", None)
+        items: list[dict[str, object]] = []
+        for exchange in exchanges:
+            if callable(policy_reader):
+                policy = policy_reader(exchange=exchange)
+                if hasattr(policy, "as_dict"):
+                    items.append(policy.as_dict())
+                    continue
+                if isinstance(policy, dict):
+                    items.append(dict(policy))
+                    continue
+            items.append(
+                {
+                    "exchange": exchange,
+                    "preferred_source": "rest",
+                    "fallback_source": None,
+                    "ws_supported": False,
+                    "policy_name": "rest_only",
+                }
+            )
+        return items
+
+    def _source_status_items(
+        self, source_policies: list[dict[str, object]]
+    ) -> list[dict[str, object]]:
+        items: list[dict[str, object]] = []
+        with self._lock:
+            last_source_by_exchange = dict(self._last_source_by_exchange)
+            fallback_count_by_exchange = dict(self._fallback_count_by_exchange)
+            last_fallback_at_by_exchange = dict(self._last_fallback_at_by_exchange)
+            last_fallback_reason_by_exchange = dict(self._last_fallback_reason_by_exchange)
+        for policy in source_policies:
+            exchange = str(policy.get("exchange") or "").strip().lower()
+            preferred_source = str(policy.get("preferred_source") or "rest")
+            fallback_source = policy.get("fallback_source")
+            last_source = last_source_by_exchange.get(exchange)
+            fallback_active = bool(fallback_source) and bool(last_source) and last_source != preferred_source
+            state = "idle"
+            if fallback_active:
+                state = "fallback_active"
+            elif preferred_source == "rest" and not bool(policy.get("ws_supported")):
+                state = "rest_only"
+            elif last_source:
+                state = "healthy" if preferred_source == last_source else "rest_only"
+            items.append(
+                {
+                    "exchange": exchange,
+                    "policy_name": policy.get("policy_name"),
+                    "preferred_source": preferred_source,
+                    "fallback_source": fallback_source,
+                    "last_source": last_source,
+                    "fallback_active": fallback_active,
+                    "fallback_count": fallback_count_by_exchange.get(exchange, 0),
+                    "last_fallback_at": last_fallback_at_by_exchange.get(exchange),
+                    "last_fallback_reason": last_fallback_reason_by_exchange.get(exchange),
+                    "ws_supported": bool(policy.get("ws_supported")),
+                    "state": state,
+                }
+            )
+        return items
+
     def _record_snapshot(
         self, snapshot: dict[str, object], *, trace_id: str | None = None
     ) -> None:
@@ -273,10 +363,23 @@ class MarketDataRuntime:
             payload=snapshot,
             trace_id=trace_id,
         )
+        exchange = str(snapshot["exchange"]).strip().lower()
+        actual_source = str(snapshot.get("source_type") or "").strip().lower() or None
+        fallback_used = bool(snapshot.get("collector_fallback_used"))
+        fallback_reason = str(snapshot.get("collector_fallback_reason") or "").strip()
         with self._lock:
             self._success_count += 1
             self._last_success_at = _iso_now()
             self._last_error_message = None
+            if actual_source is not None:
+                self._last_source_by_exchange[exchange] = actual_source
+            if fallback_used:
+                self._fallback_count_by_exchange[exchange] = (
+                    self._fallback_count_by_exchange.get(exchange, 0) + 1
+                )
+                self._last_fallback_at_by_exchange[exchange] = self._last_success_at or _iso_now()
+                if fallback_reason:
+                    self._last_fallback_reason_by_exchange[exchange] = fallback_reason
 
     def _record_failure(
         self, *, exchange: str, market: str, exc: MarketDataError
