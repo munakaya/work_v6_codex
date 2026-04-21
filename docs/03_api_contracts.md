@@ -895,6 +895,10 @@
 응답 핵심 필드:
 
 - `runtime.enabled`
+- `runtime.source_policies[].exchange`
+- `runtime.source_policies[].support_level`
+- `runtime.source_statuses[].exchange`
+- `runtime.source_statuses[].support_level`
 - `rate_limits.items[].name`
 - `rate_limits.items[].rate_per_sec`
 - `rate_limits.items[].burst`
@@ -906,6 +910,8 @@
 - `runtime.markets`
 - `runtime.last_success_at`
 - `runtime.last_error_message`
+- `runtime.source_policies[].support_level`은 `supported | experimental | unsupported` 중 하나다.
+- 현재 구현 기준 `bithumb` public WS는 이 필드에서 `experimental`로 고정된다.
 - `snapshots`
 - `snapshot_count`
 

@@ -257,6 +257,10 @@ def _case_bithumb_snapshot() -> None:
             bithumb_ws_url=bithumb_server.url,
             coinone_ws_url="ws://127.0.0.1:9",
         )
+        _assert(
+            connector.ws_support_levels["bithumb"] == "experimental",
+            "bithumb websocket support level mismatch",
+        )
         snapshot = connector.get_orderbook_top(exchange="bithumb", market="KRW-BTC")
     _assert(snapshot["exchange"] == "bithumb", f"bithumb exchange mismatch: {snapshot}")
     _assert(snapshot["best_bid"] == "100", f"bithumb best bid mismatch: {snapshot}")

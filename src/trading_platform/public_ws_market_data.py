@@ -75,6 +75,14 @@ class PublicWebSocketMarketDataConnector(PublicMarketDataConnector):
     def supported_ws_exchanges(self) -> tuple[str, ...]:
         return ("upbit", "bithumb", "coinone")
 
+    @property
+    def ws_support_levels(self) -> dict[str, str]:
+        return {
+            "upbit": "supported",
+            "bithumb": "experimental",
+            "coinone": "supported",
+        }
+
     def get_orderbook_top(self, *, exchange: str, market: str) -> dict[str, object]:
         normalized_exchange = exchange.strip().lower()
         normalized_market = market.strip().upper()

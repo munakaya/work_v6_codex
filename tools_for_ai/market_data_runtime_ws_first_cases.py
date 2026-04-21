@@ -63,6 +63,10 @@ class RecordingWsConnector(RecordingRestConnector):
     def supported_ws_exchanges(self) -> tuple[str, ...]:
         return ("upbit", "bithumb", "coinone")
 
+    @property
+    def ws_support_levels(self) -> dict[str, str]:
+        return {"upbit": "supported", "bithumb": "experimental", "coinone": "supported"}
+
     def get_orderbook_top(self, *, exchange: str, market: str) -> dict[str, object]:
         self.calls.append((exchange, market))
         if exchange == "coinone":
@@ -85,6 +89,7 @@ def main() -> None:
     )
     bithumb_policy = runtime_connector.source_policy(exchange="bithumb")
     _assert(bithumb_policy.preferred_source == "public_ws", "bithumb policy mismatch")
+    _assert(bithumb_policy.support_level == "experimental", "bithumb support level mismatch")
     bithumb_snapshot = runtime_connector.get_orderbook_top(exchange="bithumb", market="KRW-BTC")
     _assert(
         bithumb_snapshot["collector_preferred_source"] == "public_ws",
@@ -111,15 +116,21 @@ def main() -> None:
     statuses = {item["exchange"]: item for item in info.source_statuses}
 
     _assert(policies["upbit"]["preferred_source"] == "public_ws", "upbit policy mismatch")
+    _assert(policies["upbit"]["support_level"] == "supported", "upbit support level mismatch")
     _assert(policies["coinone"]["preferred_source"] == "public_ws", "coinone policy mismatch")
+    _assert(policies["coinone"]["support_level"] == "supported", "coinone support level mismatch")
     _assert(policies["sample"]["preferred_source"] == "rest", "sample policy mismatch")
+    _assert(policies["sample"]["support_level"] == "unsupported", "sample support level mismatch")
 
     _assert(statuses["upbit"]["last_source"] == "public_ws", "upbit should use websocket")
+    _assert(statuses["upbit"]["support_level"] == "supported", "upbit runtime status support mismatch")
     _assert(statuses["coinone"]["last_source"] == "rest", "coinone should fall back to rest")
     _assert(statuses["coinone"]["fallback_active"] is True, "coinone fallback should be active")
     _assert(statuses["coinone"]["fallback_count"] == 1, "coinone fallback count mismatch")
     _assert(statuses["coinone"]["last_fallback_reason"] == "WS_TIMEOUT", "coinone fallback reason mismatch")
+    _assert(statuses["coinone"]["support_level"] == "supported", "coinone runtime status support mismatch")
     _assert(statuses["sample"]["state"] == "rest_only", "sample should remain rest only")
+    _assert(statuses["sample"]["support_level"] == "unsupported", "sample runtime status support mismatch")
     _assert(info.fallback_active is True, "runtime fallback flag mismatch")
     _assert(info.state == "fallback_active", f"runtime state mismatch: {info.state}")
 

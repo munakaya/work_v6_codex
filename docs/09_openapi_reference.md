@@ -2587,6 +2587,61 @@ components:
                   type: integer
                 failure_count:
                   type: integer
+                source_policies:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      exchange:
+                        type: string
+                      preferred_source:
+                        type: string
+                      fallback_source:
+                        oneOf:
+                          - type: 'null'
+                          - type: string
+                      ws_supported:
+                        type: boolean
+                      support_level:
+                        type: string
+                      policy_name:
+                        type: string
+                source_statuses:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      exchange:
+                        type: string
+                      preferred_source:
+                        type: string
+                      fallback_source:
+                        oneOf:
+                          - type: 'null'
+                          - type: string
+                      last_source:
+                        oneOf:
+                          - type: 'null'
+                          - type: string
+                      fallback_active:
+                        type: boolean
+                      fallback_count:
+                        type: integer
+                      last_fallback_at:
+                        oneOf:
+                          - type: 'null'
+                          - type: string
+                            format: date-time
+                      last_fallback_reason:
+                        oneOf:
+                          - type: 'null'
+                          - type: string
+                      ws_supported:
+                        type: boolean
+                      support_level:
+                        type: string
+                      state:
+                        type: string
             redis_runtime:
               type: object
               properties:
@@ -3529,6 +3584,61 @@ components:
                   type: integer
                 failure_count:
                   type: integer
+                source_policies:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      exchange:
+                        type: string
+                      preferred_source:
+                        type: string
+                      fallback_source:
+                        oneOf:
+                          - type: 'null'
+                          - type: string
+                      ws_supported:
+                        type: boolean
+                      support_level:
+                        type: string
+                      policy_name:
+                        type: string
+                source_statuses:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      exchange:
+                        type: string
+                      preferred_source:
+                        type: string
+                      fallback_source:
+                        oneOf:
+                          - type: 'null'
+                          - type: string
+                      last_source:
+                        oneOf:
+                          - type: 'null'
+                          - type: string
+                      fallback_active:
+                        type: boolean
+                      fallback_count:
+                        type: integer
+                      last_fallback_at:
+                        oneOf:
+                          - type: 'null'
+                          - type: string
+                            format: date-time
+                      last_fallback_reason:
+                        oneOf:
+                          - type: 'null'
+                          - type: string
+                      ws_supported:
+                        type: boolean
+                      support_level:
+                        type: string
+                      state:
+                        type: string
             redis_runtime:
               type: object
               properties:

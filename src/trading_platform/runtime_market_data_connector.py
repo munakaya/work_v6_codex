@@ -17,6 +17,7 @@ class RuntimeMarketDataSourcePolicy:
     preferred_source: str
     fallback_source: str | None
     ws_supported: bool
+    support_level: str
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -24,6 +25,7 @@ class RuntimeMarketDataSourcePolicy:
             "preferred_source": self.preferred_source,
             "fallback_source": self.fallback_source,
             "ws_supported": self.ws_supported,
+            "support_level": self.support_level,
             "policy_name": "ws_first" if self.ws_supported else "rest_only",
         }
 
@@ -43,14 +45,24 @@ class RuntimeMarketDataConnector:
         supported = getattr(self.ws_connector, "supported_ws_exchanges", ())
         return tuple(str(item).strip().lower() for item in supported if str(item).strip())
 
+    def _ws_support_level(self, *, exchange: str) -> str:
+        levels = getattr(self.ws_connector, "ws_support_levels", None)
+        if isinstance(levels, dict):
+            level = str(levels.get(exchange) or "").strip().lower()
+            if level in {"supported", "experimental", "unsupported"}:
+                return level
+        return "supported" if exchange in self.supported_ws_exchanges else "unsupported"
+
     def source_policy(self, *, exchange: str) -> RuntimeMarketDataSourcePolicy:
         normalized_exchange = exchange.strip().lower()
-        ws_supported = normalized_exchange in self.supported_ws_exchanges
+        support_level = self._ws_support_level(exchange=normalized_exchange)
+        ws_supported = support_level != "unsupported"
         return RuntimeMarketDataSourcePolicy(
             exchange=normalized_exchange,
             preferred_source="public_ws" if ws_supported else "rest",
             fallback_source="rest" if ws_supported else None,
             ws_supported=ws_supported,
+            support_level=support_level,
         )
 
     def describe_source_policies(

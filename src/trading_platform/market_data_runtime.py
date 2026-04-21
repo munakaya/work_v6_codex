@@ -332,6 +332,7 @@ class MarketDataRuntime:
                     "preferred_source": "rest",
                     "fallback_source": None,
                     "ws_supported": False,
+                    "support_level": "unsupported",
                     "policy_name": "rest_only",
                 }
             )
@@ -371,6 +372,7 @@ class MarketDataRuntime:
                     "last_fallback_at": last_fallback_at_by_exchange.get(exchange),
                     "last_fallback_reason": last_fallback_reason_by_exchange.get(exchange),
                     "ws_supported": bool(policy.get("ws_supported")),
+                    "support_level": str(policy.get("support_level") or "unsupported"),
                     "state": state,
                 }
             )

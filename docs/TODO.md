@@ -57,8 +57,8 @@
 - [x] Bithumb public WS adapter를 추가한다.
   `sim observer`와 이후 runtime collector 양쪽에서 동일 contract를 쓰도록 맞춘다.
 
-- [ ] 지원을 보류할 경우, 미지원 사유를 코드와 문서에 명시한다.
-  현재처럼 애매한 상태로 두지 않고 `unsupported` 또는 `experimental` 중 하나로 고정한다.
+- [x] 지원 상태를 코드와 문서에 명시한다.
+  현재 구현 기준 `upbit/coinone`은 `supported`, `bithumb` public WS는 `experimental`, 그 외 거래소는 `unsupported`로 runtime source policy와 문서에 고정했다.
 
 ### 4. market data collector coverage 확장
 
@@ -216,4 +216,4 @@
 - direct REST 재조회 제거와 cached snapshot 우선 로딩은 이미 반영됐다.
 - write API bearer token / rate limit guard도 이미 구현 및 실행 검증되어 있다.
 - 지금 가장 먼저 닫아야 할 공백은 `Coinone WS freshness`와 `WS-first collector`다.
-- 그 다음 축은 `Bithumb WS`, `private execution 최종 경로`, `정식 테스트 승격`, `live/shadow 편차 계측`, `private balance refresh 관측성 보강`이다.
+- 그 다음 축은 `private execution 최종 경로`, `정식 테스트 승격`, `live/shadow 편차 계측`, `private balance refresh 관측성 보강`이다.
