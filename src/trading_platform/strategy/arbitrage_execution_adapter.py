@@ -6,6 +6,7 @@ from typing import Protocol
 from ..storage.store_protocol import ControlPlaneStoreProtocol
 from .arbitrage_execution import ArbitrageSubmitResult, submit_arbitrage_orders
 from .arbitrage_models import ArbitrageDecision
+from .arbitrage_private_connectors_execution_adapter import PrivateConnectorsArbitrageExecutionAdapter
 from .arbitrage_private_execution_adapter import PrivateHttpArbitrageExecutionAdapter
 from .arbitrage_state_machine import classify_submit_failure_transition
 
@@ -87,6 +88,7 @@ def build_arbitrage_execution_adapter(
     private_execution_url: str | None = None,
     private_execution_timeout_ms: int = 3000,
     private_execution_token: str | None = None,
+    private_exchange_connectors: dict[str, object] | None = None,
 ) -> ArbitrageExecutionAdapterProtocol:
     normalized = mode.strip().lower() or "simulate_success"
     if normalized == "private_http":
@@ -94,6 +96,14 @@ def build_arbitrage_execution_adapter(
             url=private_execution_url,
             timeout_ms=private_execution_timeout_ms,
             token=private_execution_token,
+        )
+    if normalized == "private_connectors":
+        return PrivateConnectorsArbitrageExecutionAdapter(
+            connectors=(
+                private_exchange_connectors
+                if isinstance(private_exchange_connectors, dict)
+                else {}
+            ),
         )
     if normalized == "private_stub":
         return PrivateStubArbitrageExecutionAdapter()

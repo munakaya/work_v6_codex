@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
 import os
@@ -16,6 +17,18 @@ from private_executor_stub import start_private_executor_stub
 ROOT_DIR = Path(__file__).resolve().parents[1]
 BASE_URL = "http://127.0.0.1:38765"
 PYTHON_BIN = ROOT_DIR / ".venv" / "bin" / "python"
+
+
+@dataclass(frozen=True)
+class CaseSpec:
+    name: str
+    submit_path: str
+    expected_outcome: str
+    expected_lifecycles: tuple[str, ...]
+    expected_order_count: int
+    expected_fill_count: int
+    expected_reason: str | None = None
+    expect_recovery_trace: bool = False
 
 
 def _iso_now() -> str:
@@ -146,9 +159,163 @@ def _evaluate_payload(*, persist_intent: bool, execute: bool) -> dict[str, objec
     }
 
 
-def _run_case(mode: str, *, submit_url: str, health_url: str) -> None:
+def _assert_ready_metadata(ready_payload: dict[str, object]) -> None:
+    private_dep = ready_payload["data"]["dependencies"]["private_execution"]
+    _assert(private_dep["configured"] is True, "private execution not configured")
+    _assert(private_dep["reachable"] is True, "private execution not reachable")
+    _assert(private_dep["mode"] == "private_http", "private execution mode mismatch")
+    _assert(
+        private_dep["path_kind"] == "temporary_external_delegate",
+        "private execution path_kind mismatch",
+    )
+    _assert(private_dep["temporary"] is True, "private execution temporary mismatch")
+    strategy_runtime = ready_payload["data"]["strategy_runtime"]
+    _assert(strategy_runtime["execution_mode"] == "private_http", "execution mode mismatch")
+    _assert(
+        strategy_runtime["execution_path_kind"] == "temporary_external_delegate",
+        "execution path kind mismatch",
+    )
+    _assert(
+        strategy_runtime["execution_path_temporary"] is True,
+        "execution path temporary mismatch",
+    )
+
+
+def _response_item_count(payload: dict[str, object]) -> int:
+    data = payload.get("data")
+    if isinstance(data, dict):
+        count = data.get("count")
+        if isinstance(count, int):
+            return count
+        items = data.get("items")
+        if isinstance(items, list):
+            return len(items)
+    if isinstance(data, list):
+        return len(data)
+    return 0
+
+
+def _assert_case_result(case: CaseSpec, *, run_id: str, payload: dict[str, object]) -> None:
+    data = payload["data"]
+    submit_result = data["submit_result"]
+    _assert(
+        submit_result["outcome"] == case.expected_outcome,
+        f"{case.name}: submit result mismatch: {submit_result}",
+    )
+    lifecycle = str(data.get("lifecycle_preview") or "")
+    _assert(
+        lifecycle in case.expected_lifecycles,
+        f"{case.name}: lifecycle mismatch: {lifecycle}",
+    )
+    if case.expected_reason is not None:
+        details = submit_result.get("details") if isinstance(submit_result, dict) else None
+        reason = str(details.get("reason") or "") if isinstance(details, dict) else ""
+        _assert(reason == case.expected_reason, f"{case.name}: reason mismatch: {reason}")
+
+    latest_status, latest_payload = _http_json(
+        "GET", f"/api/v1/strategy-runs/{run_id}/latest-evaluation"
+    )
+    _assert(latest_status == 200, f"{case.name}: latest evaluation fetch failed")
+    latest_data = latest_payload["data"]
+    _assert(
+        str(latest_data.get("lifecycle_preview") or "") in case.expected_lifecycles,
+        f"{case.name}: latest evaluation lifecycle mismatch: {latest_data}",
+    )
+    latest_submit = latest_data.get("submit_result")
+    _assert(
+        isinstance(latest_submit, dict)
+        and str(latest_submit.get("outcome") or "") == case.expected_outcome,
+        f"{case.name}: latest evaluation submit result mismatch: {latest_data}",
+    )
+
+    orders_status, orders_payload = _http_json("GET", f"/api/v1/orders?strategy_run_id={run_id}")
+    _assert(orders_status == 200, f"{case.name}: orders fetch failed")
+    _assert(
+        _response_item_count(orders_payload) == case.expected_order_count,
+        f"{case.name}: order count mismatch: {orders_payload}",
+    )
+
+    fills_status, fills_payload = _http_json("GET", f"/api/v1/fills?strategy_run_id={run_id}")
+    _assert(fills_status == 200, f"{case.name}: fills fetch failed")
+    _assert(
+        _response_item_count(fills_payload) == case.expected_fill_count,
+        f"{case.name}: fill count mismatch: {fills_payload}",
+    )
+
+    traces_status, traces_payload = _http_json("GET", f"/api/v1/recovery-traces?run_id={run_id}")
+    _assert(traces_status == 200, f"{case.name}: recovery traces fetch failed")
+    trace_count = int(traces_payload["data"].get("count") or 0)
+    if case.expect_recovery_trace:
+        _assert(trace_count >= 1, f"{case.name}: recovery trace missing")
+    else:
+        _assert(trace_count == 0, f"{case.name}: unexpected recovery trace: {traces_payload}")
+
+
+CASES: tuple[CaseSpec, ...] = (
+    CaseSpec(
+        name="filled",
+        submit_path="/filled",
+        expected_outcome="filled",
+        expected_lifecycles=("closed",),
+        expected_order_count=2,
+        expected_fill_count=2,
+    ),
+    CaseSpec(
+        name="submitted",
+        submit_path="/submitted",
+        expected_outcome="submitted",
+        expected_lifecycles=("entry_submitting",),
+        expected_order_count=2,
+        expected_fill_count=0,
+    ),
+    CaseSpec(
+        name="failed",
+        submit_path="/failed",
+        expected_outcome="submit_failed",
+        expected_lifecycles=("recovery_required", "unwind_in_progress"),
+        expected_order_count=0,
+        expected_fill_count=0,
+        expect_recovery_trace=True,
+    ),
+    CaseSpec(
+        name="submitted_with_fill_malformed",
+        submit_path="/submitted-with-fill",
+        expected_outcome="submit_failed",
+        expected_lifecycles=("recovery_required", "unwind_in_progress"),
+        expected_order_count=0,
+        expected_fill_count=0,
+        expected_reason="private execution submitted outcome must not include fills",
+        expect_recovery_trace=True,
+    ),
+    CaseSpec(
+        name="submit_failed_filled_order_no_fill_malformed",
+        submit_path="/submit-failed-filled-order-no-fill",
+        expected_outcome="submit_failed",
+        expected_lifecycles=("recovery_required", "unwind_in_progress"),
+        expected_order_count=0,
+        expected_fill_count=0,
+        expected_reason="private execution submit_failed outcome missing fills for filled orders",
+        expect_recovery_trace=True,
+    ),
+    CaseSpec(
+        name="filled_bad_preview_malformed",
+        submit_path="/filled-bad-preview",
+        expected_outcome="submit_failed",
+        expected_lifecycles=("recovery_required", "unwind_in_progress"),
+        expected_order_count=0,
+        expected_fill_count=0,
+        expected_reason=(
+            "private execution lifecycle_preview is inconsistent with outcome: "
+            "filled:entry_submitting"
+        ),
+        expect_recovery_trace=True,
+    ),
+)
+
+
+def _run_case(case: CaseSpec, *, health_url: str, submit_base: str) -> None:
     global BASE_URL
-    redis_prefix = f"tp_private_http_server_case_{mode}_{uuid4().hex[:8]}"
+    redis_prefix = f"tp_private_http_server_case_{case.name}_{uuid4().hex[:8]}"
     server_port = _allocate_local_port()
     BASE_URL = f"http://127.0.0.1:{server_port}"
     env = os.environ.copy()
@@ -160,7 +327,7 @@ def _run_case(mode: str, *, submit_url: str, health_url: str) -> None:
             "TP_USE_SAMPLE_READ_MODEL": "true",
             "TP_STRATEGY_RUNTIME_EXECUTION_ENABLED": "true",
             "TP_STRATEGY_RUNTIME_EXECUTION_MODE": "private_http",
-            "TP_STRATEGY_PRIVATE_EXECUTION_URL": submit_url,
+            "TP_STRATEGY_PRIVATE_EXECUTION_URL": f"{submit_base}{case.submit_path}",
             "TP_STRATEGY_PRIVATE_EXECUTION_HEALTH_URL": health_url,
             "TP_STRATEGY_RUNTIME_ENABLED": "false",
             "TP_RECOVERY_RUNTIME_ENABLED": "false",
@@ -176,74 +343,19 @@ def _run_case(mode: str, *, submit_url: str, health_url: str) -> None:
     )
     try:
         ready_payload = _wait_ready()
-        private_dep = ready_payload["data"]["dependencies"]["private_execution"]
-        _assert(private_dep["configured"] is True, f"{mode}: private execution not configured")
-        _assert(private_dep["reachable"] is True, f"{mode}: private execution not reachable")
-        _assert(private_dep["mode"] == "private_http", f"{mode}: private execution mode mismatch")
-        _assert(
-            private_dep["path_kind"] == "temporary_external_delegate",
-            f"{mode}: private execution path_kind mismatch",
-        )
-        _assert(private_dep["temporary"] is True, f"{mode}: private execution temporary mismatch")
-        strategy_runtime = ready_payload["data"]["strategy_runtime"]
-        _assert(strategy_runtime["execution_mode"] == "private_http", f"{mode}: execution mode mismatch")
-        _assert(
-            strategy_runtime["execution_path_kind"] == "temporary_external_delegate",
-            f"{mode}: execution path kind mismatch",
-        )
-        _assert(
-            strategy_runtime["execution_path_temporary"] is True,
-            f"{mode}: execution path temporary mismatch",
-        )
+        _assert_ready_metadata(ready_payload)
 
-        bot_id, run_id = _register_and_start_run(f"private-http-server-{mode}-{uuid4().hex[:6]}")
+        _bot_id, run_id = _register_and_start_run(
+            f"private-http-server-{case.name}-{uuid4().hex[:6]}"
+        )
         status, payload = _http_json(
             "POST",
             f"/api/v1/strategy-runs/{run_id}/evaluate-arbitrage",
             _evaluate_payload(persist_intent=True, execute=True),
         )
-        _assert(status == 201, f"{mode}: evaluate execute failed: {status} {payload}")
-        data = payload["data"]
-        if mode == "filled":
-            _assert(data["submit_result"]["outcome"] == "filled", f"{mode}: submit result mismatch")
-            _assert(data["lifecycle_preview"] == "closed", f"{mode}: lifecycle mismatch")
-            latest_status, latest_payload = _http_json(
-                "GET", f"/api/v1/strategy-runs/{run_id}/latest-evaluation"
-            )
-            _assert(latest_status == 200, f"{mode}: latest evaluation fetch failed")
-            _assert(
-                latest_payload["data"]["lifecycle_preview"] == "closed",
-                f"{mode}: latest evaluation lifecycle mismatch: {latest_payload}",
-            )
-        elif mode == "submitted":
-            _assert(
-                data["submit_result"]["outcome"] == "submitted",
-                f"{mode}: submit result mismatch",
-            )
-            _assert(
-                data["lifecycle_preview"] == "entry_submitting",
-                f"{mode}: lifecycle mismatch",
-            )
-            orders_status, orders_payload = _http_json(
-                "GET", f"/api/v1/orders?strategy_run_id={run_id}"
-            )
-            _assert(orders_status == 200, f"{mode}: orders fetch failed")
-            _assert(len(orders_payload["data"]) == 2, f"{mode}: expected 2 orders")
-        else:
-            _assert(
-                data["submit_result"]["outcome"] == "submit_failed",
-                f"{mode}: submit result mismatch",
-            )
-            _assert(
-                data["lifecycle_preview"] in {"recovery_required", "unwind_in_progress"},
-                f"{mode}: lifecycle mismatch",
-            )
-            traces_status, traces_payload = _http_json(
-                "GET", f"/api/v1/recovery-traces?run_id={run_id}"
-            )
-            _assert(traces_status == 200, f"{mode}: traces fetch failed")
-            _assert(traces_payload["data"]["count"] >= 1, f"{mode}: recovery trace missing")
-        print(f"PASS private_http server case {mode}")
+        _assert(status == 201, f"{case.name}: evaluate execute failed: {status} {payload}")
+        _assert_case_result(case, run_id=run_id, payload=payload)
+        print(f"PASS private_http server case {case.name}")
     finally:
         server.terminate()
         try:
@@ -259,13 +371,9 @@ def main() -> None:
     try:
         host, port = stub.server_address
         health_url = f"http://{host}:{port}/health"
-        base_submit = f"http://{host}:{port}"
-        for mode in ("filled", "submitted", "failed"):
-            _run_case(
-                mode,
-                submit_url=f"{base_submit}/{mode}",
-                health_url=health_url,
-            )
+        submit_base = f"http://{host}:{port}"
+        for case in CASES:
+            _run_case(case, health_url=health_url, submit_base=submit_base)
     finally:
         stub.shutdown()
         stub.server_close()

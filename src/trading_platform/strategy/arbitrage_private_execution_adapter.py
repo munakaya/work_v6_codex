@@ -46,6 +46,7 @@ def _failure_result(
     details: dict[str, object] | None = None,
     created_orders: tuple[dict[str, object], ...] = (),
     created_fills: tuple[dict[str, object], ...] = (),
+    mode: str = "private_http",
 ) -> ArbitrageSubmitResult:
     transition = classify_submit_failure_transition(
         decision_accepted=True,
@@ -53,7 +54,7 @@ def _failure_result(
         submit_failed=True,
         auto_unwind_allowed=auto_unwind_on_failure,
     )
-    payload = {"mode": "private_http", "reason": reason}
+    payload = {"mode": mode, "reason": reason}
     if isinstance(details, dict):
         details_to_merge = dict(details)
         detail_reason = _json_text(details_to_merge.get("reason"))
@@ -172,6 +173,7 @@ def _create_orders_from_response(
     intent: dict[str, object],
     orders_payload: object,
     normalize_filled_status_for_persistence: bool = False,
+    submission_mode: str = "private_http",
 ) -> tuple[tuple[dict[str, object], ...], dict[tuple[str, str], dict[str, object]], str | None]:
     if not isinstance(orders_payload, list) or not orders_payload:
         return (), {}, "private execution response missing orders"
@@ -245,7 +247,7 @@ def _create_orders_from_response(
                 ),
                 "raw_payload": {
                     **raw_payload,
-                    "submission_mode": "private_http",
+                    "submission_mode": submission_mode,
                     "adapter_response_order_index": index,
                     "adapter_response_status": status,
                 },

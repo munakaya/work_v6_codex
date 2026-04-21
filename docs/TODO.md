@@ -102,12 +102,13 @@
 
 ### 8. private execution 최종 경로 정리
 
-- [ ] `private_http`를 계속 임시 외부 위임 경로로 둘지, 내장 execution path로 대체할지 결정한다.
+- [x] `private_http`를 계속 임시 외부 위임 경로로 둘지, 내장 execution path로 대체할지 결정한다.
+  현재 구현은 `private_connectors`를 기본 내장 execution path로 추가했고, `private_http`는 health-probed temporary external delegate로만 유지한다.
 
 - [ ] 실계정 smoke, cancel flow, reconciliation까지 포함한 end-to-end 경로를 닫는다.
 
-- [ ] malformed `private_http` 응답 회귀를 서버 레벨까지 확대한다.
-  direct adapter만이 아니라 `evaluate-arbitrage` 실제 서버 경로에서 fail-closed를 확인해야 한다.
+- [x] malformed `private_http` 응답 회귀를 서버 레벨까지 확대했다.
+  direct adapter만이 아니라 `evaluate-arbitrage` 실제 서버 경로에서도 malformed `submitted/submit_failed/filled` 응답이 fail-closed 되고, 주문/체결 미저장과 recovery trace 생성을 확인했다.
 
 ### 9. 검증 체계 승격
 

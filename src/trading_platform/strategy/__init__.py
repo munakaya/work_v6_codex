@@ -6,6 +6,9 @@ from .arbitrage_execution_adapter import (
     SimulatedArbitrageExecutionAdapter,
     build_arbitrage_execution_adapter,
 )
+from .arbitrage_private_connectors_execution_adapter import (
+    PrivateConnectorsArbitrageExecutionAdapter,
+)
 from .arbitrage_evaluation_payload import build_arbitrage_evaluation_payload
 from .arbitrage_candidate_sets import evaluate_arbitrage_candidate_set
 from .arbitrage_pair_lock import (
@@ -49,6 +52,7 @@ __all__ = [
     "ExchangeTradingCredentials",
     "ExchangeTradingCredentialsStatus",
     "PrivateHttpArbitrageExecutionAdapter",
+    "PrivateConnectorsArbitrageExecutionAdapter",
     "PrivateStubArbitrageExecutionAdapter",
     "SimulatedArbitrageExecutionAdapter",
     "build_bearer_authorization",

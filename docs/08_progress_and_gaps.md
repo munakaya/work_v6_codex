@@ -75,6 +75,7 @@
 - PostgreSQL/Redis/readiness 기본 점검 경로
 - private REST connector 최소 계약
 - `private_http`가 임시 외부 위임 경로라는 메타데이터 노출
+- in-process `private_connectors` execution path 추가
 - Redis runtime의 `redis-cli` 의존 제거
 - 운영 환경 write API fail-closed 기동 정책
 - cached snapshot 우선 로딩과 direct REST 재조회 제거
@@ -82,7 +83,7 @@
 
 ### 42.2 아직 실거래 전환을 막는 핵심 공백
 
-- private execution의 최종 내장 경로 미구현
+- `private_connectors` 내장 execution path는 추가됐지만, cancel flow / 실계정 smoke / reconciliation 자동화는 미완료
 - `private_http`는 아직 임시 외부 delegate 경로
 - public WS-first collector 미완료
 - collector coverage 확장 미완료
@@ -113,8 +114,8 @@
 
 ### 48.1 실거래 경로 리스크
 
-- private REST connector는 붙었지만 cancel flow, execution path 편입, 실계정 smoke가 남아 있다.
-- `private_http`는 계속 임시 경로이며, 외부 executor 의존을 제거하지 못했다.
+- private REST connector는 이제 `private_connectors` execution path까지 편입됐지만 cancel flow, 실계정 smoke, reconciliation 자동화가 남아 있다.
+- `private_http`는 계속 임시 경로이며, 외부 executor 의존 fallback을 아직 유지한다.
 
 ### 48.2 market data 리스크
 

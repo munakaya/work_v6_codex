@@ -5,9 +5,9 @@
 - strategy_runtime_guard_cases.py: active recovery/manual handoff trace가 있을 때 strategy runtime이 새 평가를 skip하는지 검증한다
 - redis_runtime_cases.py: redis-cli 없이도 Redis runtime이 동작하고, 명령 실패 시 degraded 상태로 내려가는지 검증한다
 - private_execution_readiness_cases.py: private_http execution이 health probe 기준으로 reachable, missing, not_required 상태를 올바르게 판정하는지 검증한다
-- private_executor_stub.py: private_http execution 검증용 로컬 stub 서버를 띄워 health와 filled/submitted/failed 응답을 재현한다
+- private_executor_stub.py: private_http execution 검증용 로컬 stub 서버를 띄워 health, 정상 응답, malformed 응답을 경로별로 재현한다
 - private_http_adapter_cases.py: private_http adapter를 runtime guard 없이 직접 호출해 existing order id 충돌, submitted-with-fill, submit_failed bad fill/extra fill leg/filled-no-fill/partial-no-fill, filled bad preview, filled partial, extra fill leg 무저장 fail-closed를 검증한다
-- private_http_server_cases.py: private_http executor를 실제 서버 흐름에서 filled/submitted/failed 세 경로로 검증한다
+- private_http_server_cases.py: private_http executor를 실제 서버 흐름에서 정상 filled/submitted/failed와 malformed 응답의 fail-closed, recovery trace, 주문/체결 미저장을 함께 검증한다
 - private_http_followup_cases.py: private_http가 submitted를 반환한 뒤 later fill로 closed 되거나 timeout으로 recovery trace가 열리는지 서버 전체 흐름에서 검증한다
 - memory_store_contract_cases.py: 메모리 저장소의 read/mutation 반환값이 내부 상태를 직접 노출하지 않는지 방어 복사 계약을 검증한다
 - exchange_key_loader_cases.py: 거래소 키 로더가 /dev/shm/keys 우선, ~/.key fallback, access_key/secret_key 정규화, 파일 없음/오류 처리를 올바르게 하는지 검증한다
@@ -42,3 +42,4 @@
 - arbitrage_multi_exchange_selection_cases.py: 3거래소 이상 후보를 양방향 평가해 최적 selected_pair를 고르고 accept/reject/accepted_unselected 후보를 decision_context에 남기는지 검증한다
 - pair_lock_runtime_cases.py: strategy runtime이 pair lock conflict를 `PAIR_LOCK_ACTIVE`로 막고 submit/recovery/closed lifecycle에 따라 락을 refresh 또는 release 하는지 검증한다
 - arbitrage_runtime_balance_cases.py: live run이 private connector `get_balances()`를 강제하고, shadow는 runtime_config balance fallback을 유지하며, live의 manual balance source는 fail-closed 되는지 검증한다
+- private_connectors_adapter_cases.py: private_connectors execution adapter가 in-process private connector로 두 leg 주문을 제출하고, 중간 실패 시 fail-closed 하면서 생성된 order evidence를 남기는지 검증한다

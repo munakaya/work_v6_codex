@@ -42,6 +42,59 @@ def _build_payload(*, mode: str, body: dict[str, object]) -> dict[str, object]:
             "orders": [],
             "details": {"reason": "remote private submit rejected", "remote_mode": mode},
         }
+    if mode == "submitted-with-fill":
+        return {
+            "outcome": "submitted",
+            "orders": orders,
+            "fills": [
+                {
+                    "exchange_name": buy_exchange,
+                    "side": "buy",
+                    "exchange_trade_id": f"{mode}-buy-fill-001",
+                    "fill_price": "100000",
+                    "fill_qty": target_qty,
+                    "filled_at": _iso_now(),
+                }
+            ],
+            "details": {"remote_mode": mode},
+        }
+    if mode == "submit-failed-filled-order-no-fill":
+        return {
+            "outcome": "submit_failed",
+            "orders": [
+                {**orders[0], "status": "filled"},
+                orders[1],
+            ],
+            "details": {"reason": "remote private submit rejected", "remote_mode": mode},
+        }
+    if mode == "filled-bad-preview":
+        return {
+            "outcome": "filled",
+            "lifecycle_preview": "entry_submitting",
+            "orders": [
+                {**orders[0], "status": "filled"},
+                {**orders[1], "status": "filled"},
+            ],
+            "fills": [
+                {
+                    "exchange_name": buy_exchange,
+                    "side": "buy",
+                    "exchange_trade_id": f"{mode}-buy-fill-001",
+                    "fill_price": "100000",
+                    "fill_qty": target_qty,
+                    "filled_at": _iso_now(),
+                },
+                {
+                    "exchange_name": sell_exchange,
+                    "side": "sell",
+                    "exchange_trade_id": f"{mode}-sell-fill-001",
+                    "fill_price": "100500",
+                    "fill_qty": target_qty,
+                    "filled_at": _iso_now(),
+                },
+            ],
+            "details": {"remote_mode": mode},
+        }
     if mode == "submitted":
         return {
             "outcome": "submitted",

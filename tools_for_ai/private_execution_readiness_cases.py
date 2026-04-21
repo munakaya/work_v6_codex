@@ -76,9 +76,25 @@ def main() -> None:
         _assert(not_required.mode == "private_http", "not_required mode mismatch")
         _assert(not_required.temporary is True, "not_required temporary mismatch")
 
+        integrated = private_execution_status(
+            execution_enabled=True,
+            execution_mode="private_connectors",
+            submit_url=None,
+            health_url=None,
+            timeout_ms=1000,
+        )
+        _assert(integrated.state == "not_required", "integrated mode should skip external health probe")
+        _assert(integrated.mode == "private_connectors", "integrated mode mismatch")
+        _assert(
+            integrated.path_kind == "integrated_private_connectors",
+            "integrated path_kind mismatch",
+        )
+        _assert(integrated.temporary is False, "integrated temporary mismatch")
+
         print("PASS private execution health probe reachable")
         print("PASS private execution missing health url detected")
         print("PASS private execution not-required mode skipped")
+        print("PASS private_connectors mode skips external private execution health probe")
     finally:
         server.shutdown()
         server.server_close()

@@ -39,6 +39,7 @@ SUPPORTED_EXECUTION_MODES = {
     "simulate_failure",
     "simulate_fill",
     "private_http",
+    "private_connectors",
     "private_stub",
 }
 
@@ -147,6 +148,7 @@ class StrategyRuntime:
             private_execution_url=private_execution_url,
             private_execution_timeout_ms=private_execution_timeout_ms,
             private_execution_token=private_execution_token,
+            private_exchange_connectors=self.private_exchange_connectors,
         )
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
