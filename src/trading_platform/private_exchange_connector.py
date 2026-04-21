@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import socket
 from typing import Protocol
 from urllib import error, request
 
@@ -22,6 +23,13 @@ from .strategy.exchange_key_loader import (
 
 
 DEFAULT_TIMEOUT_MS = 3000
+DEFAULT_OPERATION_TIMEOUT_MS = {
+    "get_balances": 1500,
+    "place_order": 3000,
+    "get_order_status": 1500,
+    "cancel_order": 3000,
+    "list_open_orders": 2000,
+}
 
 
 @dataclass(frozen=True)
@@ -210,12 +218,17 @@ class RestPrivateExchangeConnector:
         credentials: ExchangeTradingCredentials,
         base_url: str,
         timeout_ms: int = DEFAULT_TIMEOUT_MS,
+        timeout_ms_by_operation: dict[str, int] | None = None,
     ) -> None:
         self.exchange = exchange
         self.name = f"{exchange}:private_rest"
         self._credentials = credentials
         self._base_url = base_url.rstrip("/")
-        self._timeout_ms = max(timeout_ms, 250)
+        self._default_timeout_ms = max(timeout_ms, 250)
+        merged_timeout_ms_by_operation = dict(DEFAULT_OPERATION_TIMEOUT_MS)
+        for operation_name, raw_timeout_ms in (timeout_ms_by_operation or {}).items():
+            merged_timeout_ms_by_operation[operation_name] = max(int(raw_timeout_ms), 250)
+        self._timeout_ms_by_operation = merged_timeout_ms_by_operation
 
     @property
     def info(self) -> PrivateExchangeConnectorInfo:
@@ -282,6 +295,7 @@ class RestPrivateExchangeConnector:
         query_pairs: tuple[tuple[str, str], ...] = (),
         json_body: dict[str, object] | None = None,
     ) -> object:
+        timeout_ms = self._operation_timeout_ms(operation_name)
         url = self._base_url + path
         if query_pairs:
             url = f"{url}?{build_query_string(query_pairs)}"
@@ -292,7 +306,7 @@ class RestPrivateExchangeConnector:
             request_headers.setdefault("Content-Type", "application/json")
         req = request.Request(url, method=method, data=data, headers=request_headers)
         try:
-            with request.urlopen(req, timeout=self._timeout_ms / 1000.0) as response:
+            with request.urlopen(req, timeout=timeout_ms / 1000.0) as response:
                 raw_text = response.read().decode("utf-8")
                 payload = _decode_json_payload(raw_text)
                 return self._unwrap_success_payload(
@@ -310,6 +324,16 @@ class RestPrivateExchangeConnector:
                 payload=payload,
             ) from exc
         except error.URLError as exc:
+            if _is_timeout_exception(exc.reason):
+                raise PrivateExchangeApiError(
+                    exchange=self.exchange,
+                    operation_name=operation_name,
+                    internal_code="NETWORK_ERROR",
+                    reason=(
+                        f"{self.exchange} {operation_name} request timed out after {timeout_ms}ms"
+                    ),
+                    retryable=True,
+                ) from exc
             raise PrivateExchangeApiError(
                 exchange=self.exchange,
                 operation_name=operation_name,
@@ -322,9 +346,15 @@ class RestPrivateExchangeConnector:
                 exchange=self.exchange,
                 operation_name=operation_name,
                 internal_code="NETWORK_ERROR",
-                reason=f"{self.exchange} request timed out",
+                reason=f"{self.exchange} {operation_name} request timed out after {timeout_ms}ms",
                 retryable=True,
             ) from exc
+
+    def _operation_timeout_ms(self, operation_name: str) -> int:
+        return max(
+            int(self._timeout_ms_by_operation.get(operation_name, self._default_timeout_ms)),
+            250,
+        )
 
     def _unwrap_success_payload(
         self,
@@ -761,11 +791,19 @@ def build_private_exchange_connector(
         "coinone": CoinonePrivateExchangeConnector,
     }
     connector_class = connector_class_by_exchange[exchange]
+    timeout_ms_by_operation = {
+        "get_balances": config.private_exchange_get_balances_timeout_ms,
+        "place_order": config.private_exchange_place_order_timeout_ms,
+        "get_order_status": config.private_exchange_get_order_status_timeout_ms,
+        "cancel_order": config.private_exchange_cancel_order_timeout_ms,
+        "list_open_orders": config.private_exchange_list_open_orders_timeout_ms,
+    }
     return connector_class(
         exchange=exchange,
         credentials=credentials,
         base_url=base_url_by_exchange[exchange],
-        timeout_ms=config.market_data_timeout_ms,
+        timeout_ms=max(timeout_ms_by_operation.values(), default=DEFAULT_TIMEOUT_MS),
+        timeout_ms_by_operation=timeout_ms_by_operation,
     )
 
 
@@ -831,6 +869,10 @@ def _decode_json_payload(raw_text: str) -> object:
         return json.loads(stripped)
     except json.JSONDecodeError:
         return {"raw_text": stripped}
+
+
+def _is_timeout_exception(value: object) -> bool:
+    return isinstance(value, (TimeoutError, socket.timeout))
 
 
 def _normalize_market(exchange: str, market: str) -> ExchangeMarket:

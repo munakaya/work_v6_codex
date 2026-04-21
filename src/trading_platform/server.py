@@ -385,6 +385,7 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         exchange=config.market_data_poll_exchange,
         markets=config.market_data_poll_markets,
         interval_ms=config.market_data_poll_interval_ms,
+        startup_jitter_ms=config.market_data_poll_startup_jitter_ms,
         connector=market_data_runtime_connector,
         metrics=metrics,
         redis_runtime=redis_runtime,

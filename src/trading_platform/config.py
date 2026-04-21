@@ -78,6 +78,7 @@ class AppConfig:
     market_data_poll_exchange: str
     market_data_poll_markets: tuple[str, ...]
     market_data_poll_interval_ms: int
+    market_data_poll_startup_jitter_ms: int
     app_env: str
     admin_token: str | None
     write_api_require_admin_token: bool
@@ -88,6 +89,11 @@ class AppConfig:
     strategy_runtime_persist_intent: bool
     strategy_runtime_execution_enabled: bool
     strategy_runtime_execution_mode: str
+    private_exchange_get_balances_timeout_ms: int
+    private_exchange_place_order_timeout_ms: int
+    private_exchange_get_order_status_timeout_ms: int
+    private_exchange_cancel_order_timeout_ms: int
+    private_exchange_list_open_orders_timeout_ms: int
     strategy_private_execution_url: str | None
     strategy_private_execution_health_url: str | None
     strategy_private_execution_token: str | None
@@ -182,6 +188,9 @@ def load_config() -> AppConfig:
         market_data_poll_exchange=os.getenv("TP_MARKET_DATA_POLL_EXCHANGE", "upbit"),
         market_data_poll_markets=_env_csv("TP_MARKET_DATA_POLL_MARKETS"),
         market_data_poll_interval_ms=_env_int("TP_MARKET_DATA_POLL_INTERVAL_MS", 3000),
+        market_data_poll_startup_jitter_ms=_env_int(
+            "TP_MARKET_DATA_POLL_STARTUP_JITTER_MS", 500
+        ),
         app_env=app_env,
         admin_token=os.getenv("TP_ADMIN_TOKEN"),
         write_api_require_admin_token=(
@@ -206,6 +215,21 @@ def load_config() -> AppConfig:
             "TP_STRATEGY_RUNTIME_EXECUTION_MODE", "simulate_success"
         ).strip()
         or "simulate_success",
+        private_exchange_get_balances_timeout_ms=_env_int(
+            "TP_PRIVATE_EXCHANGE_GET_BALANCES_TIMEOUT_MS", 1500
+        ),
+        private_exchange_place_order_timeout_ms=_env_int(
+            "TP_PRIVATE_EXCHANGE_PLACE_ORDER_TIMEOUT_MS", 3000
+        ),
+        private_exchange_get_order_status_timeout_ms=_env_int(
+            "TP_PRIVATE_EXCHANGE_GET_ORDER_STATUS_TIMEOUT_MS", 1500
+        ),
+        private_exchange_cancel_order_timeout_ms=_env_int(
+            "TP_PRIVATE_EXCHANGE_CANCEL_ORDER_TIMEOUT_MS", 3000
+        ),
+        private_exchange_list_open_orders_timeout_ms=_env_int(
+            "TP_PRIVATE_EXCHANGE_LIST_OPEN_ORDERS_TIMEOUT_MS", 2000
+        ),
         strategy_private_execution_url=os.getenv("TP_STRATEGY_PRIVATE_EXECUTION_URL"),
         strategy_private_execution_health_url=os.getenv(
             "TP_STRATEGY_PRIVATE_EXECUTION_HEALTH_URL"

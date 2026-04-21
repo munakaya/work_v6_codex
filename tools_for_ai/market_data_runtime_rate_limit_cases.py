@@ -91,6 +91,14 @@ def main() -> None:
         items = {item["name"]: item for item in rate_limits["items"]}
         _assert(items["upbit_public_rest"]["rate_per_sec"] == 5.0, "upbit rps mismatch")
         _assert(items["upbit_public_rest"]["burst"] == 2, "upbit burst mismatch")
+        _assert(
+            items["upbit_public_rest"]["runtime_stats"]["wait_count"] == 0,
+            "upbit runtime stats wait count mismatch",
+        )
+        _assert(
+            items["upbit_public_rest"]["runtime_stats"]["retry_attempt_count"] == 0,
+            "upbit runtime stats retry count mismatch",
+        )
         _assert(items["coinone_public_rest"]["enabled"] is False, "coinone enabled mismatch")
         _assert(rate_limits["orderbook_depth_levels"] == 7, "orderbook depth level mismatch")
         print("PASS market data runtime exposes rate limit config")

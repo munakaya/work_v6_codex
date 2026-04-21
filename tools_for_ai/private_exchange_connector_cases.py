@@ -3,13 +3,18 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import tempfile
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from trading_platform.config import load_config
 from trading_platform.private_exchange_connector import (
     RestPrivateExchangeConnector,
+    UpbitPrivateExchangeConnector,
     build_private_exchange_connector,
     build_private_exchange_connectors,
 )
+from trading_platform.strategy.exchange_key_loader import ExchangeTradingCredentials
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -24,6 +29,27 @@ def _assert(condition: bool, message: str) -> None:
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+class _SlowHandler(BaseHTTPRequestHandler):
+    delay_seconds = 0.3
+
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path != "/v1/accounts":
+            self.send_response(404)
+            self.end_headers()
+            return
+        time.sleep(type(self).delay_seconds)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        try:
+            self.wfile.write(b"[]")
+        except BrokenPipeError:
+            return
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+        return
 
 
 def main() -> None:
@@ -78,6 +104,38 @@ def main() -> None:
             bundle = build_private_exchange_connectors(config=config)
             _assert(set(bundle) == {"upbit", "bithumb", "coinone"}, "bundle keys mismatch")
             print("PASS private exchange connector readiness")
+
+            credentials = ExchangeTradingCredentials(
+                exchange="upbit",
+                access_key="upbit-access",
+                secret_key="upbit-secret",
+                source_path=primary_dir / "upbit_trading.json",
+            )
+            server = ThreadingHTTPServer(("127.0.0.1", 0), _SlowHandler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = server.server_address
+                timeout_connector = UpbitPrivateExchangeConnector(
+                    exchange="upbit",
+                    credentials=credentials,
+                    base_url=f"http://{host}:{port}",
+                    timeout_ms=100,
+                    timeout_ms_by_operation={"get_balances": 100},
+                )
+                result = timeout_connector.get_balances()
+                _assert(result.outcome == "error", "timeout result should be error")
+                _assert(result.error_code == "NETWORK_ERROR", "timeout error code mismatch")
+                _assert(result.retryable is True, "timeout should be retryable")
+                _assert(
+                    "get_balances request timed out after" in str(result.reason),
+                    "timeout reason should include operation and timeout",
+                )
+                print("PASS private exchange connector applies operation timeout budget")
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=1.0)
         finally:
             if previous_primary is None:
                 os.environ.pop("TP_EXCHANGE_KEY_PRIMARY_DIR", None)

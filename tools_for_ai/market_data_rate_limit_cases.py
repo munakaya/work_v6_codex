@@ -87,6 +87,13 @@ def main() -> None:
         _assert(isinstance(payload, list), "retry payload should succeed")
         _assert(_RetryHandler.call_count == 3, "retry path should call endpoint three times")
         _assert(elapsed >= 0.0, "retry elapsed should be measurable")
+        rate_limit_items = {
+            item["name"]: item for item in connector.describe_rate_limits()["items"]
+        }
+        runtime_stats = rate_limit_items["upbit_public_rest"]["runtime_stats"]
+        _assert(runtime_stats["upstream_rate_limited_count"] == 2, "429 count mismatch")
+        _assert(runtime_stats["retry_attempt_count"] == 2, "retry count mismatch")
+        _assert(runtime_stats["wait_count"] == 0, "disabled limiter should not wait")
         snapshot = connector.get_orderbook_top(exchange="upbit", market="KRW-BTC")
         _assert(snapshot["asks"] == [{"price": "101", "quantity": "1"}], "ask levels mismatch")
         _assert(snapshot["bids"] == [{"price": "100", "quantity": "1"}], "bid levels mismatch")
@@ -95,6 +102,7 @@ def main() -> None:
         _assert(cached["best_ask"] == "101", "cached snapshot best ask mismatch")
         _assert(connector._coinone_request_depth_levels() == 10, "coinone supported depth rounding mismatch")
         print("PASS market data retry with backoff")
+        print("PASS market data runtime rate-limit stats track 429 and retry attempts")
         print("PASS market data snapshot includes normalized orderbook depth")
         print("PASS market data connector caches latest snapshot")
         print("PASS coinone request depth rounds up to supported size")

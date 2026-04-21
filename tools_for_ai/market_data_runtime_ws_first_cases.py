@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from http import HTTPStatus
+import threading
 
 from trading_platform.market_data_connector import MarketDataError
 from trading_platform.market_data_runtime import MarketDataRuntime
@@ -80,6 +81,21 @@ class RecordingWsConnector(RecordingRestConnector):
         return snapshot
 
 
+class SlowRestConnector(RecordingRestConnector):
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = threading.Event()
+        self.release = threading.Event()
+
+    def get_orderbook_top(self, *, exchange: str, market: str) -> dict[str, object]:
+        self.calls.append((exchange, market))
+        self.started.set()
+        self.release.wait(timeout=2.0)
+        snapshot = _snapshot(exchange=exchange, market=market, source_type="rest")
+        self.sync_cached_orderbook_top(snapshot=snapshot)
+        return snapshot
+
+
 def main() -> None:
     rest_connector = RecordingRestConnector()
     ws_connector = RecordingWsConnector()
@@ -143,6 +159,41 @@ def main() -> None:
     print("PASS market data runtime uses websocket first for supported exchanges")
     print("PASS market data runtime falls back to rest and exposes fallback diagnostics")
     print("PASS market data runtime keeps unsupported exchanges on rest-only policy")
+
+    slow_connector = SlowRestConnector()
+    inflight_runtime = MarketDataRuntime(
+        enabled=True,
+        exchange="upbit",
+        markets=("KRW-BTC",),
+        interval_ms=1000,
+        connector=slow_connector,
+        metrics=MetricsRegistry(),
+        redis_runtime=RedisRuntime(None, "tp", "control-plane"),
+        read_store=sample_read_store(),
+    )
+    first_result: dict[str, object] = {}
+
+    def _run_first_refresh() -> None:
+        snapshots, errors = inflight_runtime.refresh(exchange="upbit", markets=["KRW-BTC"])
+        first_result["snapshots"] = snapshots
+        first_result["errors"] = errors
+
+    thread = threading.Thread(target=_run_first_refresh, daemon=True)
+    thread.start()
+    _assert(slow_connector.started.wait(timeout=1.0), "first refresh should start")
+    skipped_snapshots, skipped_errors = inflight_runtime.refresh(
+        exchange="upbit",
+        markets=["KRW-BTC"],
+    )
+    _assert(not skipped_snapshots, "second refresh should skip inflight target")
+    _assert(len(skipped_errors) == 1, "second refresh should report one skip")
+    _assert(skipped_errors[0]["code"] == "FETCH_INFLIGHT", "inflight skip code mismatch")
+    slow_connector.release.set()
+    thread.join(timeout=1.0)
+    _assert(thread.is_alive() is False, "first refresh thread should complete")
+    _assert(len(first_result.get("snapshots") or []) == 1, "first refresh should still succeed")
+    _assert(inflight_runtime.info.inflight_skip_count == 1, "inflight skip count mismatch")
+    print("PASS market data runtime skips duplicate inflight refreshes")
 
 
 if __name__ == "__main__":

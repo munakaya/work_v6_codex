@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import logging
+import random
 import threading
 from typing import Sequence
 
@@ -27,6 +28,7 @@ class MarketDataRuntimeInfo:
     target_count: int
     target_groups: list[dict[str, object]]
     interval_ms: int
+    startup_jitter_ms: int
     running: bool
     state: str
     last_success_at: str | None
@@ -41,6 +43,7 @@ class MarketDataRuntimeInfo:
     missing_snapshot_count: int
     fallback_active: bool
     fallback_count: int
+    inflight_skip_count: int
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -50,6 +53,7 @@ class MarketDataRuntimeInfo:
             "target_count": self.target_count,
             "target_groups": self.target_groups,
             "interval_ms": self.interval_ms,
+            "startup_jitter_ms": self.startup_jitter_ms,
             "running": self.running,
             "state": self.state,
             "last_success_at": self.last_success_at,
@@ -64,6 +68,7 @@ class MarketDataRuntimeInfo:
             "missing_snapshot_count": self.missing_snapshot_count,
             "fallback_active": self.fallback_active,
             "fallback_count": self.fallback_count,
+            "inflight_skip_count": self.inflight_skip_count,
         }
 
 
@@ -79,11 +84,13 @@ class MarketDataRuntime:
         metrics: MetricsRegistry,
         redis_runtime: RedisRuntime,
         read_store: ControlPlaneStoreProtocol | None = None,
+        startup_jitter_ms: int = 0,
     ) -> None:
         self.enabled = enabled
         self.exchange = exchange.strip().lower()
         self.markets = tuple(m.strip().upper() for m in markets if m.strip())
         self.interval_ms = max(interval_ms, 250)
+        self.startup_jitter_ms = max(startup_jitter_ms, 0)
         self.connector = connector
         self.metrics = metrics
         self.redis_runtime = redis_runtime
@@ -101,6 +108,8 @@ class MarketDataRuntime:
         self._fallback_count_by_exchange: dict[str, int] = {}
         self._last_fallback_at_by_exchange: dict[str, str] = {}
         self._last_fallback_reason_by_exchange: dict[str, str] = {}
+        self._inflight_targets: set[tuple[str, str]] = set()
+        self._inflight_skip_count = 0
 
     @property
     def info(self) -> MarketDataRuntimeInfo:
@@ -129,6 +138,7 @@ class MarketDataRuntime:
                     for exchange, markets in target_groups
                 ],
                 interval_ms=self.interval_ms,
+                startup_jitter_ms=self.startup_jitter_ms,
                 running=self._running,
                 state=self._state_name(fallback_active=fallback_active),
                 last_success_at=self._last_success_at,
@@ -143,6 +153,7 @@ class MarketDataRuntime:
                 missing_snapshot_count=missing_snapshot_count,
                 fallback_active=fallback_active,
                 fallback_count=fallback_count,
+                inflight_skip_count=self._inflight_skip_count,
             )
 
     def start(self) -> None:
@@ -195,6 +206,9 @@ class MarketDataRuntime:
 
     def _run_loop(self) -> None:
         try:
+            startup_jitter_ms = self._startup_jitter_ms()
+            if startup_jitter_ms > 0 and self._stop_event.wait(startup_jitter_ms / 1000.0):
+                return
             while not self._stop_event.is_set():
                 self._poll_once()
                 if self._stop_event.wait(self.interval_ms / 1000):
@@ -217,6 +231,16 @@ class MarketDataRuntime:
         for market in normalized_markets:
             if self._stop_event.is_set():
                 break
+            if not self._acquire_inflight_target(exchange=normalized_exchange, market=market):
+                errors.append(
+                    {
+                        "market": market,
+                        "code": "FETCH_INFLIGHT",
+                        "message": "market fetch already in progress",
+                        "status": 409,
+                    }
+                )
+                continue
             try:
                 snapshot = self.connector.get_orderbook_top(
                     exchange=normalized_exchange,
@@ -232,9 +256,11 @@ class MarketDataRuntime:
                         "status": exc.status.value,
                     }
                 )
-                continue
-            self._record_snapshot(snapshot, trace_id=trace_id)
-            snapshots.append(snapshot)
+            else:
+                self._record_snapshot(snapshot, trace_id=trace_id)
+                snapshots.append(snapshot)
+            finally:
+                self._release_inflight_target(exchange=normalized_exchange, market=market)
         return snapshots, errors
 
     def _target_groups(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
@@ -469,3 +495,22 @@ class MarketDataRuntime:
                 "event_name": "market_data_poll_failed",
             },
         )
+
+    def _acquire_inflight_target(self, *, exchange: str, market: str) -> bool:
+        normalized_key = (exchange.strip().lower(), market.strip().upper())
+        with self._lock:
+            if normalized_key in self._inflight_targets:
+                self._inflight_skip_count += 1
+                return False
+            self._inflight_targets.add(normalized_key)
+            return True
+
+    def _release_inflight_target(self, *, exchange: str, market: str) -> None:
+        normalized_key = (exchange.strip().lower(), market.strip().upper())
+        with self._lock:
+            self._inflight_targets.discard(normalized_key)
+
+    def _startup_jitter_ms(self) -> int:
+        if self.startup_jitter_ms <= 0:
+            return 0
+        return random.randint(0, self.startup_jitter_ms)

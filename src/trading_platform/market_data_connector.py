@@ -54,6 +54,28 @@ class MarketDataError(Exception):
     message: str
 
 
+@dataclass(frozen=True)
+class RateLimitRuntimeStats:
+    wait_count: int = 0
+    wait_seconds_total: float = 0.0
+    last_wait_seconds: float = 0.0
+    upstream_rate_limited_count: int = 0
+    retry_attempt_count: int = 0
+    last_retry_delay_ms: int = 0
+    last_rate_limited_at: str | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "wait_count": self.wait_count,
+            "wait_seconds_total": round(self.wait_seconds_total, 6),
+            "last_wait_seconds": round(self.last_wait_seconds, 6),
+            "upstream_rate_limited_count": self.upstream_rate_limited_count,
+            "retry_attempt_count": self.retry_attempt_count,
+            "last_retry_delay_ms": self.last_retry_delay_ms,
+            "last_rate_limited_at": self.last_rate_limited_at,
+        }
+
+
 class PublicMarketDataConnector:
     def __init__(
         self,
@@ -83,6 +105,11 @@ class PublicMarketDataConnector:
         }
         self._snapshot_lock = threading.Lock()
         self._latest_snapshots: dict[tuple[str, str], dict[str, object]] = {}
+        self._rate_limit_stats_lock = threading.Lock()
+        self._rate_limit_stats_by_exchange: dict[str, RateLimitRuntimeStats] = {
+            exchange: RateLimitRuntimeStats()
+            for exchange in self.rate_limit_policies
+        }
 
     def get_orderbook_top(self, *, exchange: str, market: str) -> dict[str, object]:
         normalized_exchange = exchange.strip().lower()
@@ -459,12 +486,11 @@ class PublicMarketDataConnector:
         return normalized
 
     def describe_rate_limits(self) -> dict[str, object]:
-        items = [
-            policy.as_dict()
-            for _exchange, policy in sorted(
-                self.rate_limit_policies.items(), key=lambda item: item[0]
-            )
-        ]
+        items: list[dict[str, object]] = []
+        for exchange, policy in sorted(self.rate_limit_policies.items(), key=lambda item: item[0]):
+            item = policy.as_dict()
+            item["runtime_stats"] = self._rate_limit_runtime_stats(exchange).as_dict()
+            items.append(item)
         return {
             "items": items,
             "count": len(items),
@@ -476,15 +502,21 @@ class PublicMarketDataConnector:
     def _fetch_json(self, url: str, *, exchange: str) -> object:
         limiter = self._rate_limiters.get(exchange)
         if limiter is not None:
-            limiter.acquire()
+            waited_seconds = limiter.acquire()
+            if waited_seconds > 0:
+                self._record_rate_limit_wait(exchange=exchange, waited_seconds=waited_seconds)
         attempt = 0
         while True:
             try:
                 return self._fetch_json_once(url)
             except MarketDataError as exc:
+                if exc.code == "UPSTREAM_RATE_LIMITED":
+                    self._record_upstream_rate_limited(exchange=exchange)
                 if not self._should_retry(exc=exc, attempt=attempt):
                     raise
-                time.sleep(self.retry_backoff.delay_seconds(attempt))
+                delay_seconds = self.retry_backoff.delay_seconds(attempt)
+                self._record_retry_attempt(exchange=exchange, delay_seconds=delay_seconds)
+                time.sleep(delay_seconds)
                 attempt += 1
 
     def _fetch_json_once(self, url: str) -> object:
@@ -559,3 +591,50 @@ class PublicMarketDataConnector:
         if not isinstance(message, str) or not message:
             return None
         return message
+
+    def _rate_limit_runtime_stats(self, exchange: str) -> RateLimitRuntimeStats:
+        normalized_exchange = exchange.strip().lower()
+        with self._rate_limit_stats_lock:
+            return self._rate_limit_stats_by_exchange.get(normalized_exchange, RateLimitRuntimeStats())
+
+    def _record_rate_limit_wait(self, *, exchange: str, waited_seconds: float) -> None:
+        normalized_exchange = exchange.strip().lower()
+        with self._rate_limit_stats_lock:
+            current = self._rate_limit_stats_by_exchange.get(normalized_exchange, RateLimitRuntimeStats())
+            self._rate_limit_stats_by_exchange[normalized_exchange] = RateLimitRuntimeStats(
+                wait_count=current.wait_count + 1,
+                wait_seconds_total=current.wait_seconds_total + max(waited_seconds, 0.0),
+                last_wait_seconds=max(waited_seconds, 0.0),
+                upstream_rate_limited_count=current.upstream_rate_limited_count,
+                retry_attempt_count=current.retry_attempt_count,
+                last_retry_delay_ms=current.last_retry_delay_ms,
+                last_rate_limited_at=current.last_rate_limited_at,
+            )
+
+    def _record_upstream_rate_limited(self, *, exchange: str) -> None:
+        normalized_exchange = exchange.strip().lower()
+        with self._rate_limit_stats_lock:
+            current = self._rate_limit_stats_by_exchange.get(normalized_exchange, RateLimitRuntimeStats())
+            self._rate_limit_stats_by_exchange[normalized_exchange] = RateLimitRuntimeStats(
+                wait_count=current.wait_count,
+                wait_seconds_total=current.wait_seconds_total,
+                last_wait_seconds=current.last_wait_seconds,
+                upstream_rate_limited_count=current.upstream_rate_limited_count + 1,
+                retry_attempt_count=current.retry_attempt_count,
+                last_retry_delay_ms=current.last_retry_delay_ms,
+                last_rate_limited_at=_iso_now(),
+            )
+
+    def _record_retry_attempt(self, *, exchange: str, delay_seconds: float) -> None:
+        normalized_exchange = exchange.strip().lower()
+        with self._rate_limit_stats_lock:
+            current = self._rate_limit_stats_by_exchange.get(normalized_exchange, RateLimitRuntimeStats())
+            self._rate_limit_stats_by_exchange[normalized_exchange] = RateLimitRuntimeStats(
+                wait_count=current.wait_count,
+                wait_seconds_total=current.wait_seconds_total,
+                last_wait_seconds=current.last_wait_seconds,
+                upstream_rate_limited_count=current.upstream_rate_limited_count,
+                retry_attempt_count=current.retry_attempt_count + 1,
+                last_retry_delay_ms=max(int(delay_seconds * 1000), 0),
+                last_rate_limited_at=current.last_rate_limited_at,
+            )
