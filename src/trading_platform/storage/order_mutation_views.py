@@ -5,6 +5,10 @@ from decimal import Decimal
 from uuid import uuid4
 
 
+VALID_ORDER_STATUSES = {"new", "partially_filled", "filled", "cancelled", "rejected", "expired"}
+TERMINAL_ORDER_STATUSES = {"filled", "cancelled", "rejected", "expired"}
+
+
 def _sample_time() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
@@ -106,6 +110,28 @@ def create_order(
     if intent["status"] == "created":
         intent["status"] = "submitted"
     return "created", order
+
+
+def update_order_status(
+    *,
+    orders: dict[str, dict[str, object]],
+    order_id: str,
+    status: str,
+) -> tuple[str, dict[str, object] | None]:
+    order = orders.get(order_id)
+    if order is None:
+        return "not_found", None
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status not in VALID_ORDER_STATUSES:
+        return "invalid", None
+    current_status = str(order.get("status") or "").strip().lower()
+    if current_status in TERMINAL_ORDER_STATUSES and current_status != normalized_status:
+        return "conflict", order
+    if current_status == normalized_status:
+        return "updated", order
+    order["status"] = normalized_status
+    order["updated_at"] = _sample_time()
+    return "updated", order
 
 
 def create_fill(

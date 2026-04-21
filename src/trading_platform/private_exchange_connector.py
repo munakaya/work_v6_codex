@@ -137,6 +137,10 @@ class PrivateExchangeConnectorProtocol(Protocol):
         self, *, exchange_order_id: str, market: str
     ) -> PrivateExchangeResult: ...
 
+    def cancel_order(
+        self, *, exchange_order_id: str, market: str
+    ) -> PrivateExchangeResult: ...
+
     def list_open_orders(self, *, market: str | None = None) -> PrivateExchangeResult: ...
 
 
@@ -174,6 +178,11 @@ class MissingCredentialsPrivateExchangeConnector:
         return self._unavailable_result()
 
     def get_order_status(
+        self, *, exchange_order_id: str, market: str
+    ) -> PrivateExchangeResult:
+        return self._unavailable_result()
+
+    def cancel_order(
         self, *, exchange_order_id: str, market: str
     ) -> PrivateExchangeResult:
         return self._unavailable_result()
@@ -234,6 +243,11 @@ class RestPrivateExchangeConnector:
         raise NotImplementedError
 
     def get_order_status(
+        self, *, exchange_order_id: str, market: str
+    ) -> PrivateExchangeResult:
+        raise NotImplementedError
+
+    def cancel_order(
         self, *, exchange_order_id: str, market: str
     ) -> PrivateExchangeResult:
         raise NotImplementedError
@@ -408,6 +422,37 @@ class UpbitPrivateExchangeConnector(RestPrivateExchangeConnector):
         except PrivateExchangeApiError as exc:
             return self._handle_api_error(exc)
 
+    def cancel_order(
+        self, *, exchange_order_id: str, market: str
+    ) -> PrivateExchangeResult:
+        try:
+            exchange_market = _normalize_market(self.exchange, market)
+            query_pairs = (("uuid", exchange_order_id),)
+            payload = self._request(
+                operation_name="cancel_order",
+                method="DELETE",
+                path="/v1/order",
+                headers={
+                    "Authorization": build_bearer_authorization(
+                        create_upbit_jwt_token(
+                            self._credentials.access_key,
+                            self._credentials.secret_key,
+                            query_string=build_query_string(query_pairs),
+                        )
+                    )
+                },
+                query_pairs=query_pairs,
+            )
+            normalized = _normalize_upbit_order(payload)
+            normalized = _apply_order_market_fallback(
+                normalized,
+                exchange_market=exchange_market,
+                exchange_order_id=exchange_order_id,
+            )
+            return self._ok(normalized, raw_payload=payload)
+        except PrivateExchangeApiError as exc:
+            return self._handle_api_error(exc)
+
     def list_open_orders(self, *, market: str | None = None) -> PrivateExchangeResult:
         try:
             query_pairs = (("market", _normalize_market(self.exchange, market).exchange_symbol),) if market else ()
@@ -499,6 +544,37 @@ class BithumbPrivateExchangeConnector(RestPrivateExchangeConnector):
                 query_pairs=query_pairs,
             )
             return self._ok(_normalize_bithumb_order(payload), raw_payload=payload)
+        except PrivateExchangeApiError as exc:
+            return self._handle_api_error(exc)
+
+    def cancel_order(
+        self, *, exchange_order_id: str, market: str
+    ) -> PrivateExchangeResult:
+        try:
+            exchange_market = _normalize_market(self.exchange, market)
+            query_pairs = (("uuid", exchange_order_id),)
+            payload = self._request(
+                operation_name="cancel_order",
+                method="DELETE",
+                path="/v1/order",
+                headers={
+                    "Authorization": build_bearer_authorization(
+                        create_bithumb_jwt_token(
+                            self._credentials.access_key,
+                            self._credentials.secret_key,
+                            query_string=build_query_string(query_pairs),
+                        )
+                    )
+                },
+                query_pairs=query_pairs,
+            )
+            normalized = _normalize_bithumb_order(payload)
+            normalized = _apply_order_market_fallback(
+                normalized,
+                exchange_market=exchange_market,
+                exchange_order_id=exchange_order_id,
+            )
+            return self._ok(normalized, raw_payload=payload)
         except PrivateExchangeApiError as exc:
             return self._handle_api_error(exc)
 
@@ -600,6 +676,37 @@ class CoinonePrivateExchangeConnector(RestPrivateExchangeConnector):
                 json_body=body,
             )
             return self._ok(_normalize_coinone_order(payload), raw_payload=payload)
+        except PrivateExchangeApiError as exc:
+            return self._handle_api_error(exc)
+
+    def cancel_order(
+        self, *, exchange_order_id: str, market: str
+    ) -> PrivateExchangeResult:
+        try:
+            exchange_market = _normalize_market(self.exchange, market)
+            headers, body, _encoded = build_coinone_private_headers(
+                {
+                    "order_id": exchange_order_id,
+                    "quote_currency": exchange_market.quote_currency,
+                    "target_currency": exchange_market.target_currency,
+                },
+                access_key=self._credentials.access_key,
+                secret_key=self._credentials.secret_key,
+            )
+            payload = self._request(
+                operation_name="cancel_order",
+                method="POST",
+                path="/v2.1/order/cancel",
+                headers=headers,
+                json_body=body,
+            )
+            normalized = _normalize_coinone_order(payload)
+            normalized = _apply_order_market_fallback(
+                normalized,
+                exchange_market=exchange_market,
+                exchange_order_id=exchange_order_id,
+            )
+            return self._ok(normalized, raw_payload=payload)
         except PrivateExchangeApiError as exc:
             return self._handle_api_error(exc)
 
@@ -889,6 +996,22 @@ def _build_coinone_order_payload(request_payload: dict[str, object]) -> dict[str
     return body
 
 
+def _apply_order_market_fallback(
+    payload: dict[str, object],
+    *,
+    exchange_market: ExchangeMarket,
+    exchange_order_id: str,
+) -> dict[str, object]:
+    updated = dict(payload)
+    if not updated.get("exchange_order_id"):
+        updated["exchange_order_id"] = exchange_order_id
+    if not updated.get("market"):
+        updated["market"] = exchange_market.canonical_symbol
+    if not updated.get("exchange_market"):
+        updated["exchange_market"] = exchange_market.exchange_symbol
+    return updated
+
+
 def _normalize_upbit_balance(item: dict[str, object]) -> dict[str, object]:
     currency = str(item.get("currency") or "")
     unit_currency = str(item.get("unit_currency") or "")
@@ -952,7 +1075,7 @@ def _normalize_bithumb_order(payload: object) -> dict[str, object]:
     item = payload if isinstance(payload, dict) else {}
     market = str(item.get("market") or "")
     exchange_market = _normalize_market("bithumb", market) if market else None
-    raw_state = str(item.get("state") or item.get("order_state") or "")
+    raw_state = str(item.get("state") or item.get("order_state") or item.get("status") or "")
     return {
         "exchange_order_id": str(item.get("uuid") or item.get("order_id") or ""),
         "client_order_id": item.get("client_order_id"),
@@ -1053,11 +1176,11 @@ def _normalize_upbit_order_status(raw_state: str) -> str:
 
 def _normalize_bithumb_order_status(raw_state: str) -> str:
     normalized = raw_state.strip().lower()
-    if normalized in {"wait", "watch"}:
+    if normalized in {"wait", "watch", "pending"}:
         return "open"
     if normalized == "done":
         return "filled"
-    if normalized == "cancel":
+    if normalized in {"cancel", "cancelled"}:
         return "cancelled"
     return normalized or "unknown"
 
@@ -1070,6 +1193,7 @@ def _normalize_coinone_order_status(raw_state: str) -> str:
         "PARTIALLY_CANCELED": "partially_cancelled",
         "FILLED": "filled",
         "CANCELED": "cancelled",
+        "CANCEL": "cancelled",
     }
     return mapping.get(normalized, normalized.lower() or "unknown")
 

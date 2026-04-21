@@ -172,6 +172,29 @@
 - `linked_unwind_order_id`
 - `created_unwind_order`
 
+#### `POST /api/v1/recovery-traces/{recovery_trace_id}/cancel-open-orders`
+
+목적:
+
+- operator가 recovery trace에 연결된 entry/unwind open order들을 private connector cancel API로 취소
+- linked unwind intent가 있으면 `intent_id`와 `linked_unwind_action_id` 양쪽의 non-terminal order를 함께 취소 대상으로 본다
+- 취소 결과는 trace patch에 남고, recovery runtime이 다음 reconciliation에서 resolve 또는 handoff를 이어서 판단한다
+
+요청 핵심 필드:
+
+- `verified_by` (선택)
+- `summary` (선택)
+- `operator_context` (선택)
+
+응답 핵심 필드:
+
+- `cancel_results`
+- `updated_orders`
+- `cancelled_order_ids`
+- `cancel_failed_order_ids`
+- `cancel_remaining_open_order_ids`
+- `latest_evaluation` (있으면 포함)
+
 #### `POST /api/v1/recovery-traces/{recovery_trace_id}/record-unwind-fill`
 
 목적:

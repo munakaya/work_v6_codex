@@ -276,6 +276,42 @@ paths:
         '503':
           description: Redis runtime unavailable
 
+  /api/v1/recovery-traces/{recovery_trace_id}/cancel-open-orders:
+    post:
+      tags: [Recovery]
+      summary: Cancel open entry and unwind orders linked to recovery trace
+      operationId: cancelRecoveryTraceOpenOrders
+      parameters:
+        - in: path
+          name: recovery_trace_id
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: X-Trace-Id
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryTraceActionRequest'
+      responses:
+        '200':
+          description: Cancel attempts recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryTraceResponse'
+        '404':
+          description: Recovery trace not found
+        '409':
+          description: Recovery trace already terminal or no open linked order remains
+        '503':
+          description: Redis runtime unavailable
+
   /api/v1/recovery-traces/{recovery_trace_id}/record-unwind-fill:
     post:
       tags: [Recovery]

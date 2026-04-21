@@ -8,6 +8,10 @@ from .postgres_driver import PostgresDriverAdapter
 from .postgres_view_utils import uuid_or_none
 
 
+VALID_ORDER_STATUSES = {"new", "partially_filled", "filled", "cancelled", "rejected", "expired"}
+TERMINAL_ORDER_STATUSES = {"filled", "cancelled", "rejected", "expired"}
+
+
 def create_order_intent(
     adapter: PostgresDriverAdapter,
     *,
@@ -188,6 +192,46 @@ def create_order(
         (intent_uuid,),
     )
     return "created", get_order_detail(adapter, str(row["order_id"]))
+
+
+def update_order_status(
+    adapter: PostgresDriverAdapter,
+    *,
+    order_id: str,
+    status: str,
+) -> tuple[str, dict[str, object] | None]:
+    order_uuid = uuid_or_none(order_id)
+    if order_uuid is None:
+        return "not_found", None
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status not in VALID_ORDER_STATUSES:
+        return "invalid", None
+    current = adapter.fetch_one(
+        """
+        select status::text as status
+        from orders
+        where id = %s::uuid
+        """,
+        (order_uuid,),
+    )
+    if current is None:
+        return "not_found", None
+    current_status = str(current.get("status") or "").strip().lower()
+    if current_status in TERMINAL_ORDER_STATUSES and current_status != normalized_status:
+        return "conflict", get_order_detail(adapter, order_id)
+    row = adapter.fetch_one(
+        """
+        update orders
+        set status = %s::order_status,
+            updated_at = now()
+        where id = %s::uuid
+        returning id::text as order_id
+        """,
+        (normalized_status, order_uuid),
+    )
+    if row is None:
+        return "not_found", None
+    return "updated", get_order_detail(adapter, str(row["order_id"]))
 
 
 def create_fill(

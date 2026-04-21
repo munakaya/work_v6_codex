@@ -5,6 +5,7 @@ from uuid import uuid4
 from ..config_apply_policy import summarize_config_assignment_policy
 from .order_mutation_views import create_order as build_order_create
 from .order_mutation_views import create_fill as build_fill_create
+from .order_mutation_views import update_order_status as build_order_status_update
 from .order_mutation_views import create_order_intent as build_order_intent_create
 from .read_store import MemoryReadStore, _clone, _sample_time
 
@@ -227,6 +228,20 @@ class MemoryMutableStore(MemoryReadStore):
                 filled_at=filled_at,
             )
             return outcome, None if fill is None else _clone(fill)
+
+    def update_order_status(
+        self,
+        *,
+        order_id: str,
+        status: str,
+    ) -> tuple[str, dict[str, object] | None]:
+        with self._lock:
+            outcome, order = build_order_status_update(
+                orders=self.orders,
+                order_id=order_id,
+                status=status,
+            )
+            return outcome, None if order is None else _clone(order)
 
     def assign_config(
         self,

@@ -220,6 +220,14 @@ class MemoryReadStore:
     ) -> tuple[str, dict[str, object] | None]:
         raise RuntimeError("mutation not supported for base memory store")
 
+    def update_order_status(
+        self,
+        *,
+        order_id: str,
+        status: str,
+    ) -> tuple[str, dict[str, object] | None]:
+        raise RuntimeError("mutation not supported for base memory store")
+
     def list_fills(
         self,
         *,

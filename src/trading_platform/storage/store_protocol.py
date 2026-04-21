@@ -83,6 +83,13 @@ class ControlPlaneStoreProtocol(Protocol):
         raw_payload: dict[str, object] | None,
     ) -> tuple[str, dict[str, object] | None]: ...
 
+    def update_order_status(
+        self,
+        *,
+        order_id: str,
+        status: str,
+    ) -> tuple[str, dict[str, object] | None]: ...
+
     def list_fills(
         self,
         *,

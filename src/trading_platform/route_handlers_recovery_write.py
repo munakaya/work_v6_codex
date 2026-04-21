@@ -107,6 +107,7 @@ class ControlPlaneRecoveryWriteRouteMixin:
             "/handoff": self._handoff_recovery_trace_response,
             "/start-unwind": self._start_unwind_recovery_trace_response,
             "/submit-unwind-order": self._submit_unwind_order_response,
+            "/cancel-open-orders": self._cancel_open_orders_response,
             "/record-unwind-fill": self._record_unwind_fill_response,
             "/record-reconciliation": self._record_reconciliation_response,
         }
@@ -691,6 +692,307 @@ class ControlPlaneRecoveryWriteRouteMixin:
         data = dict(trace)
         data["created_unwind_order"] = order
         return HTTPStatus.CREATED, self._response(data=data)
+
+    def _cancel_open_orders_response(
+        self, recovery_trace_id: str
+    ) -> tuple[HTTPStatus, dict[str, object]]:
+        unsupported = self._ensure_mutation_supported()
+        if unsupported is not None:
+            return unsupported
+        if not self.server.redis_runtime.info.enabled:
+            return (
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                self._response(
+                    error={
+                        "code": "REDIS_RUNTIME_UNAVAILABLE",
+                        "message": "redis runtime is not enabled",
+                    }
+                ),
+            )
+        body, error = self._read_optional_body()
+        if error is not None:
+            return error
+        current = self.server.redis_runtime.get_recovery_trace(
+            recovery_trace_id=recovery_trace_id
+        )
+        if current is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_NOT_FOUND",
+                        "message": "recovery_trace_id not found",
+                    }
+                ),
+            )
+        current_status = str(current.get("status") or "").strip().lower()
+        if current_status in {"resolved", "cancelled"}:
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_TERMINAL",
+                        "message": "recovery trace is already terminal",
+                    }
+                ),
+            )
+        candidate_orders = self._trace_cancel_candidate_orders(current)
+        if not candidate_orders:
+            return (
+                HTTPStatus.CONFLICT,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_OPEN_ORDER_MISSING",
+                        "message": "recovery trace does not have open linked orders to cancel",
+                    }
+                ),
+            )
+
+        cancel_results: list[dict[str, object]] = []
+        cancelled_order_ids: list[str] = []
+        terminal_order_ids: list[str] = []
+        failed_order_ids: list[str] = []
+        skipped_order_ids: list[str] = []
+        observed_order_statuses: list[dict[str, str]] = []
+        updated_orders: list[dict[str, object]] = []
+
+        for order in candidate_orders:
+            result = self._cancel_trace_order(order)
+            cancel_results.append(result)
+            order_id = optional_string(result.get("order_id")) or ""
+            observed_status = result.get("observed_status")
+            if isinstance(observed_status, dict):
+                normalized_observed = self._observed_order_statuses([observed_status])
+                if normalized_observed:
+                    observed_order_statuses.extend(normalized_observed)
+            updated_order = result.get("updated_order")
+            if isinstance(updated_order, dict):
+                updated_orders.append(updated_order)
+                self._publish_order_event(
+                    "order.updated",
+                    {
+                        "order_id": updated_order.get("order_id"),
+                        "order_intent_id": updated_order.get("order_intent_id"),
+                        "bot_id": updated_order.get("bot_id"),
+                        "exchange_name": updated_order.get("exchange_name"),
+                        "status": updated_order.get("status"),
+                    },
+                )
+            result_kind = str(result.get("result") or "").strip().lower()
+            if result_kind == "cancelled" and order_id:
+                cancelled_order_ids.append(order_id)
+            elif result_kind == "terminal" and order_id:
+                terminal_order_ids.append(order_id)
+            elif result_kind == "skipped" and order_id:
+                skipped_order_ids.append(order_id)
+            elif order_id:
+                failed_order_ids.append(order_id)
+
+        remaining_open_order_ids = [
+            str(order.get("order_id") or "")
+            for order in self._trace_cancel_candidate_orders(current)
+            if str(order.get("order_id") or "")
+        ]
+        trace = self.server.redis_runtime.transition_recovery_trace(
+            recovery_trace_id=recovery_trace_id,
+            status=optional_string(current.get("status")) or "active",
+            lifecycle_state=(
+                optional_string(current.get("lifecycle_state")) or "recovery_required"
+            ),
+            trace_id=self.headers.get("X-Trace-Id"),
+            patch={
+                "cancel_attempted_at": self.server.redis_runtime.now_iso(),
+                "cancelled_order_ids": cancelled_order_ids,
+                "cancel_terminal_order_ids": terminal_order_ids,
+                "cancel_failed_order_ids": failed_order_ids,
+                "cancel_skipped_order_ids": skipped_order_ids,
+                "cancel_remaining_open_order_ids": remaining_open_order_ids,
+                "cancel_observed_order_statuses": observed_order_statuses,
+                "cancel_verified_by": optional_string(body.get("verified_by")),
+                "cancel_summary": optional_string(body.get("summary"))
+                or "operator requested open-order cancellation",
+                "cancel_operator_context": optional_object(body.get("operator_context")),
+            },
+            event_type="strategy.recovery_trace.open_orders_cancel_requested",
+        )
+        if trace is None:
+            return (
+                HTTPStatus.NOT_FOUND,
+                self._response(
+                    error={
+                        "code": "RECOVERY_TRACE_NOT_FOUND",
+                        "message": "recovery_trace_id not found",
+                    }
+                ),
+            )
+        if self.server.recovery_runtime.enabled:
+            self.server.recovery_runtime.run_once()
+        latest_trace = self.server.redis_runtime.get_recovery_trace(
+            recovery_trace_id=recovery_trace_id
+        )
+        run_id = optional_string(current.get("run_id"))
+        evaluation_payload = None
+        if run_id:
+            evaluation_payload = self.server.redis_runtime.get_arbitrage_evaluation(run_id=run_id)
+        data = dict(latest_trace) if latest_trace is not None else dict(trace)
+        data["cancel_results"] = cancel_results
+        data["updated_orders"] = updated_orders
+        if evaluation_payload is not None:
+            data["latest_evaluation"] = evaluation_payload
+        return HTTPStatus.OK, self._response(data=data)
+
+    def _trace_cancel_candidate_orders(
+        self, trace: dict[str, object]
+    ) -> list[dict[str, object]]:
+        bot_id = optional_string(trace.get("bot_id"))
+        run_id = optional_string(trace.get("run_id"))
+        linked_order_id = optional_string(trace.get("linked_unwind_order_id"))
+        intent_ids: list[str] = []
+        for key in ("intent_id", "linked_unwind_action_id"):
+            intent_id = optional_string(trace.get(key))
+            if intent_id and intent_id not in intent_ids:
+                intent_ids.append(intent_id)
+        if not intent_ids and not linked_order_id:
+            return []
+        orders = self.server.read_store.list_orders(
+            bot_id=bot_id or None,
+            strategy_run_id=run_id or None,
+        )
+        candidates: list[dict[str, object]] = []
+        seen_order_ids: set[str] = set()
+        for order in orders:
+            order_id = optional_string(order.get("order_id"))
+            if not order_id or order_id in seen_order_ids:
+                continue
+            matches_intent = str(order.get("order_intent_id") or "") in intent_ids
+            matches_linked_order = bool(linked_order_id and order_id == linked_order_id)
+            if not matches_intent and not matches_linked_order:
+                continue
+            status = str(order.get("status") or "").strip().lower()
+            if status in {"filled", "cancelled", "rejected", "expired"}:
+                continue
+            seen_order_ids.add(order_id)
+            candidates.append(order)
+        return candidates
+
+    def _cancel_trace_order(self, order: dict[str, object]) -> dict[str, object]:
+        order_id = optional_string(order.get("order_id")) or ""
+        exchange_name = optional_string(order.get("exchange_name")) or ""
+        exchange_order_id = optional_string(order.get("exchange_order_id")) or ""
+        market = optional_string(order.get("market")) or ""
+        if not exchange_order_id:
+            return {
+                "order_id": order_id,
+                "exchange_name": exchange_name,
+                "exchange_order_id": None,
+                "result": "skipped",
+                "error_code": "EXCHANGE_ORDER_ID_MISSING",
+                "message": "order is missing exchange_order_id",
+            }
+        if not market:
+            return {
+                "order_id": order_id,
+                "exchange_name": exchange_name,
+                "exchange_order_id": exchange_order_id,
+                "result": "failed",
+                "error_code": "ORDER_MARKET_MISSING",
+                "message": "order is missing market",
+            }
+        connector = self.server.private_exchange_connectors.get(exchange_name)
+        if connector is None:
+            return {
+                "order_id": order_id,
+                "exchange_name": exchange_name,
+                "exchange_order_id": exchange_order_id,
+                "result": "failed",
+                "error_code": "PRIVATE_CONNECTOR_UNAVAILABLE",
+                "message": f"private connector is unavailable for exchange={exchange_name}",
+            }
+        response = connector.cancel_order(
+            exchange_order_id=exchange_order_id,
+            market=market,
+        )
+        if response.outcome != "ok" or not isinstance(response.data, dict):
+            return {
+                "order_id": order_id,
+                "exchange_name": exchange_name,
+                "exchange_order_id": exchange_order_id,
+                "result": "failed",
+                "error_code": response.error_code or "CANCEL_REQUEST_FAILED",
+                "message": response.reason or "cancel request failed",
+            }
+        observed_status = optional_string(response.data.get("status"))
+        normalized_status = (
+            None if observed_status is None else observed_status.strip().lower()
+        )
+        observed_order_status = (
+            None
+            if not normalized_status
+            else {"order_id": order_id, "status": normalized_status}
+        )
+        if normalized_status not in {"cancelled", "partially_filled", "filled", "rejected", "expired"}:
+            return {
+                "order_id": order_id,
+                "exchange_name": exchange_name,
+                "exchange_order_id": exchange_order_id,
+                "result": "failed",
+                "error_code": "CANCEL_NOT_CONFIRMED",
+                "message": "exchange cancel response did not confirm a terminal order state",
+                "observed_status": observed_order_status,
+            }
+        if normalized_status in {"filled", "partially_filled"}:
+            return {
+                "order_id": order_id,
+                "exchange_name": exchange_name,
+                "exchange_order_id": exchange_order_id,
+                "result": "failed",
+                "error_code": "CANCEL_REQUIRES_RECONCILIATION",
+                "message": "cancel response indicates fill activity; wait for reconciliation evidence before changing local order state",
+                "observed_status": observed_order_status,
+            }
+        update_outcome, updated_order = self.server.read_store.update_order_status(
+            order_id=order_id,
+            status=normalized_status,
+        )
+        if update_outcome == "not_found":
+            return {
+                "order_id": order_id,
+                "exchange_name": exchange_name,
+                "exchange_order_id": exchange_order_id,
+                "result": "failed",
+                "error_code": "ORDER_NOT_FOUND",
+                "message": "order_id not found while updating local status",
+                "observed_status": observed_order_status,
+            }
+        if update_outcome == "invalid":
+            return {
+                "order_id": order_id,
+                "exchange_name": exchange_name,
+                "exchange_order_id": exchange_order_id,
+                "result": "failed",
+                "error_code": "ORDER_STATUS_INVALID",
+                "message": f"unsupported local order status: {normalized_status}",
+                "observed_status": observed_order_status,
+            }
+        if update_outcome == "conflict":
+            return {
+                "order_id": order_id,
+                "exchange_name": exchange_name,
+                "exchange_order_id": exchange_order_id,
+                "result": "failed",
+                "error_code": "ORDER_STATUS_CONFLICT",
+                "message": "local order is already terminal with a different status",
+                "observed_status": observed_order_status,
+            }
+        result_kind = "cancelled" if normalized_status == "cancelled" else "terminal"
+        return {
+            "order_id": order_id,
+            "exchange_name": exchange_name,
+            "exchange_order_id": exchange_order_id,
+            "result": result_kind,
+            "observed_status": observed_order_status,
+            "updated_order": updated_order,
+        }
 
     def _record_unwind_fill_response(
         self, recovery_trace_id: str
