@@ -191,6 +191,20 @@
 - [ ] Decimal hot path 성능을 실측한다.
   현재 철학은 정확도 우선이지만, top-N depth pricing과 다거래소 selection 경로에서 허용 가능한 latency인지 벤치마크와 운영 로그 기준으로 확인해야 한다.
 
+### 9G. REST API / poller hardening
+
+- [ ] REST fallback/진단 poller에 `inflight` skip guard와 시작 지터를 추가한다.
+  현재는 WS-first 전환 후에도 bootstrap, reconnect 직후 보정, 진단성 재조회가 남아 있다. upstream 응답이 polling interval보다 느릴 때 요청이 겹치지 않게 하고, 여러 run/process가 동시에 재시작될 때 공개 REST 호출이 한 시점에 몰리지 않도록 해야 한다.
+
+- [ ] public REST rate-limit headroom과 backoff 상태를 진단값/메트릭으로 노출한다.
+  단순히 `rate_per_sec`, `burst`만 두지 말고, 설정된 polling interval 대비 예상 RPS, 실제 limiter wait, 429/재시도 횟수, 거래소별 headroom을 운영자가 바로 볼 수 있어야 한다.
+
+- [ ] private REST connector 전체에 operation별 timeout budget을 고정한다.
+  `get_balances`, `place_order`, `get_order_status`, `list_open_orders`, `cancel_order` 같은 호출이 upstream hang에 끌려 무기한 대기하지 않도록, 호출 종류별 timeout과 fail-closed 에러 분류를 문서와 구현에서 함께 맞춰야 한다.
+
+- [ ] operator write API에 `Idempotency-Key` 또는 동등한 duplicate-command guard를 추가한다.
+  `resolve`, `handoff`, `start-unwind`, `submit-unwind-order`, `cancel-open-orders`, `record-unwind-fill`, `record-reconciliation` 같은 write 요청은 client 재시도나 네트워크 timeout 뒤 재전송돼도 같은 명령이 중복 적용되지 않아야 한다.
+
 ### 10. 운영 지표와 backlog 요약 추가
 
 - [ ] live/shadow/sim 편차 지표를 추가한다.
