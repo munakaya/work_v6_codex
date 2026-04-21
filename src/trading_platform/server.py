@@ -419,6 +419,7 @@ def build_server(config: AppConfig) -> ControlPlaneServer:
         ),
         read_store=bootstrap.store,
         redis_runtime=redis_runtime,
+        private_exchange_connectors=private_exchange_connectors,
     )
     return ControlPlaneServer(
         (config.host, config.port),

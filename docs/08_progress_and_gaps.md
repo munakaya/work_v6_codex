@@ -83,14 +83,13 @@
 
 ### 42.2 아직 실거래 전환을 막는 핵심 공백
 
-- `private_connectors` 내장 execution path는 추가됐지만, cancel flow / 실계정 smoke / reconciliation 자동화는 미완료
+- `private_connectors` 내장 execution path와 recovery runtime의 auto reconciliation은 추가됐지만, cancel flow / 실계정 smoke는 미완료
 - `private_http`는 아직 임시 외부 delegate 경로
 - public WS-first collector 미완료
 - collector coverage 확장 미완료
 - pair-level trade lock 운영 검증/지표 보강 필요
 - private balance refresh 관측성/캐시 정책 보강 필요
 - 정식 `pytest/tests/CI` 체계 부재
-- malformed `private_http` 응답의 서버 레벨 회귀 확대 필요
 - live/shadow/sim 편차 계측 부재
 
 ### 42.3 구현 준비도 재평가
@@ -114,7 +113,7 @@
 
 ### 48.1 실거래 경로 리스크
 
-- private REST connector는 이제 `private_connectors` execution path까지 편입됐지만 cancel flow, 실계정 smoke, reconciliation 자동화가 남아 있다.
+- private REST connector는 `private_connectors` execution path와 recovery runtime auto reconciliation까지 편입됐지만 cancel flow와 실계정 smoke가 남아 있다.
 - `private_http`는 계속 임시 경로이며, 외부 executor 의존 fallback을 아직 유지한다.
 
 ### 48.2 market data 리스크

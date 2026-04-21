@@ -43,3 +43,4 @@
 - pair_lock_runtime_cases.py: strategy runtime이 pair lock conflict를 `PAIR_LOCK_ACTIVE`로 막고 submit/recovery/closed lifecycle에 따라 락을 refresh 또는 release 하는지 검증한다
 - arbitrage_runtime_balance_cases.py: live run이 private connector `get_balances()`를 강제하고, shadow는 runtime_config balance fallback을 유지하며, live의 manual balance source는 fail-closed 되는지 검증한다
 - private_connectors_adapter_cases.py: private_connectors execution adapter가 in-process private connector로 두 leg 주문을 제출하고, 중간 실패 시 fail-closed 하면서 생성된 order evidence를 남기는지 검증한다
+- recovery_runtime_private_connector_cases.py: recovery runtime이 private connector order status/balance를 읽어 reconciliation evidence를 자동 기록하고, zero residual은 resolve하며 잔존 노출은 handoff로 승격하는지 검증한다

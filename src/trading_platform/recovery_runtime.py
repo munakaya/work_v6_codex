@@ -8,6 +8,7 @@ import threading
 from uuid import uuid4
 
 from .redis_runtime import RedisRuntime
+from .recovery_reconciliation_polling import build_auto_reconciliation_snapshot
 from .storage.store_protocol import ControlPlaneStoreProtocol
 
 
@@ -209,6 +210,7 @@ class RecoveryRuntime:
         reconciliation_stale_after_seconds: int = 15,
         read_store: ControlPlaneStoreProtocol,
         redis_runtime: RedisRuntime,
+        private_exchange_connectors: dict[str, object] | None = None,
     ) -> None:
         self.enabled = enabled
         self.interval_ms = max(interval_ms, 250)
@@ -222,6 +224,9 @@ class RecoveryRuntime:
         )
         self.read_store = read_store
         self.redis_runtime = redis_runtime
+        self.private_exchange_connectors = (
+            private_exchange_connectors if isinstance(private_exchange_connectors, dict) else {}
+        )
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -435,6 +440,7 @@ class RecoveryRuntime:
             self._record_skip("TRACE_ID_MISSING")
             return
         related_orders = self._related_orders(bot_id=bot_id, run_id=run_id, intent_id=intent_id)
+        trace = self._auto_record_reconciliation(trace, related_orders=related_orders)
         has_active_orders = any(
             str(order.get("status") or "").strip().lower() not in TERMINAL_ORDER_STATUSES
             for order in related_orders
@@ -543,6 +549,86 @@ class RecoveryRuntime:
             self._mark_handoff_required(trace)
             return
         self._record_skip("NO_STATE_CHANGE")
+
+    def _auto_record_reconciliation(
+        self,
+        trace: dict[str, object],
+        *,
+        related_orders: list[dict[str, object]],
+    ) -> dict[str, object]:
+        reconciliation_result = str(trace.get("reconciliation_result") or "").strip().lower()
+        reconciliation_source = str(trace.get("reconciliation_source") or "").strip().lower()
+        if reconciliation_result and reconciliation_source not in {"", "auto_private_connectors"}:
+            return trace
+        if not related_orders or not self.private_exchange_connectors:
+            return trace
+        trace_intent_id = self._trace_intent_id(trace)
+        if not trace_intent_id:
+            return trace
+        related_fills = [
+            fill
+            for fill in self.read_store.list_fills(
+                bot_id=str(trace.get("bot_id") or "") or None,
+                strategy_run_id=str(trace.get("run_id") or "") or None,
+            )
+            if (
+                trace_intent_id
+                and str(fill.get("order_intent_id") or "").strip() == trace_intent_id
+            )
+        ]
+        snapshot = build_auto_reconciliation_snapshot(
+            trace=trace,
+            related_orders=related_orders,
+            related_fills=related_fills,
+            private_exchange_connectors=self.private_exchange_connectors,
+        )
+        if snapshot is None:
+            return trace
+        previous_attempt_count = _parse_int(trace.get("reconciliation_attempt_count")) or 0
+        previous_matched_count = _parse_int(trace.get("reconciliation_matched_count")) or 0
+        previous_mismatch_count = _parse_int(trace.get("reconciliation_mismatch_count")) or 0
+        previous_mismatch_streak = _parse_int(trace.get("reconciliation_mismatch_streak")) or 0
+        matched = str(snapshot.patch.get("reconciliation_result") or "") == "matched"
+        patch = {
+            **snapshot.patch,
+            "reconciliation_attempt_count": previous_attempt_count + 1,
+            "reconciliation_matched_count": previous_matched_count + (1 if matched else 0),
+            "reconciliation_mismatch_count": previous_mismatch_count + (0 if matched else 1),
+            "reconciliation_mismatch_streak": 0 if matched else previous_mismatch_streak + 1,
+            "reconciliation_updated_at": _iso_now(),
+        }
+        recovery_trace_id = str(trace.get("recovery_trace_id") or "").strip()
+        updated_trace = {**trace, **patch}
+        self.redis_runtime.sync_recovery_trace(
+            recovery_trace_id=recovery_trace_id,
+            payload=updated_trace,
+            trace_id=None,
+        )
+        run_id = str(updated_trace.get("run_id") or "").strip()
+        if run_id:
+            latest_trace = self.redis_runtime.get_recovery_trace(
+                recovery_trace_id=recovery_trace_id
+            )
+            if latest_trace is not None:
+                self.redis_runtime.sync_arbitrage_evaluation_recovery_state(
+                    run_id=run_id,
+                    recovery_trace=latest_trace,
+                    trace_id=None,
+                )
+                updated_trace = latest_trace
+        self.redis_runtime.append_event(
+            "strategy_events",
+            event_type="strategy.recovery_trace.reconciliation_auto_recorded",
+            payload={
+                "recovery_trace_id": recovery_trace_id,
+                "run_id": updated_trace.get("run_id"),
+                "bot_id": updated_trace.get("bot_id"),
+                "matched": matched,
+                "open_order_count": updated_trace.get("reconciliation_open_order_count"),
+                "source": "auto_private_connectors",
+            },
+        )
+        return updated_trace
 
     def _related_orders(
         self, *, bot_id: str, run_id: str, intent_id: str
